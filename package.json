@@ -7,7 +7,8 @@
     "start": "expo start --dev-client",
     "android": "expo run:android",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@kesha-antonov/react-native-background-downloader": "^4.5.5",
@@ -19,6 +20,7 @@
     "expo-haptics": "~14.0.1",
     "expo-router": "~4.0.21",
     "expo-status-bar": "~2.0.1",
+    "expo-system-ui": "~4.0.9",
     "llama.rn": "^0.11.5",
     "react": "18.3.1",
     "react-native": "0.76.9",
