@@ -19,7 +19,8 @@ architecture with TypeScript strict mode and no carried-over code.
 
 1. Local LLM inference — works with zero internet after model download.
 2. Two hardcoded Gemma 4 models, downloaded from HuggingFace CDN (GGUF Q4_K_M).
-3. Clean chat UI — message bubbles, input bar, send button, streaming tokens.
+3. Clean chat UI — message bubbles, input bar, send button, streaming tokens,
+   markdown + code-block rendering for assistant messages.
 4. Basic memory — onboarding profile injected into the system prompt of every chat.
 5. 5-screen onboarding on first launch (name, occupation, project, goals, language).
 6. Conversation history persisted locally (AsyncStorage).
@@ -32,7 +33,7 @@ architecture with TypeScript strict mode and no carried-over code.
 
 iOS · vision/audio (mmproj) · app-UI translation (i18n) · cloud sync / accounts ·
 RAG or auto-extracted memory · multiple models loaded simultaneously ·
-message edit/regenerate · markdown rendering (plain text first) · benchmarks.
+message edit/regenerate · benchmarks.
 
 ## 2. Tech stack (pinned to Expo SDK 52)
 
@@ -46,6 +47,7 @@ message edit/regenerate · markdown rendering (plain text first) · benchmarks.
 | Persistence | `@react-native-async-storage/async-storage` |
 | Files / device storage | `expo-file-system` (paths, free/total disk, delete, size) |
 | State | Zustand (small, no boilerplate) |
+| Markdown | `react-native-marked` (pure-JS; renders assistant messages + code blocks) |
 | Drawer deps | `react-native-gesture-handler`, `react-native-reanimated`, `react-native-safe-area-context` |
 | Build | `expo-build-properties` (minSdk/NDK) + config plugin (arm64-v8a only) |
 
@@ -118,7 +120,7 @@ aetherbeta/
     │   ├── sidebar/     SidebarContent · ConversationRow · ModelSelector
     │   ├── settings/    ModelManagerRow · StorageBar · DownloadProgress
     │   ├── onboarding/  OnboardingStep (shared scaffold)
-    │   └── common/      Button · ProgressBar · Screen · ModelLoadingOverlay
+    │   └── common/      Button · ProgressBar · Screen · ModelLoadingOverlay · Markdown
     ├── llm/
     │   ├── LlamaService.ts           # init/release context, streaming completion
     │   ├── prompt.ts                 # profile→system prompt; Gemma prompt; trimming
