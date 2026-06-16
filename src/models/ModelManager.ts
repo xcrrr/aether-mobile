@@ -1,11 +1,25 @@
+import { Platform, PermissionsAndroid } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import {
-  createDownloadTask, getExistingDownloadTasks,
+  createDownloadTask, getExistingDownloadTasks, setConfig,
 } from '@kesha-antonov/react-native-background-downloader';
 import type { DownloadTask } from '@kesha-antonov/react-native-background-downloader';
 import { ModelDef } from '@/types';
 import { MODELS, getModelById } from './registry';
 import { modelsDir, modelDestPath, stripFileUri, isVerifiedSize } from './paths';
+
+/**
+ * Model downloads use @kesha-antonov/react-native-background-downloader: a
+ * native, OS-managed download that keeps running with the screen off and the
+ * app backgrounded (foreground service on Android < 14, User-Initiated Data
+ * Transfer job on Android 14+). It follows the HuggingFace `/resolve/` redirect
+ * and runs over Wi-Fi or mobile data.
+ *
+ * Android 14+ UIDT jobs REQUIRE a notification to run, which needs the
+ * POST_NOTIFICATIONS runtime permission (Android 13+). We declare it in the
+ * manifest, request it before the first download, and enable the library's
+ * progress notification — without this the job silently never starts (0%).
+ */
 
 const DOC = FileSystem.documentDirectory ?? 'file:///';
 const DIR = modelsDir(DOC);
@@ -13,11 +27,15 @@ const DIR = modelsDir(DOC);
 const active = new Map<string, DownloadTask>();
 const speed = new Map<string, { bytes: number; time: number; mbps: number }>();
 
+// UIDT jobs (Android 14+) must be backed by a visible notification.
+setConfig({ showNotificationsEnabled: true });
+
 export async function ensureDir(): Promise<void> {
   const info = await FileSystem.getInfoAsync(`file://${DIR}`);
   if (!info.exists) await FileSystem.makeDirectoryAsync(`file://${DIR}`, { intermediates: true });
 }
 
+/** Plain filesystem path (no file://) — what llama.rn and the downloader expect. */
 export function localPath(model: ModelDef): string {
   return modelDestPath(DOC, model.filename);
 }
@@ -45,6 +63,20 @@ export async function installedBytes(): Promise<number> {
   return sum;
 }
 
+/**
+ * Android 13+ gates notifications behind a runtime permission. The UIDT
+ * download job can't post its mandatory notification without it (download
+ * silently stays at 0%). Request it before downloading.
+ */
+export async function ensureNotificationPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+  const perm = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+  if (!perm) return true;
+  if (await PermissionsAndroid.check(perm)) return true;
+  const result = await PermissionsAndroid.request(perm);
+  return result === PermissionsAndroid.RESULTS.GRANTED;
+}
+
 export interface DownloadHandlers {
   onProgress: (pct: number, downloaded: number, total: number, mbps: number) => void;
   onDone: (path: string) => void;
@@ -53,6 +85,7 @@ export interface DownloadHandlers {
 
 export async function startDownload(model: ModelDef, h: DownloadHandlers): Promise<void> {
   if (active.has(model.id)) return;
+  await ensureNotificationPermission();
   await ensureDir();
   const dest = localPath(model);
   speed.set(model.id, { bytes: 0, time: Date.now(), mbps: 0 });
@@ -70,7 +103,8 @@ export async function startDownload(model: ModelDef, h: DownloadHandlers): Promi
   task
     .begin(({ expectedBytes }) => h.onProgress(0, 0, expectedBytes, 0))
     .progress(({ bytesDownloaded, bytesTotal }) => {
-      const pct = bytesTotal > 0 ? (bytesDownloaded / bytesTotal) * 100 : 0;
+      const total = bytesTotal > 0 ? bytesTotal : model.sizeBytes;
+      const pct = total > 0 ? (bytesDownloaded / total) * 100 : 0;
       const t = speed.get(model.id);
       let mbps = 0;
       if (t) {
@@ -84,7 +118,7 @@ export async function startDownload(model: ModelDef, h: DownloadHandlers): Promi
           mbps = t.mbps;
         }
       }
-      h.onProgress(pct, bytesDownloaded, bytesTotal, mbps);
+      h.onProgress(pct, bytesDownloaded, total, mbps);
     })
     .done(({ location }) => {
       active.delete(model.id);
@@ -113,7 +147,7 @@ export async function deleteModel(model: ModelDef): Promise<void> {
   if (info.exists) await FileSystem.deleteAsync(uri, { idempotent: true });
 }
 
-/** Reattach handlers to downloads that ran while the app was closed. */
+/** Reattach handlers to downloads that ran while the app was closed/backgrounded. */
 export async function reattachDownloads(
   onProgress: (id: string, pct: number) => void,
   onDone: (id: string, path: string) => void,
