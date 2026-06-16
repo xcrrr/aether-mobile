@@ -10,8 +10,10 @@ no telemetry — fully offline after the model downloads once.
 - **Two Gemma 4 models** (GGUF Q4_K_M, from HuggingFace, no auth required):
   - **Gemma 4 E2B** — 3.46 GB · *Recommended* (safe on 8 GB phones)
   - **Gemma 4 E4B** — 5.41 GB · *Most capable* (needs RAM headroom)
-- **Memory** — a 5-step onboarding profile (name, occupation, project, goals,
-  language) is injected into every conversation's system prompt.
+- **Memory** — a short 2-step onboarding profile (name, what you want help with)
+  is injected into every conversation's system prompt.
+- **Background downloads** — models keep downloading with the screen off / app
+  backgrounded (native foreground-service / Android 14 UIDT job).
 - **Conversations** — full history, stored locally, sliding sidebar with a model selector.
 - **Settings & storage** — Spotify-style view of real device storage + per-model
   usage, with download / cancel / delete.
@@ -27,8 +29,19 @@ no telemetry — fully offline after the model downloads once.
 ## Tech stack
 
 Expo SDK 52 (RN 0.76, New Architecture) · TypeScript (strict) · expo-router + Drawer ·
-`llama.rn` 0.11.x · `@kesha-antonov/react-native-background-downloader` 4.5.x ·
+`llama.rn` 0.12.0-rc.6 · `@kesha-antonov/react-native-background-downloader` 4.5.x (patched) ·
 AsyncStorage · Zustand · `react-native-marked`.
+
+## Notable fixes baked in
+
+- **Background downloads on the new architecture.** `react-native-background-downloader`
+  4.5.5 resolved its Android native module only via `NativeModules.*`, which is `null`
+  under bridgeless new arch (the module is a TurboModule) — downloads silently stuck at
+  0%. Patched (`patches/`, applied by `patch-package` on `postinstall`) to fall back to
+  `TurboModuleRegistry` on Android. `POST_NOTIFICATIONS` is also declared + requested at
+  runtime (required for the Android 14 download job).
+- **Gemma 4 (`gemma4` arch) loading** needs `llama.rn` ≥ 0.12.0-rc.6; older versions fail
+  with "failed to load model."
 
 ## Build & run on a device
 

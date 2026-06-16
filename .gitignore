@@ -36,9 +36,15 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
+# native build artifacts (keep android/ source, drop generated output)
 /ios
-/android
+android/build/
+android/app/build/
+android/.gradle/
+android/.cxx/
+android/app/.cxx/
+android/.kotlin/
+android/local.properties
 
 # downloaded models (never commit GGUF blobs) + logs
 *.gguf
