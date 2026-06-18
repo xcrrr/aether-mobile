@@ -1,28 +1,41 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { ProgressBar } from '@/components/common/ProgressBar';
-import { formatBytes } from './format';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, fonts } from '@/theme';
 
-export function StorageBar({ total, free, aetherUsed }: { total: number; free: number; aetherUsed: number }) {
-  const used = total - free;
-  const pct = total > 0 ? (used / total) * 100 : 0;
+export interface StorageSegment { label: string; gb: number; color: string; }
+
+export function StorageBar({ totalGb, segments }: { totalGb: number; segments: StorageSegment[] }) {
+  const safeTotal = totalGb > 0 ? totalGb : 1;
   return (
-    <View style={styles.card}>
-      <View style={styles.row}>
-        <Text style={styles.title}>Device Storage</Text>
-        <Text style={styles.muted}>{formatBytes(used)} used</Text>
+    <View>
+      <View style={styles.track}>
+        {segments.map((s, i) => (
+          <View key={i} style={{ width: `${Math.max(0, (s.gb / safeTotal) * 100)}%`, backgroundColor: s.color, height: '100%' }} />
+        ))}
       </View>
-      <ProgressBar percent={pct} />
-      <Text style={styles.sub}>{formatBytes(used)} / {formatBytes(total)} total · {formatBytes(free)} free</Text>
-      <Text style={styles.aether}>Aether models: {formatBytes(aetherUsed)}</Text>
+      <View style={styles.legend}>
+        {segments.map((s, i) => (
+          <View key={i} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: s.color }]} />
+            <Text style={styles.legendLabel}>{s.label}</Text>
+            <Text style={styles.legendGb}>{s.gb.toFixed(1)} GB</Text>
+          </View>
+        ))}
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, styles.freeDot]} />
+          <Text style={styles.legendGb}>
+            {Math.max(0, safeTotal - segments.reduce((a, x) => a + x.gb, 0)).toFixed(1)} GB free
+          </Text>
+        </View>
+      </View>
     </View>
   );
 }
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.lg },
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  title: { color: colors.text, fontWeight: '700' },
-  muted: { color: colors.textMuted, fontSize: 13 },
-  sub: { color: colors.textMuted, fontSize: 12, marginTop: spacing.sm },
-  aether: { color: colors.purple, fontSize: 12, marginTop: spacing.xs, fontWeight: '600' },
+  track: { flexDirection: 'row', height: 12, width: '100%', backgroundColor: colors.assistantBubble, borderRadius: radius.full, overflow: 'hidden', gap: 2 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: spacing.md },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  freeDot: { backgroundColor: colors.assistantBubble, borderWidth: 1, borderColor: colors.border },
+  legendLabel: { fontSize: 12, color: colors.text, fontFamily: fonts.sans },
+  legendGb: { fontSize: 12, color: colors.textMuted, fontFamily: fonts.sans },
 });

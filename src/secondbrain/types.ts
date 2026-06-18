@@ -1,0 +1,47 @@
+/**
+ * Second Brain — a private, on-device memory layer. Conversations are silently
+ * analysed and distilled into structured facts about the user, which are then
+ * injected into every system prompt for full personal context.
+ */
+
+export type MemoryCategory =
+  | 'identity'        // name, age, location, occupation, languages spoken
+  | 'personality'     // communication style, humor, directness, curiosity level
+  | 'preferences'     // topics they love, things they dislike, hobbies
+  | 'goals'           // short-term and long-term goals they mention
+  | 'knowledge'       // domains they know well, skill levels
+  | 'relationships'   // people they mention, their role
+  | 'patterns'        // time of day they chat, message length preference, emoji use
+  | 'emotional'       // stress triggers, things that make them happy, tone shifts
+  | 'context';        // current projects, recent life events, recurring problems
+
+export const MEMORY_CATEGORIES: readonly MemoryCategory[] = [
+  'identity',
+  'personality',
+  'preferences',
+  'goals',
+  'knowledge',
+  'relationships',
+  'patterns',
+  'emotional',
+  'context',
+] as const;
+
+export interface MemoryEntry {
+  id: string;                    // uuid
+  category: MemoryCategory;
+  key: string;                   // e.g. "preferred_language", "main_goal"
+  value: string;                 // the extracted fact
+  confidence: number;            // 0.0–1.0
+  sourceConversationId: string;
+  createdAt: number;             // Unix ms
+  updatedAt: number;
+  timesReinforced: number;       // incremented when the same fact reappears
+}
+
+export interface UserMemory {
+  userId: string;                // device-generated UUID, persisted
+  entries: MemoryEntry[];
+  lastExtractionAt: number;      // Unix ms, 0 if never
+  totalConversationsAnalyzed: number;
+}

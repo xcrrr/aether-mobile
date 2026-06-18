@@ -1,7 +1,9 @@
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import { ModelDef } from '@/types';
 import { ProgressBar } from '@/components/common/ProgressBar';
-import { colors, radius, spacing } from '@/theme';
+import { Badge } from '@/components/ds/Badge';
+import { Button } from '@/components/ds/Button';
+import { colors, radius, spacing, fonts } from '@/theme';
 
 export function ModelManagerRow({ model, installed, download, onDownload, onCancel, onDelete }: {
   model: ModelDef;
@@ -12,41 +14,40 @@ export function ModelManagerRow({ model, installed, download, onDownload, onCanc
   const confirmDelete = () => Alert.alert(`Delete ${model.name}?`, "You'll need to download it again.",
     [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onDelete }]);
 
+  const downloading = !!download?.downloading;
+
   return (
     <View style={styles.card}>
       <View style={styles.head}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.name}>{model.name}</Text>
-          <Text style={styles.meta}>{model.maker} · {model.sizeLabel} · {model.badge}</Text>
-        </View>
-        {installed ? (
-          <Pressable style={styles.del} onPress={confirmDelete}><Text style={styles.delTxt}>Delete</Text></Pressable>
-        ) : download?.downloading ? (
-          <Pressable style={styles.cancel} onPress={onCancel}><Text style={styles.cancelTxt}>Cancel</Text></Pressable>
-        ) : (
-          <Pressable style={styles.get} onPress={onDownload}><Text style={styles.getTxt}>Download</Text></Pressable>
-        )}
+        <Text style={styles.name}>{model.name}</Text>
+        <Badge label={model.badge} tone={model.badge === 'Recommended' ? 'accent' : 'blue'} />
       </View>
       <Text style={styles.desc}>{model.description}</Text>
-      {download?.downloading && (
-        <View style={{ marginTop: spacing.sm }}>
-          <ProgressBar percent={download.pct} />
-          <Text style={styles.meta}>{Math.round(download.pct)}% · {download.mbps.toFixed(1)} MB/s</Text>
+
+      {downloading ? (
+        <View style={{ gap: spacing.md }}>
+          <ProgressBar percent={download!.pct} meta={`${Math.round(download!.pct)}% · ${download!.mbps.toFixed(1)} MB/s`} />
+          <Button label="Cancel" variant="secondary" size="sm" onPress={onCancel} />
+        </View>
+      ) : installed ? (
+        <View style={styles.footerRow}>
+          <Text style={styles.meta}>{model.sizeLabel} · Downloaded</Text>
+          <Button label="Delete" variant="danger" size="sm" block={false} onPress={confirmDelete} />
+        </View>
+      ) : (
+        <View style={styles.footerRow}>
+          <Text style={styles.meta}>{model.sizeLabel}</Text>
+          <Button label="Download" size="sm" block={false} onPress={onDownload} />
         </View>
       )}
     </View>
   );
 }
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
-  head: { flexDirection: 'row', alignItems: 'center' },
-  name: { color: colors.text, fontWeight: '700', fontSize: 15 },
-  meta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  desc: { color: colors.textMuted, fontSize: 13, marginTop: spacing.sm },
-  get: { backgroundColor: colors.purple, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  getTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  cancel: { borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  cancelTxt: { color: colors.text, fontSize: 13 },
-  del: { backgroundColor: '#2A1414', borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  delTxt: { color: colors.danger, fontWeight: '700', fontSize: 13 },
+  card: { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.xs },
+  name: { color: colors.text, fontFamily: fonts.sansBold, fontSize: 15 },
+  desc: { color: colors.textMuted, fontSize: 13, lineHeight: 20, marginBottom: spacing.md, fontFamily: fonts.sans },
+  footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  meta: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sans },
 });

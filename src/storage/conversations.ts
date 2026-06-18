@@ -5,11 +5,37 @@ import { Conversation, ConversationMeta } from '@/types';
 
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+/**
+ * Strip heavy, non-displayable fields before persisting. Image `imageBase64`
+ * can be several MB; storing it inline blows Android's ~2 MB SQLite
+ * CursorWindow on read, which makes the whole conversation un-loadable. The
+ * base64 is only needed transiently for the in-memory generation, so it never
+ * needs to hit disk — the durable file `uri` is enough to redisplay the image.
+ */
+function forStorage(convo: Conversation): Conversation {
+  return {
+    ...convo,
+    messages: convo.messages.map((m) =>
+      m.attachments
+        ? {
+            ...m,
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            attachments: m.attachments.map(({ imageBase64, ...rest }) => rest),
+          }
+        : m,
+    ),
+  };
+}
+
 export async function loadIndex(): Promise<ConversationMeta[]> {
-  const list = safeParse<ConversationMeta[]>(
-    await AsyncStorage.getItem(KEYS.conversationsIndex), [],
-  );
-  return list.sort((a, b) => b.updatedAt - a.updatedAt);
+  try {
+    const list = safeParse<ConversationMeta[]>(
+      await AsyncStorage.getItem(KEYS.conversationsIndex), [],
+    );
+    return list.sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
 }
 
 async function saveIndex(index: ConversationMeta[]): Promise<void> {
@@ -28,13 +54,19 @@ export async function createConversation(modelId: string): Promise<Conversation>
 }
 
 export async function loadConversation(id: string): Promise<Conversation | null> {
-  return safeParse<Conversation | null>(
-    await AsyncStorage.getItem(KEYS.conversation(id)), null,
-  );
+  try {
+    return safeParse<Conversation | null>(
+      await AsyncStorage.getItem(KEYS.conversation(id)), null,
+    );
+  } catch {
+    // A legacy row that exceeds SQLite's CursorWindow (e.g. an inlined image)
+    // throws here — degrade to an empty conversation instead of crashing.
+    return null;
+  }
 }
 
 export async function saveConversation(convo: Conversation): Promise<void> {
-  await AsyncStorage.setItem(KEYS.conversation(convo.id), JSON.stringify(convo));
+  await AsyncStorage.setItem(KEYS.conversation(convo.id), JSON.stringify(forStorage(convo)));
   const firstUser = convo.messages.find((m) => m.role === 'user');
   const last = convo.messages[convo.messages.length - 1];
   const index = await loadIndex();

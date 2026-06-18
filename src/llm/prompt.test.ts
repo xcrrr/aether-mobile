@@ -1,4 +1,4 @@
-import { buildSystemPrompt, buildGemmaPrompt, trimToContext } from './prompt';
+import { buildSystemPrompt, buildGemmaPrompt, trimToContext, stripSpecialTokens } from './prompt';
 import { Message, UserProfile } from '@/types';
 
 const profile: UserProfile = {
@@ -27,6 +27,12 @@ describe('prompt assembly', () => {
     const p = buildGemmaPrompt('SYS', msgs);
     expect(p).toContain('<start_of_turn>model\nHello<end_of_turn>');
     expect(p.endsWith('<start_of_turn>user\nBye<end_of_turn>\n<start_of_turn>model\n')).toBe(true);
+  });
+  it('strips full and partial Gemma turn markers from a reply', () => {
+    expect(stripSpecialTokens('Hello there<end_of_turn>')).toBe('Hello there');
+    expect(stripSpecialTokens('What would you like to tell me?\n<end_of_turn')).toBe('What would you like to tell me?');
+    expect(stripSpecialTokens('Done<start_of')).toBe('Done');
+    expect(stripSpecialTokens('clean answer')).toBe('clean answer');
   });
   it('trims oldest messages when over the limit, keeping the newest', () => {
     const msgs: Message[] = Array.from({ length: 10 }, (_, i) => ({
