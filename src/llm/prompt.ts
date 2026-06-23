@@ -86,11 +86,19 @@ export function buildUserContent(message: Message, visionActive = false): string
 
 /** Gemma has no system role — prepend system text to the first user turn. */
 export function buildGemmaPrompt(system: string, messages: Message[], visionActive = false): string {
+  // The media marker may appear ONLY on the last user turn: only that turn's
+  // images are forwarded to native (writeImagePaths), and native requires the
+  // <__media__> marker count to equal the number of bitmaps. A marker on an
+  // older image turn would have no matching bitmap → decode mismatch/failure.
+  let lastUserIdx = -1;
+  for (let i = 0; i < messages.length; i++) if (messages[i].role === 'user') lastUserIdx = i;
+
   let pending = system;
   let out = '';
-  for (const m of messages) {
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
     if (m.role === 'user') {
-      const content = buildUserContent(m, visionActive);
+      const content = buildUserContent(m, visionActive && i === lastUserIdx);
       const text = pending ? `${pending}\n\n${content}` : content;
       pending = '';
       out += `<start_of_turn>user\n${text}<end_of_turn>\n<start_of_turn>model\n`;

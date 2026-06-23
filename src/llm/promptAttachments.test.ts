@@ -1,8 +1,25 @@
-import { buildUserContent } from './prompt';
+import { buildUserContent, buildGemmaPrompt } from './prompt';
 import { Message, FileAttachment } from '@/types';
 
 const msg = (content: string, attachments?: FileAttachment[]): Message => ({
   id: '1', role: 'user', content, createdAt: 0, ...(attachments ? { attachments } : {}),
+});
+
+const img: FileAttachment = {
+  id: 'a', uri: 'file://x.jpg', name: 'x.jpg', type: 'image',
+  mimeType: 'image/jpeg', sizeBytes: 10, imageBase64: 'AAAA',
+};
+
+describe('buildGemmaPrompt media marker placement', () => {
+  it('emits the media marker only on the LAST user turn (matches the single forwarded image)', () => {
+    const messages: Message[] = [
+      { id: '1', role: 'user', content: 'first pic', createdAt: 0, attachments: [img] },
+      { id: '2', role: 'assistant', content: 'a cat', createdAt: 1 },
+      { id: '3', role: 'user', content: 'second pic', createdAt: 2, attachments: [{ ...img, id: 'b' }] },
+    ];
+    const prompt = buildGemmaPrompt('', messages, true);
+    expect(prompt.split('<__media__>').length - 1).toBe(1); // exactly one marker
+  });
 });
 
 describe('buildUserContent', () => {
