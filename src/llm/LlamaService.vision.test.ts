@@ -5,7 +5,20 @@ jest.mock('react-native-device-info', () => ({
 }));
 jest.mock('expo-asset', () => ({ Asset: { fromModule: jest.fn() } }));
 
-import { __setVisionTestHooks, getVisionStatus, runVisionSelfTest } from './LlamaService';
+import { __setVisionTestHooks, getVisionStatus, runVisionSelfTest, toNativeMediaPath } from './LlamaService';
+
+describe('toNativeMediaPath', () => {
+  it('strips a file:// scheme so native fopen gets a real path', () => {
+    expect(toNativeMediaPath('file:///data/user/0/com.aether.app/cache/vision-1.jpg'))
+      .toBe('/data/user/0/com.aether.app/cache/vision-1.jpg');
+  });
+  it('leaves a bare absolute path untouched', () => {
+    expect(toNativeMediaPath('/data/cache/x.jpg')).toBe('/data/cache/x.jpg');
+  });
+  it('leaves a base64 data URI untouched (native decodes it from the buffer)', () => {
+    expect(toNativeMediaPath('data:image/jpeg;base64,AAAA')).toBe('data:image/jpeg;base64,AAAA');
+  });
+});
 
 describe('vision self-test', () => {
   afterEach(() => __setVisionTestHooks(null));

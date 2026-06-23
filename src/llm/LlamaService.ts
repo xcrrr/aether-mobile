@@ -70,7 +70,7 @@ async function selfTestImagePath(): Promise<string | null> {
   try {
     const asset = Asset.fromModule(require('../../assets/vision-selftest.png'));
     await asset.downloadAsync();
-    return (asset.localUri ?? asset.uri).replace(/^file:\/\//, '');
+    return toNativeMediaPath(asset.localUri ?? asset.uri);
   } catch { return null; }
 }
 
@@ -116,6 +116,18 @@ export async function runVisionSelfTest(): Promise<boolean> {
 
 export const isMultimodalReady = (): boolean => multimodalReady;
 
+/**
+ * Convert an expo-file-system uri to the plain absolute path llama.rn's native
+ * mtmd loader expects. Native does a raw `fopen(media_path)` (rn-mtmd.hpp), so a
+ * `file://` prefix makes the open fail and the image is silently dropped — the
+ * model then reports it "can't see" the picture. Strip the scheme; leave a
+ * base64 `data:` URI (also accepted by native) untouched.
+ */
+export function toNativeMediaPath(uri: string): string {
+  if (uri.startsWith('data:')) return uri;
+  return uri.replace(/^file:\/\//, '');
+}
+
 /** Persist image attachments to cache files for the multimodal API. */
 async function writeImagePaths(messages: Message[]): Promise<string[]> {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
@@ -124,11 +136,12 @@ async function writeImagePaths(messages: Message[]): Promise<string[]> {
   );
   const paths: string[] = [];
   for (const img of images) {
-    const path = `${FileSystem.cacheDirectory}vision-${img.id}.jpg`;
-    await FileSystem.writeAsStringAsync(path, img.imageBase64!, {
+    // writeAsStringAsync needs the file:// uri; native mtmd needs the bare path.
+    const uri = `${FileSystem.cacheDirectory}vision-${img.id}.jpg`;
+    await FileSystem.writeAsStringAsync(uri, img.imageBase64!, {
       encoding: FileSystem.EncodingType.Base64,
     });
-    paths.push(path);
+    paths.push(toNativeMediaPath(uri));
   }
   return paths;
 }
