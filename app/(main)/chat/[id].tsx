@@ -90,37 +90,41 @@ export default function ChatScreen() {
   const empty = !current || current.messages.length === 0;
 
   return (
-    <SafeAreaView style={styles.c} edges={['top']}>
-      {/* Living purple aurora — same as onboarding — surfaces only while Aether thinks. */}
-      <Aurora active={isGenerating} intensity={0.92} />
-      <KeyboardAvoidingView style={styles.flex} behavior="padding">
-        <ChatHeader
-          mode={mode}
-          installed={installed}
-          onMode={onMode}
-          onMenu={() => navigation.dispatch(DrawerActions.openDrawer())}
-          onSettings={() => router.push('/(main)/settings')}
-        />
-        {empty
-          ? <EmptyState name={profileName} />
-          : <MessageList messages={current!.messages} />}
-        {error && <Text style={styles.err}>{error}</Text>}
-        <BrainNoticePill />
-        <ChatInput
-          onSend={send}
-          onResearch={research}
-          researchMode={researchMode}
-          onToggleResearch={() => setResearchMode((v) => !v)}
-          disabled={loading || !!error || !!ramWarning}
-          supportsVision={supportsVision}
-          att={att}
-          vision={vision}
-        />
-        {loading && model && (
-          <ModelLoadingOverlay modelName={model.name} sizeLabel={model.sizeLabel} sizeGb={model.sizeBytes / 1e9} />
-        )}
-        <Toast />
-      </KeyboardAvoidingView>
+    // Plain root View with the Aurora as an absolute-fill sibling BENEATH the
+    // SafeAreaView content — the exact structure onboarding uses (where the aurora
+    // is known to render). Putting it inside the SafeAreaView hid it.
+    <View style={styles.root}>
+      <Aurora active={isGenerating} />
+      <SafeAreaView style={styles.flex} edges={['top']}>
+        <KeyboardAvoidingView style={styles.flex} behavior="padding">
+          <ChatHeader
+            mode={mode}
+            installed={installed}
+            onMode={onMode}
+            onMenu={() => navigation.dispatch(DrawerActions.openDrawer())}
+            onSettings={() => router.push('/(main)/settings')}
+          />
+          {empty
+            ? <EmptyState name={profileName} />
+            : <MessageList messages={current!.messages} />}
+          {error && <Text style={styles.err}>{error}</Text>}
+          <BrainNoticePill />
+          <ChatInput
+            onSend={send}
+            onResearch={research}
+            researchMode={researchMode}
+            onToggleResearch={() => setResearchMode((v) => !v)}
+            disabled={loading || !!error || !!ramWarning}
+            supportsVision={supportsVision}
+            att={att}
+            vision={vision}
+          />
+          {loading && model && (
+            <ModelLoadingOverlay modelName={model.name} sizeLabel={model.sizeLabel} sizeGb={model.sizeBytes / 1e9} />
+          )}
+          <Toast />
+        </KeyboardAvoidingView>
+      </SafeAreaView>
       <RAMWarningModal
         visible={!!ramWarning}
         available={ramWarning?.available ?? 0}
@@ -128,10 +132,11 @@ export default function ChatScreen() {
         onLoadAnyway={loadAnyway}
         onCancel={dismissRamWarning}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
   c: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
