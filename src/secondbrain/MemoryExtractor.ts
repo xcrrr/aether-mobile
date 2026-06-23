@@ -11,7 +11,7 @@ const MIN_USER_MESSAGES = 1;
 // moment the user sends their next message. A short budget lets it finish in the
 // gap (a truncated JSON array parses to nothing). Facts are short, so this is
 // plenty for a handful of them.
-const MAX_EXTRACT_TOKENS = 256;
+const MAX_EXTRACT_TOKENS = 320;
 const EXTRACT_TEMPERATURE = 0.1;
 
 // Keep the transcript well inside the model context so the extraction completion
@@ -26,18 +26,20 @@ const PROMPT_TEMPLATE =
   'projects, skills, preferences, goals, important people, and ongoing ' +
   'situations. Ignore one-off questions, general knowledge, and anything about ' +
   'the assistant.\n\n' +
-  'Output ONLY a raw JSON array — no prose, no markdown fences. Each item has ' +
-  'exactly: "category" (one of: identity, personality, preferences, goals, ' +
-  'knowledge, relationships, patterns, emotional, context), "key" (short ' +
-  'snake_case id), "value" (the fact, concise), "confidence" (0.0-1.0).\n' +
-  'Only include facts clearly stated or strongly implied — never invent. If ' +
-  'there is nothing worth remembering, output exactly [].\n\n' +
+  'Output ONLY raw JSON (no prose, no markdown fences) as an object with two keys: ' +
+  '"facts" (array; each item has exactly "category", "key", "value", "confidence") and ' +
+  '"links" (array; each item has "from_key", "to_key", "relation" — a short relationship ' +
+  'between two fact keys, e.g. {"from_key":"business_name","to_key":"city","relation":"located_in"}). ' +
+  'Use [] for either when empty. The "category" must be one of: identity, personality, ' +
+  'preferences, goals, knowledge, relationships, patterns, emotional, context. ' +
+  'Only include facts clearly stated or strongly implied — never invent.\n\n' +
   'Example conversation:\n' +
   'User: Hey, I run a barber shop called Mitruk here in Warsaw and I want to grow it on Instagram\n' +
   'Example output:\n' +
-  '[{"category":"identity","key":"business_name","value":"Mitruk barber shop","confidence":0.95},' +
-  '{"category":"identity","key":"location","value":"Warsaw","confidence":0.9},' +
-  '{"category":"goals","key":"current_goal","value":"grow the barber shop on Instagram","confidence":0.9}]\n\n' +
+  '{"facts":[{"category":"identity","key":"business_name","value":"Mitruk barber shop","confidence":0.95},' +
+  '{"category":"identity","key":"city","value":"Warsaw","confidence":0.9},' +
+  '{"category":"goals","key":"current_goal","value":"grow the barber shop on Instagram","confidence":0.9}],' +
+  '"links":[{"from_key":"business_name","to_key":"city","relation":"located_in"}]}\n\n' +
   'Now extract from this conversation:\n{CONVERSATION_TEXT}\n\nJSON:';
 
 const CATEGORIES = new Set<string>(MEMORY_CATEGORIES);
@@ -77,30 +79,59 @@ function tidyJson(s: string): string {
 
 /** Extract the JSON entries from a model response, tolerating markdown fences,
  *  stray prose, trailing commas, or a single bare object. Returns `null` if
- *  none found. */
+ *  none found. Accepts the new object form `{ facts: [...], links: [...] }` as
+ *  well as the legacy bare-array and single-object forms. */
 export function parseEntries(raw: string): unknown[] | null {
+  // object form: { facts: [...], links: [...] }
+  const objStart = raw.indexOf('{');
+  const objEnd = raw.lastIndexOf('}');
+  if (objStart >= 0 && objEnd > objStart) {
+    try {
+      const obj = JSON.parse(tidyJson(raw.slice(objStart, objEnd + 1)));
+      if (obj && typeof obj === 'object' && Array.isArray((obj as { facts?: unknown }).facts)) {
+        return (obj as { facts: unknown[] }).facts;
+      }
+    } catch { /* fall through */ }
+  }
+  // legacy: bare array
   const start = raw.indexOf('[');
   const end = raw.lastIndexOf(']');
   if (start >= 0 && end > start) {
     try {
       const parsed = JSON.parse(tidyJson(raw.slice(start, end + 1)));
       if (Array.isArray(parsed)) return parsed;
-    } catch {
-      // fall through to single-object handling
-    }
+    } catch { /* fall through */ }
   }
-  // Some small models emit a single bare object instead of an array.
-  const objStart = raw.indexOf('{');
-  const objEnd = raw.lastIndexOf('}');
+  // single bare object (a lone fact)
   if (objStart >= 0 && objEnd > objStart) {
     try {
       const obj = JSON.parse(tidyJson(raw.slice(objStart, objEnd + 1)));
-      if (obj && typeof obj === 'object') return [obj];
-    } catch {
-      return null;
-    }
+      if (obj && typeof obj === 'object' && !Array.isArray((obj as { facts?: unknown }).facts)) return [obj];
+    } catch { return null; }
   }
   return null;
+}
+
+export interface ParsedLink { fromKey: string; toKey: string; relation: string; }
+
+/** Pull the optional relationship links from a response object. Returns [] if none. */
+export function parseLinks(raw: string): ParsedLink[] {
+  const objStart = raw.indexOf('{');
+  const objEnd = raw.lastIndexOf('}');
+  if (objStart < 0 || objEnd <= objStart) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let obj: { links?: unknown };
+  try { obj = JSON.parse(tidyJson(raw.slice(objStart, objEnd + 1))); } catch { return []; }
+  const links = Array.isArray(obj?.links) ? obj.links : [];
+  const out: ParsedLink[] = [];
+  for (const l of links) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const link = l as any;
+    if (link && typeof link.from_key === 'string' && typeof link.to_key === 'string' && typeof link.relation === 'string') {
+      out.push({ fromKey: link.from_key, toKey: link.to_key, relation: link.relation });
+    }
+  }
+  return out;
 }
 
 interface ValidEntry {
@@ -176,6 +207,16 @@ export async function extractFromConversation(
     if (!entry) continue;
     MemoryStore.addOrUpdateEntry({ ...entry, sourceConversationId: conversationId });
     applied += 1;
+  }
+
+  const links = parseLinks(response);
+  if (links.length) {
+    const keys = new Set(MemoryStore.getAllEntries().map((e) => e.key));
+    for (const l of links) {
+      if (keys.has(l.fromKey) && keys.has(l.toKey)) {
+        MemoryStore.addEdge({ fromKey: l.fromKey, toKey: l.toKey, relation: l.relation });
+      }
+    }
   }
 
   MemoryStore.recordExtraction();

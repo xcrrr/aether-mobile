@@ -1,4 +1,4 @@
-import { parseEntries, validateEntry, extractFromConversation, buildTranscript } from './MemoryExtractor';
+import { parseEntries, validateEntry, extractFromConversation, buildTranscript, parseLinks } from './MemoryExtractor';
 import { Message } from '@/types';
 import * as Llama from '@/llm/LlamaService';
 import { useMemoryStore, MemoryStore } from './MemoryStore';
@@ -121,5 +121,19 @@ describe('extractFromConversation', () => {
     mockExtract.mockResolvedValue('[]');
     await extractFromConversation(convo, 'c1', { force: true });
     expect(mockExtract).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ preempt: true }));
+  });
+});
+
+describe('parseLinks', () => {
+  it('extracts a links array of {from_key,to_key,relation}', () => {
+    const raw = '{"facts":[],"links":[{"from_key":"business_name","to_key":"city","relation":"located_in"}]}';
+    expect(parseLinks(raw)).toEqual([{ fromKey: 'business_name', toKey: 'city', relation: 'located_in' }]);
+  });
+  it('returns [] when no links present', () => {
+    expect(parseLinks('[{"category":"identity","key":"x","value":"y","confidence":0.9}]')).toEqual([]);
+  });
+  it('skips malformed link objects', () => {
+    const raw = '{"links":[{"from_key":"a"},{"from_key":"a","to_key":"b","relation":"r"}]}';
+    expect(parseLinks(raw)).toEqual([{ fromKey: 'a', toKey: 'b', relation: 'r' }]);
   });
 });
