@@ -297,8 +297,12 @@ export async function generate(
   // Starting a fresh generation clears any prior cancellation.
   cancelled = false;
   activeKind = 'chat';
+  // Gemma's official recommended sampling — identical to Google's AI Edge Gallery
+  // (topK 64, topP 0.95, temperature 1.0, maxTokens 1024). Gemma is tuned for these;
+  // the prior 0.7/40/0.9 + 1.1 repeat-penalty made replies stiffer and is not how the
+  // model is meant to run. No repeat penalty (1.0) — Gemma doesn't use one.
   const base: Record<string, unknown> = {
-    prompt, n_predict: 1024, temperature: 0.7, top_p: 0.9, top_k: 40, penalty_repeat: 1.1, stop: STOP,
+    prompt, n_predict: 1024, temperature: 1.0, top_p: 0.95, top_k: 64, penalty_repeat: 1.0, stop: STOP,
   };
   // Marker-free prompt for the text-only fallback (a leftover <__media__> in a
   // non-media completion would confuse the model).
