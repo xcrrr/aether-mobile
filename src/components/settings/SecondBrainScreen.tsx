@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { View, ScrollView, Text, Pressable, StyleSheet, Switch, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Text, Pressable, StyleSheet, Switch, Alert, ActivityIndicator, Modal } from 'react-native';
+import { Graph3D } from '@/components/secondbrain/Graph3D';
+import { toGraphData } from '@/components/secondbrain/graphData';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Trash2, Sparkles } from 'lucide-react-native';
@@ -33,7 +35,16 @@ export default function SecondBrainScreen() {
   const deleteEntry = useMemoryStore((s) => s.deleteEntry);
   const clearAll = useMemoryStore((s) => s.clearAll);
 
+  const edges = useMemoryStore((s) => s.memory.edges);
   const [analyzing, setAnalyzing] = useState(false);
+  const [view, setView] = useState<'graph' | 'list'>('graph');
+  const [selected, setSelected] = useState<MemoryEntry | null>(null);
+
+  const graph = toGraphData(entries, edges ?? []);
+  const onNodeTap = (key: string) => {
+    const e = entries.find((x) => x.key === key);
+    if (e) setSelected(e);
+  };
 
   const grouped = groupByCategory(entries);
 
@@ -78,6 +89,20 @@ export default function SecondBrainScreen() {
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10}><Text style={styles.back}>‹</Text></Pressable>
         <Text style={styles.title}>Second Brain</Text>
+        <View style={styles.segment}>
+          <Pressable
+            style={[styles.segmentBtn, view === 'graph' && styles.segmentBtnActive]}
+            onPress={() => setView('graph')}
+          >
+            <Text style={[styles.segmentText, view === 'graph' && styles.segmentTextActive]}>Graph</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentBtn, view === 'list' && styles.segmentBtnActive]}
+            onPress={() => setView('list')}
+          >
+            <Text style={[styles.segmentText, view === 'list' && styles.segmentTextActive]}>List</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.xl }}>
@@ -130,6 +155,10 @@ export default function SecondBrainScreen() {
           <Text style={styles.empty}>
             Nothing learned yet. Keep chatting — Aether will quietly build a picture of you.
           </Text>
+        ) : view === 'graph' ? (
+          <View style={{ height: 420, borderRadius: radius.lg, overflow: 'hidden' }}>
+            <Graph3D data={graph} onNodeTap={onNodeTap} />
+          </View>
         ) : (
           grouped.map(([category, list]) => (
             <View key={category}>
@@ -162,6 +191,22 @@ export default function SecondBrainScreen() {
           Memory is extracted on-device by your local model.{'\n'}Nothing is ever sent to a server.
         </Text>
       </ScrollView>
+      <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSelected(null)}>
+          <View style={styles.modalCard}>
+            {selected && (
+              <>
+                <Text style={styles.label}>{selected.category}</Text>
+                <Text style={styles.entryKey}>{selected.key}</Text>
+                <Text style={[styles.entryValue, { marginTop: 6 }]}>{selected.value}</Text>
+                <Text style={[styles.confidenceText, { marginTop: 10 }]}>
+                  {Math.round(selected.confidence * 100)}% confident{selected.stale ? ' · stale' : ''}
+                </Text>
+              </>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -192,4 +237,11 @@ const styles = StyleSheet.create({
   clearBtn: { borderColor: colors.danger, borderWidth: 1, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center', backgroundColor: colors.dangerBg },
   clearLabel: { color: colors.danger, fontSize: 14, fontFamily: fonts.sansBold },
   footer: { textAlign: 'center', color: colors.textMuted, fontSize: 12, lineHeight: 19, fontFamily: fonts.sans },
+  segment: { flexDirection: 'row', marginLeft: 'auto', backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
+  segmentBtn: { paddingHorizontal: spacing.md, paddingVertical: 6 },
+  segmentBtnActive: { backgroundColor: colors.violet },
+  segmentText: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sansSemibold },
+  segmentTextActive: { color: colors.white },
+  modalBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: spacing.xl },
+  modalCard: { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, width: '80%' },
 });
