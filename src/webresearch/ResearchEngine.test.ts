@@ -86,7 +86,11 @@ describe('runResearch', () => {
     const steps: string[] = [];
     const result = await runResearch('why', (s) => steps.push(s));
 
-    expect(steps).toEqual(['Searching the web…', 'Reading sources…', 'Thinking…']);
+    // Real-time, real counts: search → per-source read counter → write answer.
+    expect(steps[0]).toBe('Searching the web…');
+    expect(steps).toContain('Reading the web… 1/2 sources');
+    expect(steps).toContain('Reading the web… 2/2 sources');
+    expect(steps[steps.length - 1]).toBe('Read 1 source — writing your answer…');
     expect(result.sources).toHaveLength(1);              // dead source filtered out
     expect(result.sources[0].url).toBe('https://site1.com');
     expect(result.answer).toContain('grounded in'); // [1] markers stripped from display

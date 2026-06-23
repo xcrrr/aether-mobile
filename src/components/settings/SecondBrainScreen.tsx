@@ -1,18 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   View, ScrollView, Text, Pressable, StyleSheet, Switch, Alert,
-  ActivityIndicator, Modal, TextInput,
+  Modal, TextInput,
 } from 'react-native';
 import { Graph3D } from '@/components/secondbrain/Graph3D';
 import { toGraphData, CATEGORY_COLORS } from '@/components/secondbrain/graphData';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Trash2, Sparkles, Plus, Maximize2, X } from 'lucide-react-native';
+import { Trash2, Plus, Maximize2, X, Sparkles } from 'lucide-react-native';
 import { useMemoryStore } from '@/secondbrain/MemoryStore';
 import { MemoryCategory, MemoryEntry, MEMORY_CATEGORIES } from '@/secondbrain/types';
-import { extractFromConversation } from '@/secondbrain/MemoryExtractor';
-import { useChatStore } from '@/state/useChatStore';
-import * as Llama from '@/llm/LlamaService';
 import { colors, spacing, fonts, radius } from '@/theme';
 
 function formatTime(ms: number): string {
@@ -42,10 +39,15 @@ export default function SecondBrainScreen() {
   const addManualEntry = useMemoryStore((s) => s.addManualEntry);
   const purgeStale = useMemoryStore((s) => s.purgeStale);
   const edges = useMemoryStore((s) => s.memory.edges);
+  const recentKeys = useMemoryStore((s) => s.recentKeys);
+  const clearRecentKeys = useMemoryStore((s) => s.clearRecentKeys);
 
   // ─── View / UI state ──────────────────────────────────────────────────────
-  const [analyzing, setAnalyzing] = useState(false);
   const [view, setView] = useState<'graph' | 'list'>('graph');
+
+  // Stop highlighting "new" nodes once the user has seen them (on leave).
+  useEffect(() => () => clearRecentKeys(), [clearRecentKeys]);
+  const recentSet = useMemo(() => new Set(recentKeys), [recentKeys]);
 
   // Search + filter
   const [query, setQuery] = useState('');
@@ -74,7 +76,7 @@ export default function SecondBrainScreen() {
     });
   }, [entries, activeCats, query]);
 
-  const graphData = useMemo(() => toGraphData(filtered, edges ?? []), [filtered, edges]);
+  const graphData = useMemo(() => toGraphData(filtered, edges ?? [], recentSet), [filtered, edges, recentSet]);
   const grouped = useMemo(() => groupByCategory(filtered), [filtered]);
 
   // Categories that have at least 1 entry (for chip rendering)
@@ -139,33 +141,6 @@ export default function SecondBrainScreen() {
     setAddCat('context');
   };
 
-  // ─── Analyze now ──────────────────────────────────────────────────────────
-  const analyzeNow = async () => {
-    if (!Llama.isModelLoaded()) {
-      Alert.alert('Second Brain', 'Open a chat so the model loads, then come back and analyze.');
-      return;
-    }
-    const convo = useChatStore.getState().current;
-    if (!convo || convo.messages.length === 0) {
-      Alert.alert('Second Brain', 'No conversation to analyze yet. Chat with Aether first, then tap this.');
-      return;
-    }
-    setAnalyzing(true);
-    try {
-      const n = await extractFromConversation(convo.messages, convo.id, { force: true });
-      Alert.alert(
-        'Second Brain',
-        n > 0
-          ? `Learned or updated ${n} fact${n === 1 ? '' : 's'} from your latest chat.`
-          : 'No new facts found in that conversation yet. Try sharing more about yourself.',
-      );
-    } catch {
-      Alert.alert('Second Brain', 'Could not analyze right now — try again in a moment.');
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
   const confirmClear = () =>
     Alert.alert(
       'Clear all memory?',
@@ -203,7 +178,7 @@ export default function SecondBrainScreen() {
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.xl }}>
         <Text style={styles.subtitle}>
-          Aether's memory of you — fully private, stored only on this device.
+          Aether's memory of you — learned automatically after every message, fully private, stored only on this device.
         </Text>
 
         {/* ── Enable card ── */}
@@ -212,7 +187,7 @@ export default function SecondBrainScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.toggleLabel}>Enable Second Brain</Text>
               <Text style={styles.toggleHint}>
-                When off, no new memories are learned and existing ones aren't used.
+                On: every message is analysed automatically and memories are used in all chats. Off: nothing is learned or used.
               </Text>
             </View>
             <Switch
@@ -224,18 +199,14 @@ export default function SecondBrainScreen() {
           </View>
         </View>
 
-        {/* ── Analyze now ── */}
-        {enabled && (
-          <Pressable
-            style={[styles.analyzeBtn, analyzing && { opacity: 0.6 }]}
-            onPress={analyzeNow}
-            disabled={analyzing}
-          >
-            {analyzing
-              ? <ActivityIndicator size="small" color={colors.white} />
-              : <Sparkles size={18} color={colors.white} strokeWidth={2} />}
-            <Text style={styles.analyzeLabel}>{analyzing ? 'Analyzing…' : 'Analyze current chat now'}</Text>
-          </Pressable>
+        {/* ── New-memory banner (after a chat just taught Aether something) ── */}
+        {recentKeys.length > 0 && (
+          <View style={styles.recentBanner}>
+            <Sparkles size={16} color={colors.violet} strokeWidth={2.4} />
+            <Text style={styles.recentText}>
+              {recentKeys.length} new {recentKeys.length === 1 ? 'memory' : 'memories'} from your last chat — glowing in the graph below.
+            </Text>
+          </View>
         )}
 
         {/* ── Status card ── */}
@@ -507,9 +478,9 @@ const styles = StyleSheet.create({
   toggleLabel: { color: colors.text, fontSize: 15, fontFamily: fonts.sansSemibold },
   toggleHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17, fontFamily: fonts.sans, marginTop: 3 },
 
-  // Analyze button
-  analyzeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.violet, borderRadius: radius.md, paddingVertical: 14 },
-  analyzeLabel: { color: colors.white, fontSize: 15, fontFamily: fonts.sansBold },
+  // New-memory banner
+  recentBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: 'rgba(124,58,237,0.12)', borderColor: colors.violet, borderWidth: 1, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: spacing.md },
+  recentText: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 18, fontFamily: fonts.sansMedium },
 
   // Status card
   statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },

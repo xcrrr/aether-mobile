@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { Aurora } from '@/components/ds/Aurora';
 import { Button } from '@/components/ds/Button';
 import { Logo } from '@/components/ds/Logo';
 import { useChatStore } from '@/state/useChatStore';
@@ -18,6 +19,7 @@ export default function MainIndex() {
 
   return (
     <View style={styles.c}>
+      <Aurora />
       <Logo size={56} tone="white" style={styles.logo} />
       <Text style={styles.sub}>
         {activeModelId ? 'Private, on-device AI. Start a conversation — nothing leaves your phone.' : 'Download a model to begin.'}

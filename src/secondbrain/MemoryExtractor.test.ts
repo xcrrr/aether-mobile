@@ -123,6 +123,23 @@ describe('extractFromConversation', () => {
     expect(await extractFromConversation(convo, 'c1')).toBe(1);
   });
 
+  it('records the learned keys as recent for the graph highlight', async () => {
+    useMemoryStore.setState({ recentKeys: [] });
+    mockExtract.mockResolvedValue(
+      '[{"category":"preferences","key":"hobby","value":"climbing","confidence":0.9},' +
+      '{"category":"identity","key":"city","value":"Warsaw","confidence":0.9}]',
+    );
+    await extractFromConversation(convo, 'c1');
+    expect(useMemoryStore.getState().recentKeys.sort()).toEqual(['city', 'hobby']);
+  });
+
+  it('leaves recent keys untouched when nothing is learned', async () => {
+    useMemoryStore.setState({ recentKeys: ['prior'] });
+    mockExtract.mockResolvedValue('[]');
+    await extractFromConversation(convo, 'c1');
+    expect(useMemoryStore.getState().recentKeys).toEqual(['prior']);
+  });
+
   it('force passes preempt to the model so it never silently yields', async () => {
     mockExtract.mockResolvedValue('[]');
     await extractFromConversation(convo, 'c1', { force: true });

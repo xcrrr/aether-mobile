@@ -14,9 +14,17 @@ export const colors = {
   textCode: '#E2E2E2',
   violet: '#7C3AED',
   violetStrong: '#6D28D9',
+  violetDim: 'rgba(124,58,237,0.14)',
   blue: '#4285F4',
   danger: '#EF4444',
   dangerBg: '#2A1414',
+  success: '#22C55E',
+  warning: '#EAB308',
+  warningBg: 'rgba(234,179,8,0.12)',
+  // Aurora backdrop blobs (V2.0 home/hero)
+  aurora1: '#7C3AED',
+  aurora2: '#5B21B6',
+  aurora3: '#9333EA',
   // semantic aliases (kept for existing callers)
   purple: '#7C3AED',
   userBubble: '#7C3AED',
@@ -25,6 +33,18 @@ export const colors = {
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 export const radius = { sm: 8, md: 12, lg: 16, xl: 24, full: 999 };
+
+// Type scale (px) — mirrors tokens/typography.css in the Aether design system.
+export const fontSize = {
+  xs: 11, sm: 12, sm2: 13, base: 14, body: 15, md: 16, lg: 18, title: 28, hero: 32,
+};
+export const lineHeight = { tight: 1.15, snug: 1.3, body: 1.45 };
+
+// Motion — mirrors tokens/motion.css.
+export const motion = {
+  durFast: 120, durBase: 220, durSlow: 1900,
+  pressOpacity: 0.6, disabledOpacity: 0.45,
+};
 
 // Font-family names registered via expo-font in app/_layout.tsx.
 export const fonts = {

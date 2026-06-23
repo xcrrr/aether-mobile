@@ -10,6 +10,7 @@ import { RAMInsufficientError } from '@/utils/ramCheck';
 import { FileAttachment } from '@/types';
 import { extractFromConversation } from '@/secondbrain/MemoryExtractor';
 import { ExtractionQueue } from '@/secondbrain/ExtractionQueue';
+import { useBrainNotice } from '@/state/useBrainNotice';
 import { isBusy } from '@/llm/LlamaService';
 import { AppState } from 'react-native';
 import { runResearch } from '@/webresearch/ResearchEngine';
@@ -26,11 +27,17 @@ const extractionQueue = new ExtractionQueue({
     if (!messages.length) return 0;
     return extractFromConversation(messages, conversationId);
   },
+  // Surface a "N saved to your Second Brain" pill whenever a chat yields facts.
+  onResult: (_id, count) => useBrainNotice.getState().show(count),
 });
 
 function queueMemoryExtraction(): void {
   const convo = useChatStore.getState().current;
-  if (convo) extractionQueue.markDirty(convo.id);
+  if (!convo) return;
+  extractionQueue.markDirty(convo.id);
+  // Try to drain immediately so analysis happens right after the reply, not on
+  // the next poll tick. Yields to the next chat send if the context is busy.
+  extractionQueue.flush();
 }
 
 export function useInference(modelId: string | undefined) {

@@ -13,6 +13,8 @@ import { getModelById, modeForModel } from '@/models/registry';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { ModeSelector } from '@/components/chat/ModeSelector';
+import { BrainNoticePill } from '@/components/chat/BrainNoticePill';
+import { Aurora } from '@/components/ds/Aurora';
 import { ModelLoadingOverlay } from '@/components/common/ModelLoadingOverlay';
 import { Toast } from '@/components/common/Toast';
 import { RAMWarningModal } from '@/components/settings/RAMWarningModal';
@@ -56,6 +58,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
   const { current, open, setCurrentModel } = useChatStore();
+  const isGenerating = useChatStore((s) => s.isGenerating);
   const { installed, setActive } = useModelStore();
   const profileName = useProfileStore((s) => s.profile?.name ?? '');
 
@@ -83,6 +86,8 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.c} edges={['top']}>
+      {/* Living purple aurora — same as onboarding — surfaces only while Aether thinks. */}
+      <Aurora active={isGenerating} intensity={0.92} />
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <ChatHeader
           mode={mode}
@@ -95,6 +100,7 @@ export default function ChatScreen() {
           ? <EmptyState name={profileName} />
           : <MessageList messages={current!.messages} />}
         {error && <Text style={styles.err}>{error}</Text>}
+        <BrainNoticePill />
         <ChatInput
           onSend={send}
           onResearch={research}

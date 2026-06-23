@@ -20,6 +20,9 @@ interface SecondBrainState {
   enabled: boolean;
   /** True once the persisted state has rehydrated from AsyncStorage. */
   hydrated: boolean;
+  /** Keys learned/updated in the most recent extraction — used to light up new
+   *  nodes in the graph. Transient (never persisted); cleared once viewed. */
+  recentKeys: string[];
 
   addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced' | 'lastSeenAt'>) => void;
   updateEntry: (id: string, patch: { value?: string; category?: MemoryCategory }) => void;
@@ -37,6 +40,8 @@ interface SecondBrainState {
   setEnabled: (enabled: boolean) => void;
   /** Bump extraction stats after a conversation is analysed. */
   recordExtraction: () => void;
+  setRecentKeys: (keys: string[]) => void;
+  clearRecentKeys: () => void;
 }
 
 export const useMemoryStore = create<SecondBrainState>()(
@@ -45,6 +50,7 @@ export const useMemoryStore = create<SecondBrainState>()(
       memory: emptyMemory(),
       enabled: true,
       hydrated: false,
+      recentKeys: [],
 
       addOrUpdateEntry: (entry) => {
         const now = Date.now();
@@ -155,6 +161,9 @@ export const useMemoryStore = create<SecondBrainState>()(
             totalConversationsAnalyzed: get().memory.totalConversationsAnalyzed + 1,
           },
         }),
+
+      setRecentKeys: (keys) => set({ recentKeys: keys }),
+      clearRecentKeys: () => set({ recentKeys: [] }),
     }),
     {
       name: STORAGE_KEY,
@@ -207,4 +216,6 @@ export const MemoryStore = {
   isEnabled: () => useMemoryStore.getState().enabled,
   setEnabled: (enabled: boolean) => useMemoryStore.getState().setEnabled(enabled),
   recordExtraction: () => useMemoryStore.getState().recordExtraction(),
+  setRecentKeys: (keys: string[]) => useMemoryStore.getState().setRecentKeys(keys),
+  clearRecentKeys: () => useMemoryStore.getState().clearRecentKeys(),
 };

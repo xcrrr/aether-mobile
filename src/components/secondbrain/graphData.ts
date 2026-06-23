@@ -13,6 +13,8 @@ export interface GraphNode {
   color: string;
   val: number;
   opacity: number;
+  /** Just learned/updated in the latest extraction — rendered bright + framed. */
+  recent: boolean;
 }
 export interface GraphLink { source: string; target: string; relation: string; }
 export interface GraphData { nodes: GraphNode[]; links: GraphLink[]; }
@@ -23,8 +25,17 @@ export function shortLabel(value: string, max = 24): string {
   return v.length <= max ? v : `${v.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** Map memory entries + edges to the 3d-force-graph shape (pure). */
-export function toGraphData(entries: MemoryEntry[], edges: MemoryEdge[]): GraphData {
+/**
+ * Map memory entries + edges to the 3d-force-graph shape (pure). `recentKeys`
+ * marks the facts learned in the most recent extraction so the graph can light
+ * them up brighter than the rest.
+ */
+export function toGraphData(
+  entries: MemoryEntry[],
+  edges: MemoryEdge[],
+  recentKeys: Iterable<string> = [],
+): GraphData {
+  const recent = recentKeys instanceof Set ? recentKeys : new Set(recentKeys);
   const nodes: GraphNode[] = entries.map((e) => ({
     id: e.key,
     label: shortLabel(e.value),
@@ -32,6 +43,7 @@ export function toGraphData(entries: MemoryEntry[], edges: MemoryEdge[]): GraphD
     color: CATEGORY_COLORS[e.category],
     val: 1 + e.confidence * 4 + e.timesReinforced,
     opacity: e.stale ? 0.4 : 0.95,
+    recent: recent.has(e.key),
   }));
   const keys = new Set(entries.map((e) => e.key));
   const links: GraphLink[] = edges

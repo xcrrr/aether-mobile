@@ -132,15 +132,28 @@ export async function runResearch(
   onProgress('Searching the web…');
   const hits: SearchResult[] = await searchDuckDuckGo(searchQuery, MAX_SOURCES);
 
-  onProgress('Reading sources…');
-  const fetched = await Promise.all(hits.map((h) => fetchAndClean(h.url)));
+  // Report each source the moment its fetch+clean actually resolves, so the
+  // "thinking" status counts up in real time. The numbers are real reads — never
+  // faked or pre-incremented.
+  const total = hits.length;
+  let read = 0;
+  onProgress(total ? `Found ${total} source${total === 1 ? '' : 's'} — reading 0/${total}…` : 'No sources found…');
+  const fetched = await Promise.all(
+    hits.map((h) =>
+      fetchAndClean(h.url).then((r) => {
+        read += 1;
+        onProgress(`Reading the web… ${read}/${total} source${total === 1 ? '' : 's'}`);
+        return r;
+      }),
+    ),
+  );
   const sources = fetched.filter((s) => s.content !== '');
 
   if (sources.length === 0) {
     return { query, sources: [], answer: NO_SOURCES_MSG, citations: [] };
   }
 
-  onProgress('Thinking…');
+  onProgress(`Read ${sources.length} source${sources.length === 1 ? '' : 's'} — writing your answer…`);
   const prompt = buildResearchPrompt(query, sources, history);
   const raw = await Llama.extract(prompt, { maxTokens: ANSWER_MAX_TOKENS, temperature: ANSWER_TEMPERATURE, preempt: true });
 

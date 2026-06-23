@@ -35,4 +35,14 @@ describe('toGraphData', () => {
     const { nodes } = toGraphData([entry({ key: 'old', stale: true })], []);
     expect(nodes[0].opacity).toBeLessThan(1);
   });
+  it('flags nodes whose key is in recentKeys as recent', () => {
+    const entries = [entry({ key: 'city' }), entry({ key: 'goal', id: 'i2' })];
+    const { nodes } = toGraphData(entries, [], new Set(['goal']));
+    expect(nodes.find((n) => n.id === 'city')!.recent).toBe(false);
+    expect(nodes.find((n) => n.id === 'goal')!.recent).toBe(true);
+  });
+  it('defaults recent to false when no recentKeys given', () => {
+    const { nodes } = toGraphData([entry({ key: 'city' })], []);
+    expect(nodes[0].recent).toBe(false);
+  });
 });

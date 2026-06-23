@@ -203,10 +203,12 @@ export async function extractFromConversation(
   if (!rawEntries) return 0;
 
   let applied = 0;
+  const appliedKeys: string[] = [];
   for (const raw of rawEntries) {
     const entry = validateEntry(raw);
     if (!entry) continue;
     MemoryStore.addOrUpdateEntry({ ...entry, sourceConversationId: conversationId });
+    appliedKeys.push(entry.key);
     applied += 1;
   }
 
@@ -222,5 +224,7 @@ export async function extractFromConversation(
 
   MemoryStore.recordExtraction();
   MemoryStore.markStale();
+  // Light up the just-learned facts in the graph (cleared once the user views them).
+  if (appliedKeys.length) MemoryStore.setRecentKeys(appliedKeys);
   return applied;
 }

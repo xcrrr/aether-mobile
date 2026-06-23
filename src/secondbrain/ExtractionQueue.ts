@@ -2,6 +2,8 @@ export interface ExtractionQueueOptions {
   isBusy: () => boolean;
   /** Run extraction for a conversation; resolves the number of facts applied. */
   extract: (conversationId: string) => Promise<number>;
+  /** Called after a successful drain with the number of facts learned/updated. */
+  onResult?: (conversationId: string, count: number) => void;
   pollMs?: number;
 }
 
@@ -18,7 +20,7 @@ export class ExtractionQueue {
   private readonly opts: Required<ExtractionQueueOptions>;
 
   constructor(opts: ExtractionQueueOptions) {
-    this.opts = { pollMs: 1500, ...opts };
+    this.opts = { pollMs: 1500, onResult: () => {}, ...opts };
   }
 
   markDirty(conversationId: string): void {
@@ -48,7 +50,8 @@ export class ExtractionQueue {
       // Remove before running; re-add on failure so it retries next tick.
       this.dirty.delete(id);
       try {
-        await this.opts.extract(id);
+        const count = await this.opts.extract(id);
+        this.opts.onResult(id, count);
       } catch {
         this.dirty.add(id);
       }

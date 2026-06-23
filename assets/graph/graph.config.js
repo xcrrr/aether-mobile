@@ -5,7 +5,11 @@
 
   var highlightNodes = new Set();
   var highlightLinks = new Set();
+  var recentIds = new Set();          // facts learned in the latest extraction
   var hasFocus = false;
+
+  // Bright accent for just-learned nodes so they pop out of the cluster.
+  var RECENT_COLOR = '#EDE9FE';
 
   function dim(hex) { return 'rgba(120,120,140,0.12)'; }
 
@@ -15,19 +19,25 @@
     .nodeRelSize(4)
     .nodeOpacity(0.95)
     .nodeColor(function (n) {
+      if (recentIds.has(n.id)) return RECENT_COLOR;     // new facts always glow
       if (!hasFocus) return n.color;
       return highlightNodes.has(n.id) ? n.color : dim(n.color);
     })
-    .nodeVal(function (n) { return n.val; })
+    .nodeVal(function (n) {
+      // New facts render noticeably larger so they read as "more visible".
+      return recentIds.has(n.id) ? (n.val || 1) * 2.4 + 8 : n.val;
+    })
     .nodeThreeObjectExtend(true)
     .nodeThreeObject(function (n) {
+      var isRecent = recentIds.has(n.id);
       var s = new SpriteText(n.label || n.id);
-      s.color = '#EAEAF0';
-      s.textHeight = 4;
-      s.backgroundColor = 'rgba(11,11,15,0.55)';
-      s.padding = 1.6;
+      s.color = isRecent ? '#FFFFFF' : '#EAEAF0';
+      s.textHeight = isRecent ? 6 : 4;
+      s.fontWeight = isRecent ? 'bold' : 'normal';
+      s.backgroundColor = isRecent ? 'rgba(124,58,237,0.9)' : 'rgba(11,11,15,0.55)';
+      s.padding = isRecent ? 2.4 : 1.6;
       s.borderRadius = 2;
-      s.position.set(0, 9, 0);
+      s.position.set(0, isRecent ? 11 : 9, 0);
       return s;
     })
     .linkColor(function (l) {
@@ -70,6 +80,7 @@
 
   function refresh() {
     Graph.nodeColor(Graph.nodeColor())
+      .nodeVal(Graph.nodeVal())
       .linkColor(Graph.linkColor())
       .linkWidth(Graph.linkWidth())
       .linkDirectionalParticles(Graph.linkDirectionalParticles());
@@ -125,13 +136,27 @@
     }).join('');
   }
 
+  // After data lands, if any nodes are freshly learned, frame the camera on them
+  // so the new memories are front-and-centre. Delayed so the force layout warms up.
+  function frameRecent() {
+    if (!recentIds.size) return;
+    pauseSpin();
+    try {
+      Graph.zoomToFit(900, 60, function (n) { return recentIds.has(n.id); });
+    } catch (e) {}
+  }
+
   function setData(payload) {
     try {
       var data = typeof payload === 'string' ? JSON.parse(payload) : payload;
       var nodes = data.nodes || [];
       clearFocus();
+      recentIds = new Set();
+      nodes.forEach(function (n) { if (n.recent) recentIds.add(n.id); });
       Graph.graphData({ nodes: nodes, links: data.links || [] });
       buildLegend(nodes);
+      refresh();
+      if (recentIds.size) setTimeout(frameRecent, 1400);
     } catch (e) {}
   }
 
