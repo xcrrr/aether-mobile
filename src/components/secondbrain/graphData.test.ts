@@ -1,4 +1,4 @@
-import { toGraphData, CATEGORY_COLORS } from './graphData';
+import { toGraphData, CATEGORY_COLORS, shortLabel } from './graphData';
 import { MemoryEntry, MemoryEdge } from '@/secondbrain/types';
 
 const entry = (over: Partial<MemoryEntry>): MemoryEntry => ({
@@ -11,8 +11,16 @@ describe('toGraphData', () => {
   it('maps entries to nodes colored by category and sized by confidence', () => {
     const { nodes } = toGraphData([entry({ key: 'city', category: 'identity', confidence: 0.9 })], []);
     expect(nodes).toHaveLength(1);
-    expect(nodes[0]).toMatchObject({ id: 'city', label: 'v', color: CATEGORY_COLORS.identity });
+    expect(nodes[0]).toMatchObject({ id: 'city', label: 'v', category: 'identity', color: CATEGORY_COLORS.identity });
     expect(nodes[0].val).toBeGreaterThan(0);
+  });
+  it('truncates long node labels with an ellipsis (full value kept elsewhere)', () => {
+    const { nodes } = toGraphData([entry({ key: 'bio', value: 'x'.repeat(60) })], []);
+    expect(nodes[0].label.length).toBeLessThanOrEqual(24);
+    expect(nodes[0].label.endsWith('…')).toBe(true);
+  });
+  it('shortLabel leaves short strings untouched', () => {
+    expect(shortLabel('Warsaw')).toBe('Warsaw');
   });
   it('keeps only links whose endpoints both exist as nodes', () => {
     const entries = [entry({ key: 'a' }), entry({ key: 'b', id: 'i2' })];

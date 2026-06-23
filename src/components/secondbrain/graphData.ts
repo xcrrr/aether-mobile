@@ -6,15 +6,29 @@ export const CATEGORY_COLORS: Record<MemoryCategory, string> = {
   context: '#8B5CF6',
 };
 
-export interface GraphNode { id: string; label: string; color: string; val: number; opacity: number; }
+export interface GraphNode {
+  id: string;
+  label: string;
+  category: MemoryCategory;
+  color: string;
+  val: number;
+  opacity: number;
+}
 export interface GraphLink { source: string; target: string; relation: string; }
 export interface GraphData { nodes: GraphNode[]; links: GraphLink[]; }
+
+/** Short node caption for the always-on label sprite (the full value lives in the popup). */
+export function shortLabel(value: string, max = 24): string {
+  const v = value.trim();
+  return v.length <= max ? v : `${v.slice(0, max - 1).trimEnd()}…`;
+}
 
 /** Map memory entries + edges to the 3d-force-graph shape (pure). */
 export function toGraphData(entries: MemoryEntry[], edges: MemoryEdge[]): GraphData {
   const nodes: GraphNode[] = entries.map((e) => ({
     id: e.key,
-    label: e.value,
+    label: shortLabel(e.value),
+    category: e.category,
     color: CATEGORY_COLORS[e.category],
     val: 1 + e.confidence * 4 + e.timesReinforced,
     opacity: e.stale ? 0.4 : 0.95,

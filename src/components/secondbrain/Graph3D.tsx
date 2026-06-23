@@ -5,9 +5,9 @@ import { Asset } from 'expo-asset';
 import { GraphData } from './graphData';
 import { colors } from '@/theme';
 
-interface Props { data: GraphData; onNodeTap: (key: string) => void; }
+interface Props { data: GraphData; onNodeTap: (key: string) => void; focusKey?: string | null; }
 
-export function Graph3D({ data, onNodeTap }: Props) {
+export function Graph3D({ data, onNodeTap, focusKey }: Props) {
   const ref = useRef<WebView>(null);
   const [uri, setUri] = useState<string | null>(null);
 
@@ -27,6 +27,15 @@ export function Graph3D({ data, onNodeTap }: Props) {
       `window.__setGraphData && window.__setGraphData(${JSON.stringify(payload)}); true;`,
     );
   }, [payload]);
+
+  // Fly the camera to a node when the screen asks to focus one (e.g. list tap).
+  useEffect(() => {
+    if (focusKey) {
+      ref.current?.injectJavaScript(
+        `window.__focusNode && window.__focusNode(${JSON.stringify(focusKey)}); true;`,
+      );
+    }
+  }, [focusKey]);
 
   if (!uri) return <View style={styles.fill} />;
 
