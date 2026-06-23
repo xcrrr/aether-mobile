@@ -1,5 +1,5 @@
 import { Message } from '@/types';
-import * as Llama from '@/llm/LlamaService';
+import * as Llama from '@/llm/engine';
 import { buildGemmaPrompt } from '@/llm/prompt';
 import { MemoryCategory, MEMORY_CATEGORIES } from './types';
 import { MemoryStore } from './MemoryStore';

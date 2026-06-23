@@ -75,10 +75,7 @@ export interface ModelDef {
   filename: string;
   color: string;
   badge: string;
-  /** Whether the model can analyze image attachments (multimodal). */
+  /** Whether the model can analyze image attachments. LiteRT `.task` bundles are
+   *  multimodal in one file — vision is built in, no separate pack. */
   supportsVision: boolean;
-  /** Multimodal projector ("vision pack") — downloaded on demand to enable image analysis. */
-  mmprojUrl?: string;
-  mmprojFilename?: string;
-  mmprojSizeBytes?: number;
 }

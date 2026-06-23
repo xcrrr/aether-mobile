@@ -3,7 +3,7 @@ import { Conversation, ConversationMeta, Message, FileAttachment } from '@/types
 import {
   loadIndex, loadConversation, saveConversation, createConversation, deleteConversation,
 } from '@/storage/conversations';
-import * as Llama from '@/llm/LlamaService';
+import * as Llama from '@/llm/engine';
 import { stripSpecialTokens } from '@/llm/prompt';
 
 interface ChatState {

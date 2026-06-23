@@ -10,9 +10,15 @@ describe('model registry', () => {
   it('every model URL ends with its filename', () => {
     for (const m of MODELS) expect(m.downloadUrl.endsWith(m.filename)).toBe(true);
   });
-  it('sizes are the verified byte counts', () => {
-    expect(getModelById('gemma4-e2b')!.sizeBytes).toBe(3462678272);
-    expect(getModelById('gemma4-e4b')!.sizeBytes).toBe(5405168384);
+  it('sizes are the verified .task byte counts', () => {
+    expect(getModelById('gemma4-e2b')!.sizeBytes).toBe(2003697664);
+    expect(getModelById('gemma4-e4b')!.sizeBytes).toBe(2964324352);
+  });
+  it('models are LiteRT .task bundles (multimodal, no separate vision pack)', () => {
+    for (const m of MODELS) {
+      expect(m.filename.endsWith('.task')).toBe(true);
+      expect(m.supportsVision).toBe(true);
+    }
   });
   it('getModelById returns undefined for unknown ids', () => {
     expect(getModelById('nope')).toBeUndefined();

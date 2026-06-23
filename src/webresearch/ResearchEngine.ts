@@ -11,7 +11,7 @@ import { Message } from '@/types';
 import { searchDuckDuckGo } from './DuckDuckGoSearch';
 import { fetchAndClean } from './ContentFetcher';
 import { buildGemmaPrompt, stripSpecialTokens } from '@/llm/prompt';
-import * as Llama from '@/llm/LlamaService';
+import * as Llama from '@/llm/engine';
 import { sanitizeModelText, clampChars, MAX_SOURCES } from './safety';
 
 /** Recent turns folded into research so follow-ups keep their context. */

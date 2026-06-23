@@ -7,8 +7,6 @@ import type { DownloadTask } from '@kesha-antonov/react-native-background-downlo
 import { ModelDef } from '@/types';
 import { MODELS, getModelById } from './registry';
 import { modelsDir, modelDestPath, stripFileUri, isVerifiedSize } from './paths';
-import { isMmprojFileValid } from './ggufCheck';
-import { base64ToArrayBuffer } from '@/files/base64';
 
 /**
  * Model downloads use @kesha-antonov/react-native-background-downloader: a
@@ -48,124 +46,6 @@ export async function isInstalled(model: ModelDef): Promise<boolean> {
   return isVerifiedSize((info as { size?: number }).size ?? 0, model.sizeBytes);
 }
 
-/** On-disk path for the model's multimodal projector ("vision pack"). */
-export function mmprojLocalPath(model: ModelDef): string | null {
-  return model.mmprojFilename ? modelDestPath(DOC, model.mmprojFilename) : null;
-}
-
-/** Whether the model's vision pack is fully downloaded and size-verified. */
-export async function isMmprojInstalled(model: ModelDef): Promise<boolean> {
-  const path = mmprojLocalPath(model);
-  if (!path || !model.mmprojSizeBytes) return false;
-  const info = await FileSystem.getInfoAsync(`file://${path}`, { size: true });
-  if (!info.exists) return false;
-  return isVerifiedSize((info as { size?: number }).size ?? 0, model.mmprojSizeBytes);
-}
-
-export interface MmprojIntegrity { ok: boolean; reason?: 'missing' | 'corrupt'; }
-
-/** Verify a downloaded vision pack: present, GGUF magic, size within tolerance.
- *  Deletes a corrupt file so the UI can prompt a clean re-download. */
-export async function verifyMmprojIntegrity(model: ModelDef): Promise<MmprojIntegrity> {
-  const path = mmprojLocalPath(model);
-  if (!path || !model.mmprojSizeBytes) return { ok: false, reason: 'missing' };
-  const uri = `file://${path}`;
-  const info = await FileSystem.getInfoAsync(uri, { size: true });
-  if (!info.exists) return { ok: false, reason: 'missing' };
-  const size = (info as { size?: number }).size ?? 0;
-
-  // Read the file's leading bytes via base64; decode only the first 4 to ASCII.
-  let headStr = '';
-  try {
-    const b64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType?.Base64,
-      length: 8,
-      position: 0,
-    });
-    const bytes = new Uint8Array(base64ToArrayBuffer(b64)).slice(0, 4);
-    headStr = String.fromCharCode(...bytes);
-  } catch {
-    headStr = '';
-  }
-
-  const valid = isMmprojFileValid({ headStr, sizeBytes: size, expectedBytes: model.mmprojSizeBytes });
-  if (!valid) {
-    await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
-    return { ok: false, reason: 'corrupt' };
-  }
-  return { ok: true };
-}
-
-/** Download the model's vision pack (mmproj) using the same background downloader. */
-export async function startMmprojDownload(model: ModelDef, h: DownloadHandlers): Promise<void> {
-  const dest = mmprojLocalPath(model);
-  if (!dest || !model.mmprojUrl) return h.onError('No vision pack for this model.');
-  const taskId = `${model.id}.mmproj`;
-  if (active.has(taskId)) return;
-  await ensureNotificationPermission();
-  await ensureDir();
-  speed.set(taskId, { bytes: 0, time: Date.now(), mbps: 0 });
-
-  const task = createDownloadTask({
-    id: taskId,
-    url: model.mmprojUrl,
-    destination: dest,
-    isAllowedOverRoaming: true,
-    isAllowedOverMetered: true,
-    metadata: { filename: model.mmprojFilename },
-  });
-  active.set(taskId, task);
-
-  const total0 = model.mmprojSizeBytes ?? 0;
-  task
-    .begin(({ expectedBytes }) => h.onProgress(0, 0, expectedBytes || total0, 0))
-    .progress(({ bytesDownloaded, bytesTotal }) => {
-      const total = bytesTotal > 0 ? bytesTotal : total0;
-      const pct = total > 0 ? (bytesDownloaded / total) * 100 : 0;
-      const t = speed.get(taskId);
-      let mbps = 0;
-      if (t) {
-        const now = Date.now();
-        const elapsed = (now - t.time) / 1000;
-        if (elapsed >= 0.5) {
-          const inst = (bytesDownloaded - t.bytes) / elapsed / 1e6;
-          mbps = Math.max(0, t.mbps * 0.7 + inst * 0.3);
-          speed.set(taskId, { bytes: bytesDownloaded, time: now, mbps });
-        } else {
-          mbps = t.mbps;
-        }
-      }
-      h.onProgress(pct, bytesDownloaded, total, mbps);
-    })
-    .done(({ location }) => {
-      active.delete(taskId);
-      speed.delete(taskId);
-      h.onDone(stripFileUri(location || dest));
-    })
-    .error(({ error }) => {
-      active.delete(taskId);
-      speed.delete(taskId);
-      const msg = typeof error === 'string' ? error : 'Download failed';
-      if (!/cancel|stopped/i.test(msg)) h.onError(msg);
-    });
-
-  task.start();
-}
-
-export function cancelMmprojDownload(model: ModelDef): void {
-  const taskId = `${model.id}.mmproj`;
-  active.get(taskId)?.stop();
-  active.delete(taskId);
-  speed.delete(taskId);
-}
-
-export async function deleteMmproj(model: ModelDef): Promise<void> {
-  const path = mmprojLocalPath(model);
-  if (!path) return;
-  const uri = `file://${path}`;
-  const info = await FileSystem.getInfoAsync(uri);
-  if (info.exists) await FileSystem.deleteAsync(uri, { idempotent: true });
-}
 
 export async function freeBytes(): Promise<number> {
   return FileSystem.getFreeDiskStorageAsync();

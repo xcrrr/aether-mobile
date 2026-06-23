@@ -1,42 +1,25 @@
 import { useCallback, useState } from 'react';
 import { View, ScrollView, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Eye, Trash2 } from 'lucide-react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { MODELS } from '@/models/registry';
-import { ModelDef } from '@/types';
 import * as MM from '@/models/ModelManager';
 import { useModelStore } from '@/state/useModelStore';
-import * as Llama from '@/llm/LlamaService';
+import * as Llama from '@/llm/engine';
 import { StorageBar, StorageSegment } from '@/components/settings/StorageBar';
 import { ModelManagerRow } from '@/components/settings/ModelManagerRow';
-import { ProgressBar } from '@/components/common/ProgressBar';
 import { colors, spacing, fonts } from '@/theme';
 
-const VISION_MODELS = MODELS.filter((m) => m.mmprojFilename);
-
-const VISION_STATUS_LABEL: Record<string, string> = {
-  unsupported: 'Not supported by this model',
-  not_downloaded: 'Not downloaded',
-  verifying: 'Verifying…',
-  working: '✓ Working',
-  error: 'Unavailable',
-};
-
 export default function Settings() {
-  const {
-    installed, downloads, download, cancel, remove,
-    visionInstalled, visionDownloads, downloadVision, cancelVision, removeVision, refreshVision,
-  } = useModelStore();
+  const { installed, downloads, download, cancel, remove } = useModelStore();
   const [disk, setDisk] = useState({ total: 0, free: 0, used: 0 });
 
   const refresh = useCallback(() => {
     (async () => {
       const [total, free, used] = await Promise.all([MM.totalBytes(), MM.freeBytes(), MM.installedBytes()]);
       setDisk({ total, free, used });
-      await refreshVision();
     })();
-  }, [refreshVision]);
+  }, []);
   useFocusEffect(refresh);
 
   const totalGb = disk.total / 1e9;
@@ -93,75 +76,11 @@ export default function Settings() {
           ))}
         </View>
 
-        {VISION_MODELS.length > 0 && (
-          <View>
-            <Text style={styles.label}>Image understanding</Text>
-            {VISION_MODELS.map((m) => (
-              <VisionPackRow
-                key={m.id}
-                model={m}
-                installed={!!visionInstalled[m.id]}
-                download={visionDownloads[m.id]}
-                onDownload={() => downloadVision(m.id)}
-                onCancel={() => cancelVision(m.id)}
-                onDelete={async () => { await Llama.releaseLlm(); await removeVision(m.id); refresh(); }}
-              />
-            ))}
-            <Text style={styles.visionHint}>
-              Optional vision packs let a model analyze photos you attach. Big one-time download; runs fully offline after.
-            </Text>
-          </View>
-        )}
-
         <Text style={styles.footer}>
-          Models download from Hugging Face once, then run fully offline.{'\n'}No account, no telemetry.
+          Each model is one file with vision built in — no extra downloads.{'\n'}Runs fully offline. No account, no telemetry.
         </Text>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function VisionPackRow({ model, installed, download, onDownload, onCancel, onDelete }: {
-  model: ModelDef;
-  installed: boolean;
-  download?: { pct: number; mbps: number; downloading: boolean };
-  onDownload: () => void;
-  onCancel: () => void;
-  onDelete: () => void;
-}) {
-  const sizeGb = ((model.mmprojSizeBytes ?? 0) / 1e9).toFixed(2);
-  const downloading = !!download?.downloading;
-
-  return (
-    <View style={styles.visionRow}>
-      <View style={styles.visionIcon}>
-        <Eye size={18} color={colors.violet} strokeWidth={2} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.visionTitle} numberOfLines={1}>{model.name} · Vision pack</Text>
-        {downloading ? (
-          <View style={{ marginTop: 6, gap: 4 }}>
-            <ProgressBar percent={download?.pct ?? 0} height={4} />
-            <Text style={styles.visionMeta}>{Math.round(download?.pct ?? 0)}% · {(download?.mbps ?? 0).toFixed(1)} MB/s</Text>
-          </View>
-        ) : (
-          <Text style={styles.visionMeta}>{installed ? 'Downloaded' : `${sizeGb} GB — ${VISION_STATUS_LABEL.not_downloaded}`}</Text>
-        )}
-      </View>
-      {downloading ? (
-        <Pressable onPress={onCancel} hitSlop={8} style={styles.visionBtn}>
-          <Text style={styles.visionBtnText}>Cancel</Text>
-        </Pressable>
-      ) : installed ? (
-        <Pressable onPress={onDelete} hitSlop={8} style={styles.visionIconBtn}>
-          <Trash2 size={18} color={colors.textMuted} strokeWidth={2} />
-        </Pressable>
-      ) : (
-        <Pressable onPress={onDownload} hitSlop={8} style={[styles.visionBtn, styles.visionBtnPrimary]}>
-          <Text style={[styles.visionBtnText, { color: colors.white }]}>Download</Text>
-        </Pressable>
-      )}
-    </View>
   );
 }
 const styles = StyleSheet.create({

@@ -7,11 +7,11 @@ import { FetchedSource } from './types';
 
 jest.mock('./DuckDuckGoSearch');
 jest.mock('./ContentFetcher');
-jest.mock('@/llm/LlamaService', () => ({ extract: jest.fn() }));
+jest.mock('@/llm/engine', () => ({ extract: jest.fn() }));
 
 import { searchDuckDuckGo } from './DuckDuckGoSearch';
 import { fetchAndClean } from './ContentFetcher';
-import * as Llama from '@/llm/LlamaService';
+import * as Llama from '@/llm/engine';
 import { buildResearchPrompt, extractCitations, runResearch, stripCitationMarkers } from './ResearchEngine';
 
 const src = (n: number, content = `content ${n}`): FetchedSource => ({

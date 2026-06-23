@@ -1,46 +1,43 @@
 import { ModelDef } from '@/types';
 
+// LiteRT `.task` bundles (MediaPipe GenAI). Multimodal in ONE file — vision is
+// built in, so there is NO separate "vision pack" download. Ungated public
+// mirror (no HuggingFace auth needed), same Gemma 4 models as before.
 const HF = (variant: 'E2B' | 'E4B', filename: string) =>
-  `https://huggingface.co/bartowski/google_gemma-4-${variant}-it-GGUF/resolve/main/${filename}`;
+  `https://huggingface.co/litert-community/gemma-4-${variant}-it-litert-lm/resolve/main/${filename}`;
 
 export const MODELS: ModelDef[] = [
   {
     id: 'gemma4-e2b',
     name: 'Gemma 4 E2B',
     maker: 'Google',
-    description: 'Compact on-device model. Fast and reliable on 8 GB phones.',
-    sizeBytes: 3462678272,
-    sizeGb: 3.46,
-    sizeLabel: '3.46 GB',
+    description: 'Compact, GPU-accelerated. Fast and reliable on 8 GB phones. Sees images.',
+    sizeBytes: 2003697664,
+    sizeGb: 2.0,
+    sizeLabel: '2.0 GB',
     minRamGb: 8,
-    contextLength: 131072,
-    filename: 'google_gemma-4-E2B-it-Q4_K_M.gguf',
-    downloadUrl: HF('E2B', 'google_gemma-4-E2B-it-Q4_K_M.gguf'),
+    contextLength: 4096,
+    filename: 'gemma-4-E2B-it-web.task',
+    downloadUrl: HF('E2B', 'gemma-4-E2B-it-web.task'),
     color: '#4285F4',
     badge: 'Recommended',
     supportsVision: true,
-    mmprojFilename: 'mmproj-google_gemma-4-E2B-it-f16.gguf',
-    mmprojUrl: HF('E2B', 'mmproj-google_gemma-4-E2B-it-f16.gguf'),
-    mmprojSizeBytes: 985653760,
   },
   {
     id: 'gemma4-e4b',
     name: 'Gemma 4 E4B',
     maker: 'Google',
-    description: 'Most capable. Needs RAM headroom — best on higher-end devices.',
-    sizeBytes: 5405168384,
-    sizeGb: 5.41,
-    sizeLabel: '5.41 GB',
+    description: 'Most capable. GPU-accelerated, sees images. Best on higher-end devices.',
+    sizeBytes: 2964324352,
+    sizeGb: 2.96,
+    sizeLabel: '3.0 GB',
     minRamGb: 8,
-    contextLength: 131072,
-    filename: 'google_gemma-4-E4B-it-Q4_K_M.gguf',
-    downloadUrl: HF('E4B', 'google_gemma-4-E4B-it-Q4_K_M.gguf'),
+    contextLength: 4096,
+    filename: 'gemma-4-E4B-it-web.task',
+    downloadUrl: HF('E4B', 'gemma-4-E4B-it-web.task'),
     color: '#7C3AED',
     badge: 'Most capable',
     supportsVision: true,
-    mmprojFilename: 'mmproj-google_gemma-4-E4B-it-f16.gguf',
-    mmprojUrl: HF('E4B', 'mmproj-google_gemma-4-E4B-it-f16.gguf'),
-    mmprojSizeBytes: 990372352,
   },
 ];
 

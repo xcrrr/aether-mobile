@@ -1,9 +1,9 @@
 import { parseEntries, validateEntry, extractFromConversation, buildTranscript, parseLinks } from './MemoryExtractor';
 import { Message } from '@/types';
-import * as Llama from '@/llm/LlamaService';
+import * as Llama from '@/llm/engine';
 import { useMemoryStore, MemoryStore } from './MemoryStore';
 
-jest.mock('@/llm/LlamaService', () => ({ extract: jest.fn() }));
+jest.mock('@/llm/engine', () => ({ extract: jest.fn() }));
 const mockExtract = Llama.extract as jest.MockedFunction<typeof Llama.extract>;
 
 function reset() {

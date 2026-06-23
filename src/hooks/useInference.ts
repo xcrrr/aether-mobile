@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import * as Llama from '@/llm/LlamaService';
-import { runVisionSelfTest, getVisionStatus } from '@/llm/LlamaService';
+import * as Llama from '@/llm/engine';
 import { buildSystemPrompt } from '@/llm/prompt';
 import { useChatStore } from '@/state/useChatStore';
 import { useProfileStore } from '@/state/useProfileStore';
@@ -11,11 +10,10 @@ import { FileAttachment } from '@/types';
 import { extractFromConversation } from '@/secondbrain/MemoryExtractor';
 import { ExtractionQueue } from '@/secondbrain/ExtractionQueue';
 import { useBrainNotice } from '@/state/useBrainNotice';
-import { isBusy } from '@/llm/LlamaService';
+import { isBusy } from '@/llm/engine';
 import { AppState } from 'react-native';
 import { runResearch } from '@/webresearch/ResearchEngine';
 import { formatResearchMarkdown } from '@/webresearch/format';
-import { deriveVisionStatus } from '@/llm/visionStatus';
 
 export interface RAMWarning { available: number; required: number; }
 
@@ -42,31 +40,20 @@ function queueMemoryExtraction(): void {
 
 export function useInference(modelId: string | undefined) {
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ramWarning, setRamWarning] = useState<RAMWarning | null>(null);
-  // Vision ("image understanding") pack state for the active model.
-  const [visionReady, setVisionReady] = useState(false);
-  const [visionInstalled, setVisionInstalled] = useState(false);
-  const [visionProgress, setVisionProgress] = useState<number | null>(null);
-  const [visionWorks, setVisionWorks] = useState(false);
-  const [visionError, setVisionError] = useState<string | null>(null);
   const profile = useProfileStore((s) => s.profile);
   const chat = useChatStore();
 
   // Set true once the user chooses "Load Anyway" for the current model.
   const bypassRam = useRef(false);
 
-  const finishVisionInit = useCallback(async () => {
-    const ok = await runVisionSelfTest();
-    const st = getVisionStatus();
-    setVisionWorks(ok);
-    setVisionError(st.error);
-  }, []);
-
   const load = useCallback(async () => {
     const model = modelId ? getModelById(modelId) : undefined;
     if (!model) return;
     setLoading(true);
+    setLoaded(false);
     setError(null);
     setRamWarning(null);
     try {
@@ -74,30 +61,7 @@ export function useInference(modelId: string | undefined) {
         modelSizeGb: model.sizeGb,
         bypassRamCheck: bypassRam.current,
       });
-      // Enable image understanding if this model's vision pack is already on
-      // disk. Never let a vision failure break model load (that would disable
-      // the composer entirely) — it's strictly best-effort.
-      setVisionReady(false);
-      try {
-        if (model.mmprojFilename) {
-          const integ = await MM.verifyMmprojIntegrity(model);
-          const inst = integ.ok;
-          setVisionInstalled(inst);
-          const path = MM.mmprojLocalPath(model);
-          if (inst && path) {
-            const ready = await Llama.initMultimodal(path);
-            setVisionReady(ready);
-            if (ready) await finishVisionInit();
-            else setVisionError(Llama.getVisionStatus().error);
-          } else if (integ.reason === 'corrupt') {
-            setVisionError('Vision pack was incomplete — re-download it.');
-          }
-        } else {
-          setVisionInstalled(false);
-        }
-      } catch (visionErr) {
-        console.error('[useInference] vision init', visionErr);
-      }
+      setLoaded(true);
     } catch (e) {
       if (e instanceof RAMInsufficientError) {
         setRamWarning({ available: e.available, required: e.required });
@@ -112,7 +76,7 @@ export function useInference(modelId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [modelId, finishVisionInit]);
+  }, [modelId]);
 
   // Load the model whenever the chat (model) changes. Reset the bypass per model.
   useEffect(() => {
@@ -135,40 +99,7 @@ export function useInference(modelId: string | undefined) {
 
   const dismissRamWarning = useCallback(() => setRamWarning(null), []);
 
-  /**
-   * Re-sync vision state with disk. Called when the user attaches an image so the
-   * chat self-heals if the pack was downloaded elsewhere (e.g. Settings) after
-   * the model loaded — no more "still asks me to download it in chat" confusion.
-   */
-  const refreshVision = useCallback(async () => {
-    const model = modelId ? getModelById(modelId) : undefined;
-    if (!model?.mmprojFilename || Llama.isMultimodalReady()) return;
-    const path = MM.mmprojLocalPath(model);
-    if (path && (await MM.isMmprojInstalled(model))) {
-      setVisionInstalled(true);
-      try {
-        const ready = await Llama.initMultimodal(path);
-        setVisionReady(ready);
-        if (ready) await finishVisionInit();
-        else setVisionError(Llama.getVisionStatus().error);
-      } catch { /* best-effort */ }
-    }
-  }, [modelId, finishVisionInit]);
-
   const send = useCallback(async (text: string, attachment?: FileAttachment) => {
-    // Lazily enable vision the first time an image is sent if the pack is on
-    // disk but not yet loaded (e.g. downloaded from Settings after model load).
-    if (attachment?.type === 'image' && !Llama.isMultimodalReady()) {
-      const m = modelId ? getModelById(modelId) : undefined;
-      const path = m ? MM.mmprojLocalPath(m) : null;
-      if (m?.supportsVision && path && (await MM.isMmprojInstalled(m))) {
-        try {
-          const ready = await Llama.initMultimodal(path);
-          setVisionReady(ready);
-          if (ready) await finishVisionInit();
-        } catch { /* best-effort */ }
-      }
-    }
     await chat.appendUser(text, attachment ? [attachment] : undefined);
     const system = buildSystemPrompt(profile);
     const messages = useChatStore.getState().current?.messages ?? [];
@@ -185,7 +116,7 @@ export function useInference(modelId: string | undefined) {
         useChatStore.getState().finishAssistant();
       },
     );
-  }, [chat, profile, modelId, finishVisionInit]);
+  }, [chat, profile]);
 
   /**
    * Web research mode: search → read sources → grounded, cited answer. Reuses
@@ -213,45 +144,20 @@ export function useInference(modelId: string | undefined) {
 
   const stop = useCallback(() => { Llama.stop(); }, []);
 
-  /** Download the active model's vision pack (mmproj), then enable multimodal. */
-  const downloadVision = useCallback(async () => {
-    const model = modelId ? getModelById(modelId) : undefined;
-    if (!model?.mmprojUrl) return;
-    setVisionProgress(0);
-    await MM.startMmprojDownload(model, {
-      onProgress: (pct) => setVisionProgress(pct),
-      onDone: async () => {
-        setVisionProgress(null);
-        setVisionInstalled(true);
-        const path = MM.mmprojLocalPath(model);
-        if (path) {
-          const ready = await Llama.initMultimodal(path);
-          setVisionReady(ready);
-          if (ready) await finishVisionInit();
-        }
-      },
-      onError: () => setVisionProgress(null),
-    });
-  }, [modelId, finishVisionInit]);
-
   const model = modelId ? getModelById(modelId) : undefined;
+  const supportsVision = model?.supportsVision ?? false;
+  // Vision is built into the LiteRT `.task` model — no separate pack, no extra
+  // download. It's available the moment the model is loaded.
   const vision = {
-    supported: model?.supportsVision ?? false,
-    ready: visionReady,
-    installed: visionInstalled,
-    works: visionWorks,
-    error: visionError,
-    progress: visionProgress,
-    sizeBytes: model?.mmprojSizeBytes ?? 0,
-    status: deriveVisionStatus({
-      supported: model?.supportsVision ?? false,
-      installed: visionInstalled,
-      ready: visionReady,
-      selfTestPassed: visionWorks,
-      error: visionError,
-    }),
-    download: downloadVision,
-    refresh: refreshVision,
+    supported: supportsVision,
+    ready: supportsVision && loaded,
+    installed: true,
+    works: true,
+    error: null as string | null,
+    progress: null as number | null,
+    sizeBytes: 0,
+    download: () => {},
+    refresh: () => {},
   };
 
   return { loading, error, ramWarning, loadAnyway, dismissRamWarning, send, research, stop, vision };

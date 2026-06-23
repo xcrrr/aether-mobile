@@ -1,6 +1,12 @@
 import { NativeModules, NativeEventEmitter } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { Message } from '@/types';
+import { assertRAMSufficient } from '@/utils/ramCheck';
+
+export interface LoadOptions {
+  modelSizeGb?: number;
+  bypassRamCheck?: boolean;
+}
 
 /**
  * JS bridge over the native MediaPipe LiteRT GenAI engine (see
@@ -34,18 +40,28 @@ const TEMPERATURE = 1.0;
 
 let currentPath: string | null = null;
 let activeCompletion: Promise<unknown> | null = null;
+let activeKind: 'chat' | 'extract' | null = null;
+let cancelled = false;
 
-export async function initLlm(modelPath: string): Promise<void> {
+export async function initLlm(modelPath: string, opts: LoadOptions = {}): Promise<void> {
   if (!LiteRt) throw new Error('LiteRT engine unavailable');
   const path = modelPath.replace(/^file:\/\//, '');
   if (currentPath === path) return;
-  await LiteRt.init(path, MAX_TOKENS);
+  if (opts.modelSizeGb != null && !opts.bypassRamCheck) assertRAMSufficient(opts.modelSizeGb);
+  try {
+    await LiteRt.init(path, MAX_TOKENS);
+  } catch (e) {
+    const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+    if (/memory|oom|out of mem|alloc/.test(msg)) throw new Error('INSUFFICIENT_RAM');
+    if (/not found|no such file|enoent/.test(msg)) throw new Error('MODEL_NOT_FOUND');
+    throw new Error('MODEL_LOAD_FAILED');
+  }
   currentPath = path;
 }
 
 /** Flatten a conversation into a plain transcript. MediaPipe wraps it in the
  *  model's own turn template, so we must NOT emit Gemma `<start_of_turn>` markers. */
-function buildPrompt(system: string, messages: Message[]): string {
+export function buildPrompt(system: string, messages: Message[]): string {
   const parts: string[] = [];
   if (system.trim()) parts.push(system.trim());
   for (const m of messages) {
@@ -86,12 +102,14 @@ export async function generate(
   const imagePaths = await writeImagePaths(messages);
   const prompt = buildPrompt(system, messages);
   await drainActive();
+  cancelled = false;
+  activeKind = 'chat';
 
   const sub = emitter.addListener('LiteRtToken', (piece: string) => onToken(piece));
   const run = LiteRt.generate(prompt, imagePaths, TOP_K, TOP_P, TEMPERATURE, true)
     .then(() => onDone())
     .catch((e) => onError(e instanceof Error ? e.message : String(e)))
-    .finally(() => { sub.remove(); activeCompletion = null; });
+    .finally(() => { sub.remove(); activeCompletion = null; activeKind = null; });
   activeCompletion = run;
   await run;
 }
@@ -104,8 +122,9 @@ export async function extract(
   if (opts.preempt) await drainActive();
   else if (activeCompletion) return null;
 
+  activeKind = 'extract';
   const run = LiteRt.generate(prompt, [], TOP_K, TOP_P, opts.temperature ?? 0.1, false);
-  activeCompletion = run.finally(() => { activeCompletion = null; });
+  activeCompletion = run.finally(() => { activeCompletion = null; activeKind = null; });
   try {
     const text = await run;
     return text && text.length ? text : null;
@@ -114,15 +133,19 @@ export async function extract(
   }
 }
 
-export function stop(): void { void LiteRt?.stop(); }
+export function stop(): void { cancelled = true; void LiteRt?.stop(); }
 
 export async function releaseLlm(): Promise<void> {
   await drainActive();
   try { await LiteRt?.release(); } catch {}
   currentPath = null;
   activeCompletion = null;
+  activeKind = null;
 }
 
 export const isModelLoaded = (): boolean => currentPath !== null;
 export const isBusy = (): boolean => activeCompletion !== null;
+export const isGenerating = (): boolean => activeKind === 'chat';
+export const wasCancelled = (): boolean => cancelled;
 export const getLoadedPath = (): string | null => currentPath;
+export const isLoading = (): boolean => false;
