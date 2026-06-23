@@ -32,7 +32,8 @@ const PROMPT_TEMPLATE =
   'between two fact keys, e.g. {"from_key":"business_name","to_key":"city","relation":"located_in"}). ' +
   'Use [] for either when empty. The "category" must be one of: identity, personality, ' +
   'preferences, goals, knowledge, relationships, patterns, emotional, context. ' +
-  'Only include facts clearly stated or strongly implied — never invent.\n\n' +
+  'Only include facts clearly stated or strongly implied — never invent. ' +
+  'Keep each "value" concise (a dozen words max). Reuse an existing key when updating a known fact; do not emit duplicates.\n\n' +
   'Example conversation:\n' +
   'User: Hey, I run a barber shop called Mitruk here in Warsaw and I want to grow it on Instagram\n' +
   'Example output:\n' +
@@ -161,7 +162,7 @@ export function validateEntry(obj: unknown): ValidEntry | null {
   return {
     category: category as MemoryCategory,
     key: key.trim().toLowerCase().replace(/\s+/g, '_'),
-    value: value.trim(),
+    value: value.trim().slice(0, 200),
     confidence,
   };
 }
@@ -220,5 +221,6 @@ export async function extractFromConversation(
   }
 
   MemoryStore.recordExtraction();
+  MemoryStore.markStale();
   return applied;
 }

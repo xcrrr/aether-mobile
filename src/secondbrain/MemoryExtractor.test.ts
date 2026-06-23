@@ -66,6 +66,12 @@ describe('validateEntry', () => {
     expect(validateEntry({ category: 'goals', key: 'k', value: 'v', confidence: 5 })?.confidence).toBe(1);
     expect(validateEntry({ category: 'goals', key: 'k', value: 'v' })?.confidence).toBe(0.5);
   });
+
+  it('caps value length to 200 chars', () => {
+    const long = 'x'.repeat(500);
+    const v = validateEntry({ category: 'identity', key: 'k', value: long, confidence: 0.9 });
+    expect(v && v.value.length).toBe(200);
+  });
 });
 
 describe('extractFromConversation', () => {
