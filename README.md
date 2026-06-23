@@ -9,6 +9,11 @@ A sovereign, **local-first AI assistant for Android**. Every reply is generated 
 ### 🔒 Private AI chat
 Chat with a locally-running Gemma 4 model. Nothing leaves your phone — no accounts, no data collection, no network requests after setup. Replies stream token-by-token and render full Markdown with code blocks.
 
+- **Concise by default** — answers match the length of the question. A greeting gets one short line; only genuinely complex questions get long, structured replies. No padding, no restating the question.
+- **GPU-accelerated** — inference offloads to the GPU/NPU where available (`n_gpu_layers`); on Snapdragon/Adreno devices `llama.rn` auto-loads its OpenCL + Hexagon backend. Falls back to a pure-CPU context on devices without a GPU backend, so it loads everywhere.
+- **Gemma's official sampling** — `temperature 1.0 · top_k 64 · top_p 0.95`, the values Gemma is tuned for (matching Google's AI Edge Gallery), for natural output.
+- A **living violet aurora** drifts behind the chat only while Aether is thinking, then dissolves at rest.
+
 ### ⚡ Two Gemma 4 modes
 Switch between **Fast** and **Thinking** from the chat header:
 
@@ -43,20 +48,22 @@ Extracted document text is injected into the prompt as a quoted context block. L
 ### 🖼️ Image analysis (vision)
 True image understanding runs on-device via a **multimodal projector (mmproj) "vision pack"**, downloaded once per model (~0.9 GB):
 
-- Attach a photo and send — if the pack isn't loaded yet you're prompted to **download it right there**, or manage packs in **Settings → Image understanding**
+- Attach a photo and send — if the pack isn't loaded yet you're prompted to **download it right there**, or manage packs in **Settings → Image understanding**. Download in either place and the other **auto-syncs** (disk is the source of truth — the chat re-checks on attach, Settings on open), so you're never asked twice.
+- The vision encoder runs on the **GPU** (`use_gpu: true`) — Gemma's vision path is designed for GPU decode (as in Google's AI Edge Gallery)
 - The downloaded pack is **integrity-checked** (GGUF magic bytes + size) so a truncated download or a saved error page can't silently break vision — a corrupt pack is dropped and you're asked to re-download
 - After loading, a **self-test** decodes a tiny bundled image to confirm the projector actually works on this device; the result drives a clear status (Working / Verifying / Unavailable)
 - The image is delivered to the model with the correct `<__media__>` marker; `image_max_tokens` is bounded for 8 GB devices
-- Failures are **surfaced, not swallowed** — the real reason shows under the composer (e.g. `Image reading failed: …`) instead of the model quietly hallucinating; if vision genuinely isn't available Aether **says so honestly**
+- Failures are **surfaced, not swallowed** — a clear, actionable reason shows under the composer (e.g. `Image reading failed: …`) instead of a raw native error or the model quietly hallucinating; if vision genuinely isn't available Aether **says so honestly**
 - Tap any image in a message to open a **fullscreen viewer** with pinch-to-zoom, pan, double-tap zoom, and share
 
 ### 🌐 Web research
-Toggle **Research** in the header to run a grounded, cited answer: DuckDuckGo search → fetch sources → synthesize with inline citations. Network/parse failures surface as a normal message, never a crash.
+Toggle **Research** in the header to run a grounded, cited answer: DuckDuckGo search → fetch sources → synthesize with inline citations. **Real-time progress** counts each source as it's actually read ("Reading the web… 2/3 sources") — real numbers, never faked. Network/parse failures surface as a normal message, never a crash.
 
 ### 🧠 Second Brain
-Aether distils conversations into durable, structured memory about you (name, work, projects, goals, preferences…), reusing the loaded model — never a second instance. Learned facts are injected into future system prompts so it remembers you across chats.
+Open it from the **sidebar** (🧠 Second Brain). Aether distils conversations into durable, structured memory about you (name, work, projects, goals, preferences…), reusing the loaded model — never a second instance. Learned facts are injected into future system prompts so it remembers you across chats.
 
-- **Reliable auto-learning** — an idle queue marks each conversation dirty after a reply and runs extraction only when the model is free (and on app background), so learning finishes in the gaps instead of being aborted by your next message. A manual **"Analyze current chat now"** button still forces it on demand.
+- **Fully automatic** — every message in every chat is analysed right after the reply (no manual button, no waiting): an idle queue marks the conversation dirty and runs extraction the moment the model is free, so learning finishes in the gaps instead of being aborted by your next message.
+- **It tells you when it learns** — when a chat yields new facts, a tappable pill appears above the composer (*"2 memories saved to your Second Brain ›"*); tap it to jump straight into the 3D graph with the **new nodes glowing** bright and the camera framed on them.
 - **Relationships** — extraction also captures links between facts (e.g. *business → located_in → city*), which become edges in the graph.
 - **Quality upkeep** — repeated facts are reinforced (confidence rises), values are kept concise, and low-confidence facts that go long-unseen decay to *stale* and can be purged with one tap.
 - **Curate it** — search, filter by category, **edit** a fact's value, **add** your own fact, and delete facts or clear everything. Fully local and toggleable.
