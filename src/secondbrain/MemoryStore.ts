@@ -22,12 +22,16 @@ interface SecondBrainState {
   hydrated: boolean;
 
   addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced' | 'lastSeenAt'>) => void;
+  updateEntry: (id: string, patch: { value?: string; category?: MemoryCategory }) => void;
   getEntriesByCategory: (category: MemoryCategory) => MemoryEntry[];
   getAllEntries: () => MemoryEntry[];
   deleteEntry: (id: string) => void;
   clearAll: () => void;
+  addManualEntry: (input: { category: MemoryCategory; key: string; value: string }) => void;
+  purgeStale: () => void;
 
   addEdge: (edge: Omit<MemoryEdge, 'id'>) => void;
+  deleteEdge: (id: string) => void;
   markStale: () => void;
 
   setEnabled: (enabled: boolean) => void;
@@ -73,6 +77,22 @@ export const useMemoryStore = create<SecondBrainState>()(
         set({ memory: { ...get().memory, entries } });
       },
 
+      updateEntry: (id, patch) => {
+        const now = Date.now();
+        const entries = get().memory.entries.map((e) => {
+          if (e.id !== id) return e;
+          return {
+            ...e,
+            ...(patch.value !== undefined ? { value: patch.value } : {}),
+            ...(patch.category !== undefined ? { category: patch.category } : {}),
+            updatedAt: now,
+            lastSeenAt: now,
+            stale: false,
+          };
+        });
+        set({ memory: { ...get().memory, entries } });
+      },
+
       getEntriesByCategory: (category) =>
         get().memory.entries.filter((e) => e.category === category),
 
@@ -88,10 +108,32 @@ export const useMemoryStore = create<SecondBrainState>()(
       clearAll: () =>
         set({ memory: { ...get().memory, entries: [], edges: [] } }),
 
+      addManualEntry: (input) => {
+        get().addOrUpdateEntry({
+          category: input.category,
+          key: input.key,
+          value: input.value,
+          confidence: 1,
+          sourceConversationId: 'manual',
+        });
+      },
+
+      purgeStale: () => {
+        const entries = get().memory.entries.filter((e) => !e.stale);
+        const keys = new Set(entries.map((e) => e.key));
+        const edges = (get().memory.edges ?? []).filter((e) => keys.has(e.fromKey) && keys.has(e.toKey));
+        set({ memory: { ...get().memory, entries, edges } });
+      },
+
       addEdge: (edge) => {
         const edges = [...(get().memory.edges ?? [])];
         if (edges.some((e) => e.fromKey === edge.fromKey && e.toKey === edge.toKey && e.relation === edge.relation)) return;
         edges.push({ ...edge, id: uuid() });
+        set({ memory: { ...get().memory, edges } });
+      },
+
+      deleteEdge: (id) => {
+        const edges = (get().memory.edges ?? []).filter((e) => e.id !== id);
         set({ memory: { ...get().memory, edges } });
       },
 
@@ -128,6 +170,12 @@ export const useMemoryStore = create<SecondBrainState>()(
             ...e,
             lastSeenAt: e.lastSeenAt ?? e.updatedAt ?? e.createdAt ?? Date.now(),
           }));
+          // Recompute stale on every rehydration so decay is applied at startup.
+          const now = Date.now();
+          state.memory.entries = state.memory.entries.map((e) => ({
+            ...e,
+            stale: e.confidence < STALE_CONFIDENCE && now - e.lastSeenAt > STALE_WINDOW_MS ? true : e.stale,
+          }));
           state.hydrated = true;
         }
       },
@@ -142,12 +190,18 @@ export const useMemoryStore = create<SecondBrainState>()(
 export const MemoryStore = {
   addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced' | 'lastSeenAt'>) =>
     useMemoryStore.getState().addOrUpdateEntry(entry),
+  updateEntry: (id: string, patch: { value?: string; category?: MemoryCategory }) =>
+    useMemoryStore.getState().updateEntry(id, patch),
   getEntriesByCategory: (category: MemoryCategory) =>
     useMemoryStore.getState().getEntriesByCategory(category),
   getAllEntries: () => useMemoryStore.getState().getAllEntries(),
   deleteEntry: (id: string) => useMemoryStore.getState().deleteEntry(id),
   clearAll: () => useMemoryStore.getState().clearAll(),
+  addManualEntry: (input: { category: MemoryCategory; key: string; value: string }) =>
+    useMemoryStore.getState().addManualEntry(input),
+  purgeStale: () => useMemoryStore.getState().purgeStale(),
   addEdge: (edge: Omit<MemoryEdge, 'id'>) => useMemoryStore.getState().addEdge(edge),
+  deleteEdge: (id: string) => useMemoryStore.getState().deleteEdge(id),
   markStale: () => useMemoryStore.getState().markStale(),
   getAllEdges: () => useMemoryStore.getState().memory.edges,
   isEnabled: () => useMemoryStore.getState().enabled,
