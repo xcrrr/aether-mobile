@@ -135,6 +135,26 @@ export function useInference(modelId: string | undefined) {
 
   const dismissRamWarning = useCallback(() => setRamWarning(null), []);
 
+  /**
+   * Re-sync vision state with disk. Called when the user attaches an image so the
+   * chat self-heals if the pack was downloaded elsewhere (e.g. Settings) after
+   * the model loaded — no more "still asks me to download it in chat" confusion.
+   */
+  const refreshVision = useCallback(async () => {
+    const model = modelId ? getModelById(modelId) : undefined;
+    if (!model?.mmprojFilename || Llama.isMultimodalReady()) return;
+    const path = MM.mmprojLocalPath(model);
+    if (path && (await MM.isMmprojInstalled(model))) {
+      setVisionInstalled(true);
+      try {
+        const ready = await Llama.initMultimodal(path);
+        setVisionReady(ready);
+        if (ready) await finishVisionInit();
+        else setVisionError(Llama.getVisionStatus().error);
+      } catch { /* best-effort */ }
+    }
+  }, [modelId, finishVisionInit]);
+
   const send = useCallback(async (text: string, attachment?: FileAttachment) => {
     // Lazily enable vision the first time an image is sent if the pack is on
     // disk but not yet loaded (e.g. downloaded from Settings after model load).
@@ -231,6 +251,7 @@ export function useInference(modelId: string | undefined) {
       error: visionError,
     }),
     download: downloadVision,
+    refresh: refreshVision,
   };
 
   return { loading, error, ramWarning, loadAnyway, dismissRamWarning, send, research, stop, vision };

@@ -21,6 +21,8 @@ export interface VisionState {
   progress: number | null;
   sizeBytes: number;
   download: () => void;
+  /** Re-sync with disk (pack may have been downloaded from Settings). */
+  refresh: () => void;
 }
 
 export function ChatInput({ onSend, onResearch, researchMode = false, onToggleResearch, disabled, supportsVision = true, att, vision }: {

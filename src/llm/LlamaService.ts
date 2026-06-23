@@ -30,6 +30,15 @@ export function getVisionStatus(): {
   return { ready: multimodalReady, selfTestPassed: visionSelfTestPassed, error: lastVisionError };
 }
 
+/** Turn a vague/empty native mtmd error into something the user can act on. */
+function cleanVisionError(raw: unknown): string {
+  const msg = (raw instanceof Error ? raw.message : String(raw ?? '')).trim();
+  if (!msg || /unknown|<unknown>|^error$|hostfunction/i.test(msg)) {
+    return "This phone's GPU couldn't decode the image with this model. Image understanding may not be supported on this device.";
+  }
+  return msg;
+}
+
 /**
  * Load a multimodal projector so the active model can analyze images. Safe to
  * call repeatedly; returns whether vision is available afterwards. Requires a
@@ -50,7 +59,14 @@ export async function initMultimodal(mmprojPath: string): Promise<boolean> {
     // image_max_tokens/image_min_tokens are for dynamic-resolution models; gemma-3n is
     // fixed (~256 soft tokens), so do NOT clamp below that. Keep a generous ceiling
     // (1024) instead of the prior 512 which could corrupt decode.
-    const ok = await ctx.initMultimodal({ path, use_gpu: false, image_max_tokens: 1024 });
+    //
+    // use_gpu: TRUE — Gemma-3n's vision encoder (MobileNet-v5) must run on the GPU
+    // to decode reliably (Google's own AI Edge Gallery enables the GPU vision
+    // backend for exactly this model; the prior use_gpu:false is the likely cause
+    // of the "image reading failed / Unknown error" decode failures). On devices
+    // without a GPU backend this throws and we fall back to the honest "can't see"
+    // path, which is strictly better than a silent wrong answer.
+    const ok = await ctx.initMultimodal({ path, use_gpu: true, image_max_tokens: 1024 });
     let enabled = ok !== false;
     if (typeof ctx.isMultimodalEnabled === 'function') {
       try { enabled = await ctx.isMultimodalEnabled(); } catch { /* keep ok */ }
@@ -58,7 +74,7 @@ export async function initMultimodal(mmprojPath: string): Promise<boolean> {
     multimodalReady = !!enabled;
     if (!multimodalReady) lastVisionError = 'Projector loaded but vision did not enable.';
   } catch (e) {
-    lastVisionError = e instanceof Error ? e.message : String(e);
+    lastVisionError = cleanVisionError(e);
     multimodalReady = false;
   }
   return multimodalReady;
@@ -106,7 +122,7 @@ export async function runVisionSelfTest(): Promise<boolean> {
     if (!visionSelfTestPassed) lastVisionError = 'Image decoded but produced no output.';
     return visionSelfTestPassed;
   } catch (e) {
-    lastVisionError = e instanceof Error ? e.message : String(e);
+    lastVisionError = cleanVisionError(e);
     visionSelfTestPassed = false;
     return false;
   } finally {
@@ -171,22 +187,44 @@ let activeKind: 'chat' | 'extract' | null = null;
 
 const N_CTX = 8192;
 const STOP = ['<end_of_turn>', '<start_of_turn>'];
+// Modern phones have 6–8 performance cores; 4 left compute on the table.
+const N_THREADS = 6;
+
+/** True when the loaded context offloaded layers to the GPU/NPU (Adreno OpenCL /
+ *  Hexagon). Reported by llama.rn after init; surfaced for diagnostics. */
+let gpuActive = false;
+export const isGpuActive = (): boolean => gpuActive;
 
 async function doInit(path: string): Promise<void> {
+  const common = {
+    model: path,
+    n_ctx: N_CTX,
+    // Larger batch markedly speeds prompt prefill (long research/vision prompts)
+    // at a modest, bounded memory cost — the prior value of 32 was a bottleneck.
+    n_batch: 128,
+    n_threads: N_THREADS,
+    use_mlock: false,
+    use_mmap: true,
+  };
+  // Try GPU/NPU offload first. On Snapdragon/Adreno devices llama.rn auto-loads
+  // its OpenCL+Hexagon native variant, and n_gpu_layers offloads the model to the
+  // GPU — the single biggest speedup (CPU-only inference is ~10x slower). On
+  // devices without a GPU backend, n_gpu_layers is a harmless no-op; if GPU init
+  // actively fails (e.g. limited VRAM) we fall back to a pure-CPU context below.
   try {
-    context = await initLlama({
-      model: path,
-      n_ctx: N_CTX,
-      // Larger batch markedly speeds prompt prefill (long research/vision
-      // prompts) at a modest, bounded memory cost — the prior value of 32 was
-      // a big bottleneck for research.
-      n_batch: 128,
-      n_threads: 4,
-      n_gpu_layers: 0,
-      use_mlock: false,
-      use_mmap: true,
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    context = await initLlama({ ...common, n_gpu_layers: 99 } as any);
     currentPath = path;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    gpuActive = !!(context as any).gpu;
+    return;
+  } catch (gpuErr) {
+    console.warn('[LlamaService] GPU init failed, retrying CPU-only', gpuErr);
+  }
+  try {
+    context = await initLlama({ ...common, n_gpu_layers: 0 });
+    currentPath = path;
+    gpuActive = false;
   } catch (err) {
     const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
     if (/memory|oom|out of mem|failed to allocate/.test(msg)) throw new Error('INSUFFICIENT_RAM');

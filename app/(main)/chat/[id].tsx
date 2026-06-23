@@ -82,6 +82,11 @@ export default function ChatScreen() {
     }
   };
 
+  // When an image is attached, re-sync vision with disk so the composer reflects
+  // a pack downloaded elsewhere (Settings) without needing a reload.
+  const imageAttached = att.attachment?.type === 'image';
+  useEffect(() => { if (imageAttached) vision.refresh(); }, [imageAttached]);
+
   const empty = !current || current.messages.length === 0;
 
   return (
