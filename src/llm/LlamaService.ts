@@ -106,7 +106,7 @@ export async function runVisionSelfTest(): Promise<boolean> {
     if (!visionSelfTestPassed) lastVisionError = 'Image decoded but produced no output.';
     return visionSelfTestPassed;
   } catch (e) {
-    lastVisionError = e instanceof Error ? e.message : 'vision self-test failed';
+    lastVisionError = e instanceof Error ? e.message : String(e);
     visionSelfTestPassed = false;
     return false;
   } finally {
