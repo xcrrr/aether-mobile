@@ -44,8 +44,10 @@ Extracted document text is injected into the prompt as a quoted context block. L
 True image understanding runs on-device via a **multimodal projector (mmproj) "vision pack"**, downloaded once per model (~0.9 GB):
 
 - Attach a photo and send — if the pack isn't loaded yet you're prompted to **download it right there**, or manage packs in **Settings → Image understanding**
-- Once loaded, the image is delivered to the model with the correct `<__media__>` marker and a green **Vision active** badge appears; `image_max_tokens` is capped to keep memory bounded on 8 GB devices
-- If a model/runtime genuinely can't see an image, Aether **says so honestly** instead of inventing a description
+- The downloaded pack is **integrity-checked** (GGUF magic bytes + size) so a truncated download or a saved error page can't silently break vision — a corrupt pack is dropped and you're asked to re-download
+- After loading, a **self-test** decodes a tiny bundled image to confirm the projector actually works on this device; the result drives a clear status (Working / Verifying / Unavailable)
+- The image is delivered to the model with the correct `<__media__>` marker; `image_max_tokens` is bounded for 8 GB devices
+- Failures are **surfaced, not swallowed** — the real reason shows under the composer (e.g. `Image reading failed: …`) instead of the model quietly hallucinating; if vision genuinely isn't available Aether **says so honestly**
 - Tap any image in a message to open a **fullscreen viewer** with pinch-to-zoom, pan, double-tap zoom, and share
 
 ### 🌐 Web research
@@ -54,9 +56,19 @@ Toggle **Research** in the header to run a grounded, cited answer: DuckDuckGo se
 ### 🧠 Second Brain
 Aether distils conversations into durable, structured memory about you (name, work, projects, goals, preferences…), reusing the loaded model — never a second instance. Learned facts are injected into future system prompts so it remembers you across chats.
 
-- Runs **automatically** after replies (best-effort; yields the shared model to your next message)
-- A manual **"Analyze current chat now"** button (Settings → Second Brain) runs extraction to completion and reports how many facts were learned — the reliable way to force it
-- Browse, delete, or clear everything; fully local and toggleable
+- **Reliable auto-learning** — an idle queue marks each conversation dirty after a reply and runs extraction only when the model is free (and on app background), so learning finishes in the gaps instead of being aborted by your next message. A manual **"Analyze current chat now"** button still forces it on demand.
+- **Relationships** — extraction also captures links between facts (e.g. *business → located_in → city*), which become edges in the graph.
+- **Quality upkeep** — repeated facts are reinforced (confidence rises), values are kept concise, and low-confidence facts that go long-unseen decay to *stale* and can be purged with one tap.
+- **Curate it** — search, filter by category, **edit** a fact's value, **add** your own fact, and delete facts or clear everything. Fully local and toggleable.
+
+#### 🌐 3D thought graph
+The Second Brain screen renders your memory as an **Obsidian-style interactive 3D graph** — each thought is a node coloured by category, related thoughts are linked:
+
+- **Rotate, pinch-zoom, pan, and drag nodes**; the cluster slowly auto-rotates when idle and pauses the moment you touch it
+- **Always-on labels** on every node (readable on touch, no hover needed), a **category legend**, and **tap-to-highlight** that lights up a thought's connections and dims the rest
+- Tap a node for a **read/edit popup**; a **fullscreen** toggle expands the graph; tapping a list row flies the camera to that node
+- A **list view** toggle remains for a plain, accessible browse
+- Rendered in a WebView from a **fully offline, self-contained asset** (three.js + 3d-force-graph + label sprites are inlined — no network, no CDN)
 
 ### 💬 Onboarding, history & storage
 - Short 2-step onboarding (name + goals) feeds every system prompt
@@ -91,6 +103,7 @@ Aether distils conversations into durable, structured memory about you (name, wo
 | State | Zustand |
 | Animation/Gesture | `react-native-reanimated` · `react-native-gesture-handler` |
 | Rendering | `react-native-marked` (Markdown) |
+| 3D graph | `react-native-webview` hosting inlined `three` · `three-spritetext` · `3d-force-graph` (offline) |
 | Storage | AsyncStorage |
 
 ---
@@ -144,14 +157,15 @@ src/llm/                 LlamaService (context + multimodal), prompt assembly
 src/voice/               VoiceService singleton + RECORD_AUDIO permission helper
 src/files/               FileProcessor, PDF/base64 extractors, pickers
 src/webresearch/         DuckDuckGo search, content fetch, citation formatting
-src/secondbrain/         Memory extraction, store, injection
-src/models/              Model registry + ModelManager (download/verify/delete)
+src/secondbrain/         Memory extraction, store (facts + edges + decay), injection, idle queue
+src/models/              Model registry + ModelManager (download/verify, mmproj integrity)
 src/state/               Zustand stores (chat, model, profile, toast)
 src/hooks/               useInference, useVoice, useAttachment
-src/components/          UI: chat · sidebar · settings · design system
+src/components/          UI: chat · sidebar · settings · secondbrain (3D graph) · design system
 src/theme/               Design tokens (colors, spacing, fonts, radius)
 plugins/                 withAetherAndroid (arm64, AsyncStorage, Jetifier, perms)
-assets/                  Icons, logos, splash
+assets/graph/            Offline self-contained 3D-graph WebView page (graph.html)
+assets/                  Icons, logos, splash, vision self-test image
 ```
 
 ---
@@ -163,7 +177,7 @@ npm test          # Jest unit suite
 npm run typecheck # tsc --noEmit (strict)
 ```
 
-Covers prompt assembly (incl. attachment injection), model registry, storage, web research, and Second Brain logic.
+Covers prompt assembly (incl. attachment injection), model registry, mmproj integrity + vision self-test, storage, web research, and Second Brain logic (extraction, edges, reinforcement/decay, the idle queue, and graph-data mapping).
 
 ---
 
