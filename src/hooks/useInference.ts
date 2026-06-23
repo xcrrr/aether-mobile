@@ -9,23 +9,28 @@ import * as MM from '@/models/ModelManager';
 import { RAMInsufficientError } from '@/utils/ramCheck';
 import { FileAttachment } from '@/types';
 import { extractFromConversation } from '@/secondbrain/MemoryExtractor';
+import { ExtractionQueue } from '@/secondbrain/ExtractionQueue';
+import { isBusy } from '@/llm/LlamaService';
+import { AppState } from 'react-native';
 import { runResearch } from '@/webresearch/ResearchEngine';
 import { formatResearchMarkdown } from '@/webresearch/format';
 import { deriveVisionStatus } from '@/llm/visionStatus';
 
 export interface RAMWarning { available: number; required: number; }
 
-/**
- * Second Brain — silently distil the just-finished conversation into memory.
- * Fire-and-forget: runs after the reply is saved, never blocks the UI, and
- * swallows its own errors so a failed extraction can't surface in chat.
- */
-function runMemoryExtraction(): void {
+const extractionQueue = new ExtractionQueue({
+  isBusy,
+  extract: async (conversationId) => {
+    const convo = useChatStore.getState().current;
+    const messages = convo && convo.id === conversationId ? convo.messages : [];
+    if (!messages.length) return 0;
+    return extractFromConversation(messages, conversationId);
+  },
+});
+
+function queueMemoryExtraction(): void {
   const convo = useChatStore.getState().current;
-  if (!convo) return;
-  void extractFromConversation(convo.messages, convo.id).catch((e) =>
-    console.error('[useInference] memory extraction', e),
-  );
+  if (convo) extractionQueue.markDirty(convo.id);
 }
 
 export function useInference(modelId: string | undefined) {
@@ -110,6 +115,11 @@ export function useInference(modelId: string | undefined) {
     return () => { cancelled = true; };
   }, [load]);
 
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => { if (s !== 'active') extractionQueue.flush(); });
+    return () => sub.remove();
+  }, []);
+
   const loadAnyway = useCallback(() => {
     bypassRam.current = true;
     setRamWarning(null);
@@ -141,7 +151,7 @@ export function useInference(modelId: string | undefined) {
       messages,
       (token) => useChatStore.getState().appendToken(token),
       () => {
-        void useChatStore.getState().finishAssistant().then(runMemoryExtraction);
+        void useChatStore.getState().finishAssistant().then(queueMemoryExtraction);
       },
       (e) => {
         useChatStore.getState().appendToken(`\n\n_Error: ${e}_`);

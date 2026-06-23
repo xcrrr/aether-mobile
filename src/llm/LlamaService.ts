@@ -388,3 +388,5 @@ export const isLoading = (): boolean => initPromise !== null;
 export const getLoadedPath = (): string | null => currentPath;
 /** True while a chat reply is streaming (not extraction). */
 export const isGenerating = (): boolean => activeKind === 'chat';
+/** True while ANY completion (chat or extraction) holds the single context. */
+export const isBusy = (): boolean => activeCompletion !== null;
