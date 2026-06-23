@@ -13,7 +13,7 @@
 | Framework | Expo SDK 52 + React Native 0.76 New Architecture (bridgeless) | — |
 | Language | TypeScript strict | — |
 | Navigation | expo-router v4 + Drawer | — |
-| Inference | MediaPipe LiteRT GenAI (`tasks-genai`/`tasks-vision` 0.10.35) — GPU, `.task` multimodal models. Native module at `android/.../litert/`, JS at `src/llm/LiteRtService.ts`, engine seam `src/llm/engine.ts`. (llama.rn 0.12.0-rc.6 still in tree but unused — fallback.) | — |
+| Inference | LiteRT-LM (`com.google.ai.edge.litertlm` 0.11.0 — Edge Gallery's engine) — GPU, ungated `.litertlm` multimodal models. Built on Kotlin 1.9 via `-Xskip-metadata-version-check`. Native module `android/.../litert/LiteRtModule.kt`, JS `src/llm/LiteRtService.ts`, seam `src/llm/engine.ts`. (llama.rn still in tree, unused fallback.) | — |
 | Voice | @react-native-voice/voice | 3.2.4 (patched) |
 | Downloads | @kesha-antonov/react-native-background-downloader | 4.5.5 (patched) |
 | State | Zustand + AsyncStorage persist | — |
