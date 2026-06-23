@@ -1,5 +1,6 @@
 import { initLlama, type LlamaContext } from 'llama.rn';
 import * as FileSystem from 'expo-file-system';
+import { Asset } from 'expo-asset';
 import { Message } from '@/types';
 import { buildGemmaPrompt, trimToContext } from './prompt';
 import { assertRAMSufficient } from '@/utils/ramCheck';
@@ -11,6 +12,23 @@ import { assertRAMSufficient } from '@/utils/ramCheck';
  * prompt, but the pixels are not sent.
  */
 let multimodalReady = false;
+let lastVisionError: string | null = null;
+let visionSelfTestPassed = false;
+
+// Test seam so the self-test can be unit-tested without a native context.
+interface VisionTestHooks {
+  multimodalReady: boolean;
+  selfTestImagePath: string;
+  completion: (params: unknown, onTok: (t: { token?: string }) => void) => Promise<void>;
+}
+let visionTestHooks: VisionTestHooks | null = null;
+export function __setVisionTestHooks(h: VisionTestHooks | null): void { visionTestHooks = h; }
+
+export function getVisionStatus(): {
+  ready: boolean; selfTestPassed: boolean; error: string | null;
+} {
+  return { ready: multimodalReady, selfTestPassed: visionSelfTestPassed, error: lastVisionError };
+}
 
 /**
  * Load a multimodal projector so the active model can analyze images. Safe to
@@ -19,29 +37,81 @@ let multimodalReady = false;
  */
 export async function initMultimodal(mmprojPath: string): Promise<boolean> {
   if (!context) return false;
+  lastVisionError = null;
+  visionSelfTestPassed = false;
   const path = mmprojPath.replace(/^file:\/\//, '');
-  // llama.rn exposes multimodal via initMultimodal on newer builds; guard with
-  // feature detection so a text-only build never throws.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ctx = context as any;
-  if (typeof ctx.initMultimodal !== 'function') return false;
+  if (typeof ctx.initMultimodal !== 'function') {
+    lastVisionError = 'This build has no multimodal support.';
+    return false;
+  }
   try {
-    // image_max_tokens caps how many tokens an image expands to — the default
-    // can be very high and OOM/stall on an 8 GB phone during decode. 512 keeps
-    // memory bounded while still giving the model a usable view.
-    const ok = await ctx.initMultimodal({ path, use_gpu: false, image_max_tokens: 512 });
-    // Respect the return value AND confirm the projector actually enabled — some
-    // architectures load the file but can't run vision.
+    // image_max_tokens/image_min_tokens are for dynamic-resolution models; gemma-3n is
+    // fixed (~256 soft tokens), so do NOT clamp below that. Keep a generous ceiling
+    // (1024) instead of the prior 512 which could corrupt decode.
+    const ok = await ctx.initMultimodal({ path, use_gpu: false, image_max_tokens: 1024 });
     let enabled = ok !== false;
     if (typeof ctx.isMultimodalEnabled === 'function') {
-      try { enabled = await ctx.isMultimodalEnabled(); } catch { /* keep `ok` */ }
+      try { enabled = await ctx.isMultimodalEnabled(); } catch { /* keep ok */ }
     }
     multimodalReady = !!enabled;
+    if (!multimodalReady) lastVisionError = 'Projector loaded but vision did not enable.';
   } catch (e) {
-    console.error('[LlamaService] initMultimodal failed', e);
+    lastVisionError = e instanceof Error ? e.message : String(e);
     multimodalReady = false;
   }
   return multimodalReady;
+}
+
+/** Resolve the bundled self-test image to a filesystem path llama.rn can read. */
+async function selfTestImagePath(): Promise<string | null> {
+  if (visionTestHooks) return visionTestHooks.selfTestImagePath;
+  try {
+    const asset = Asset.fromModule(require('../../assets/vision-selftest.png'));
+    await asset.downloadAsync();
+    return (asset.localUri ?? asset.uri).replace(/^file:\/\//, '');
+  } catch { return null; }
+}
+
+/**
+ * Prove vision really decodes: feed the bundled red square through one short
+ * completion. Any emitted token means the projector decoded an image without
+ * crashing -> vision works. Records the failure reason otherwise.
+ */
+export async function runVisionSelfTest(): Promise<boolean> {
+  const ready = visionTestHooks ? visionTestHooks.multimodalReady : multimodalReady;
+  if (!ready) return false;
+  const img = await selfTestImagePath();
+  if (!img) { lastVisionError = 'Self-test image missing.'; return false; }
+
+  const runCompletion = visionTestHooks
+    ? visionTestHooks.completion
+    : (params: unknown, onTok: (t: { token?: string }) => void) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context!.completion(params as any, onTok).then(() => {});
+
+  if (!visionTestHooks) await drainActive();
+  let emitted = 0;
+  const prompt = `<start_of_turn>user\n<__media__>\nWhat color is this image? One word.<end_of_turn>\n<start_of_turn>model\n`;
+  try {
+    if (!visionTestHooks) activeKind = 'extract';
+    const run = runCompletion(
+      { prompt, n_predict: 8, temperature: 0.1, stop: STOP, media_paths: [img] },
+      (tr) => { if (tr.token != null) emitted++; },
+    );
+    if (!visionTestHooks) activeCompletion = run as Promise<void>;
+    await run;
+    visionSelfTestPassed = emitted > 0;
+    if (!visionSelfTestPassed) lastVisionError = 'Image decoded but produced no output.';
+    return visionSelfTestPassed;
+  } catch (e) {
+    lastVisionError = e instanceof Error ? e.message : 'vision self-test failed';
+    visionSelfTestPassed = false;
+    return false;
+  } finally {
+    if (!visionTestHooks) { activeCompletion = null; activeKind = null; }
+  }
 }
 
 export const isMultimodalReady = (): boolean => multimodalReady;
@@ -214,6 +284,8 @@ export async function generate(
       // A vision (media) completion can hard-crash the native context. Rebuild a
       // clean context and retry text-only so the user still gets a reply.
       if (mediaPaths.length && emitted === 0) {
+        lastVisionError = `Image decode failed: ${msg}`;
+        visionSelfTestPassed = false;
         await reinit();
         if (context) {
           try {
@@ -307,6 +379,8 @@ export async function releaseLlm(): Promise<void> {
   try { await context.release(); } catch (e) { console.error('[LlamaService] release', e); }
   context = null; currentPath = null; activeCompletion = null; activeKind = null;
   multimodalReady = false;
+  lastVisionError = null;
+  visionSelfTestPassed = false;
 }
 
 export const isModelLoaded = (): boolean => context !== null;
