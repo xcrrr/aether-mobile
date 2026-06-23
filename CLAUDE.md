@@ -13,7 +13,7 @@
 | Framework | Expo SDK 52 + React Native 0.76 New Architecture (bridgeless) | — |
 | Language | TypeScript strict | — |
 | Navigation | expo-router v4 + Drawer | — |
-| Inference | llama.rn | 0.12.0-rc.6 |
+| Inference | MediaPipe LiteRT GenAI (`tasks-genai`/`tasks-vision` 0.10.35) — GPU, `.task` multimodal models. Native module at `android/.../litert/`, JS at `src/llm/LiteRtService.ts`, engine seam `src/llm/engine.ts`. (llama.rn 0.12.0-rc.6 still in tree but unused — fallback.) | — |
 | Voice | @react-native-voice/voice | 3.2.4 (patched) |
 | Downloads | @kesha-antonov/react-native-background-downloader | 4.5.5 (patched) |
 | State | Zustand + AsyncStorage persist | — |
@@ -44,12 +44,11 @@ Android SQLite `CursorWindow` = 2 MB per row. Never store image base64 in conver
 - Extraction transcript: trimmed to 4000 chars total
 - N_CTX maths: keep prompts + completion well under 4096 tokens
 
-### Vision (multimodal)
-- Requires mmproj pack (~940 MB) downloaded separately per model
-- `initMultimodal({path, use_gpu:false, image_max_tokens:512})` — check return value + `isMultimodalEnabled()`
-- Prompt MUST include `<__media__>` marker when mediaPaths.length > 0 (`buildUserContent`)
-- mediaPaths computed BEFORE `drainActive()` — no await between drain and lock (race = crash)
-- Honesty fallback: if vision not loaded, tell user honestly instead of hallucinating
+### Vision (multimodal) — built into the model
+- LiteRT `.task` bundles are multimodal in ONE file. NO separate vision pack, no mmproj.
+- Vision is ready the moment the model loads. Images go to the native session via
+  `Content.ImageBytes` / `BitmapImageBuilder` (no `<__media__>` marker — MediaPipe templates).
+- Models: ungated `litert-community/gemma-4-{E2B,E4B}-it-litert-lm` `*-web.task` (public CDN).
 
 ## Build commands
 ```bash
