@@ -7,6 +7,8 @@ import type { DownloadTask } from '@kesha-antonov/react-native-background-downlo
 import { ModelDef } from '@/types';
 import { MODELS, getModelById } from './registry';
 import { modelsDir, modelDestPath, stripFileUri, isVerifiedSize } from './paths';
+import { isMmprojFileValid } from './ggufCheck';
+import { base64ToArrayBuffer } from '@/files/base64';
 
 /**
  * Model downloads use @kesha-antonov/react-native-background-downloader: a
@@ -58,6 +60,40 @@ export async function isMmprojInstalled(model: ModelDef): Promise<boolean> {
   const info = await FileSystem.getInfoAsync(`file://${path}`, { size: true });
   if (!info.exists) return false;
   return isVerifiedSize((info as { size?: number }).size ?? 0, model.mmprojSizeBytes);
+}
+
+export interface MmprojIntegrity { ok: boolean; reason?: 'missing' | 'corrupt'; }
+
+/** Verify a downloaded vision pack: present, GGUF magic, size within tolerance.
+ *  Deletes a corrupt file so the UI can prompt a clean re-download. */
+export async function verifyMmprojIntegrity(model: ModelDef): Promise<MmprojIntegrity> {
+  const path = mmprojLocalPath(model);
+  if (!path || !model.mmprojSizeBytes) return { ok: false, reason: 'missing' };
+  const uri = `file://${path}`;
+  const info = await FileSystem.getInfoAsync(uri, { size: true });
+  if (!info.exists) return { ok: false, reason: 'missing' };
+  const size = (info as { size?: number }).size ?? 0;
+
+  // Read the file's leading bytes via base64; decode only the first 4 to ASCII.
+  let headStr = '';
+  try {
+    const b64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType?.Base64,
+      length: 8,
+      position: 0,
+    });
+    const bytes = new Uint8Array(base64ToArrayBuffer(b64)).slice(0, 4);
+    headStr = String.fromCharCode(...bytes);
+  } catch {
+    headStr = '';
+  }
+
+  const valid = isMmprojFileValid({ headStr, sizeBytes: size, expectedBytes: model.mmprojSizeBytes });
+  if (!valid) {
+    await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+    return { ok: false, reason: 'corrupt' };
+  }
+  return { ok: true };
 }
 
 /** Download the model's vision pack (mmproj) using the same background downloader. */
