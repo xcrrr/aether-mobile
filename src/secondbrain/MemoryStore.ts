@@ -1,14 +1,17 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MemoryCategory, MemoryEntry, UserMemory } from './types';
+import { MemoryCategory, MemoryEntry, MemoryEdge, UserMemory } from './types';
 import { uuid } from './id';
 
 /** AsyncStorage key — fixed by the Second Brain spec (not the `@aether/*` namespace). */
 const STORAGE_KEY = 'aether_second_brain';
 
+const STALE_WINDOW_MS = 1000 * 60 * 60 * 24 * 90; // 90 days
+const STALE_CONFIDENCE = 0.4;
+
 function emptyMemory(): UserMemory {
-  return { userId: uuid(), entries: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 };
+  return { userId: uuid(), entries: [], edges: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 };
 }
 
 interface SecondBrainState {
@@ -18,11 +21,14 @@ interface SecondBrainState {
   /** True once the persisted state has rehydrated from AsyncStorage. */
   hydrated: boolean;
 
-  addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced'>) => void;
+  addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced' | 'lastSeenAt'>) => void;
   getEntriesByCategory: (category: MemoryCategory) => MemoryEntry[];
   getAllEntries: () => MemoryEntry[];
   deleteEntry: (id: string) => void;
   clearAll: () => void;
+
+  addEdge: (edge: Omit<MemoryEdge, 'id'>) => void;
+  markStale: () => void;
 
   setEnabled: (enabled: boolean) => void;
   /** Bump extraction stats after a conversation is analysed. */
@@ -47,9 +53,11 @@ export const useMemoryStore = create<SecondBrainState>()(
           entries[idx] = {
             ...prev,
             value: entry.value,
-            confidence: entry.confidence,
+            confidence: Math.min(1, Math.max(prev.confidence, entry.confidence) + 0.05),
             sourceConversationId: entry.sourceConversationId,
             updatedAt: now,
+            lastSeenAt: now,
+            stale: false,
             timesReinforced: prev.timesReinforced + 1,
           };
         } else {
@@ -58,6 +66,7 @@ export const useMemoryStore = create<SecondBrainState>()(
             id: uuid(),
             createdAt: now,
             updatedAt: now,
+            lastSeenAt: now,
             timesReinforced: 0,
           });
         }
@@ -69,11 +78,30 @@ export const useMemoryStore = create<SecondBrainState>()(
 
       getAllEntries: () => get().memory.entries,
 
-      deleteEntry: (id) =>
-        set({ memory: { ...get().memory, entries: get().memory.entries.filter((e) => e.id !== id) } }),
+      deleteEntry: (id) => {
+        const entries = get().memory.entries.filter((e) => e.id !== id);
+        const keys = new Set(entries.map((e) => e.key));
+        const edges = (get().memory.edges ?? []).filter((e) => keys.has(e.fromKey) && keys.has(e.toKey));
+        set({ memory: { ...get().memory, entries, edges } });
+      },
 
       clearAll: () =>
-        set({ memory: { ...get().memory, entries: [] } }),
+        set({ memory: { ...get().memory, entries: [], edges: [] } }),
+
+      addEdge: (edge) => {
+        const edges = [...(get().memory.edges ?? [])];
+        if (edges.some((e) => e.fromKey === edge.fromKey && e.toKey === edge.toKey && e.relation === edge.relation)) return;
+        edges.push({ ...edge, id: uuid() });
+        set({ memory: { ...get().memory, edges } });
+      },
+
+      markStale: () => {
+        const now = Date.now();
+        const entries = get().memory.entries.map((e) =>
+          e.confidence < STALE_CONFIDENCE && now - e.lastSeenAt > STALE_WINDOW_MS ? { ...e, stale: true } : e,
+        );
+        set({ memory: { ...get().memory, entries } });
+      },
 
       setEnabled: (enabled) => set({ enabled }),
 
@@ -92,8 +120,14 @@ export const useMemoryStore = create<SecondBrainState>()(
       partialize: (s) => ({ memory: s.memory, enabled: s.enabled }),
       onRehydrateStorage: () => (state) => {
         // Ensure a userId exists even on a fresh install / corrupt payload.
+        // Backfill new fields on legacy payloads.
         if (state) {
           if (!state.memory?.userId) state.memory = emptyMemory();
+          if (!Array.isArray(state.memory.edges)) state.memory.edges = [];
+          state.memory.entries = (state.memory.entries ?? []).map((e) => ({
+            ...e,
+            lastSeenAt: e.lastSeenAt ?? e.updatedAt ?? e.createdAt ?? Date.now(),
+          }));
           state.hydrated = true;
         }
       },
@@ -106,13 +140,16 @@ export const useMemoryStore = create<SecondBrainState>()(
  * extractor). They read/write the same store instance.
  */
 export const MemoryStore = {
-  addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced'>) =>
+  addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced' | 'lastSeenAt'>) =>
     useMemoryStore.getState().addOrUpdateEntry(entry),
   getEntriesByCategory: (category: MemoryCategory) =>
     useMemoryStore.getState().getEntriesByCategory(category),
   getAllEntries: () => useMemoryStore.getState().getAllEntries(),
   deleteEntry: (id: string) => useMemoryStore.getState().deleteEntry(id),
   clearAll: () => useMemoryStore.getState().clearAll(),
+  addEdge: (edge: Omit<MemoryEdge, 'id'>) => useMemoryStore.getState().addEdge(edge),
+  markStale: () => useMemoryStore.getState().markStale(),
+  getAllEdges: () => useMemoryStore.getState().memory.edges,
   isEnabled: () => useMemoryStore.getState().enabled,
   setEnabled: (enabled: boolean) => useMemoryStore.getState().setEnabled(enabled),
   recordExtraction: () => useMemoryStore.getState().recordExtraction(),

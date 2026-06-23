@@ -8,7 +8,7 @@ const mockExtract = Llama.extract as jest.MockedFunction<typeof Llama.extract>;
 
 function reset() {
   useMemoryStore.setState({
-    memory: { userId: 't', entries: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 },
+    memory: { userId: 't', entries: [], edges: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 },
     enabled: true,
   });
   mockExtract.mockReset();

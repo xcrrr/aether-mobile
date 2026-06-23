@@ -37,11 +37,22 @@ export interface MemoryEntry {
   createdAt: number;             // Unix ms
   updatedAt: number;
   timesReinforced: number;       // incremented when the same fact reappears
+  lastSeenAt: number;            // Unix ms — bumped each time the fact is re-observed
+  stale?: boolean;               // low-confidence + long-unseen; de-emphasized in the graph
+}
+
+/** A directed relationship between two facts (by key), e.g. business —located_in→ city. */
+export interface MemoryEdge {
+  id: string;
+  fromKey: string;
+  toKey: string;
+  relation: string;
 }
 
 export interface UserMemory {
   userId: string;                // device-generated UUID, persisted
   entries: MemoryEntry[];
+  edges: MemoryEdge[];
   lastExtractionAt: number;      // Unix ms, 0 if never
   totalConversationsAnalyzed: number;
 }

@@ -11,6 +11,7 @@ function entry(p: Partial<MemoryEntry> & { category: MemoryCategory; key: string
     createdAt: 0,
     updatedAt: 0,
     timesReinforced: 0,
+    lastSeenAt: 0,
     ...p,
   };
 }
