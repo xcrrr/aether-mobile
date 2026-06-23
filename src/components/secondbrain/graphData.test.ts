@@ -45,4 +45,24 @@ describe('toGraphData', () => {
     const { nodes } = toGraphData([entry({ key: 'city' })], []);
     expect(nodes[0].recent).toBe(false);
   });
+  it('collapses entries that share a key into one node (force-graph needs unique ids)', () => {
+    // Same key surfacing in two categories must not emit two nodes with the same id —
+    // duplicate ids break the 3d-force-graph node map and the graph renders blank.
+    const entries = [
+      entry({ key: 'x', category: 'identity', id: 'a' }),
+      entry({ key: 'x', category: 'goals', id: 'b' }),
+    ];
+    const { nodes } = toGraphData(entries, []);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].id).toBe('x');
+  });
+  it('keeps a shared-key node marked recent when either duplicate is recent', () => {
+    const entries = [
+      entry({ key: 'x', category: 'identity', id: 'a' }),
+      entry({ key: 'x', category: 'goals', id: 'b' }),
+    ];
+    const { nodes } = toGraphData(entries, [], new Set(['x']));
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].recent).toBe(true);
+  });
 });

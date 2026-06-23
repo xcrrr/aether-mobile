@@ -14,6 +14,44 @@ function emptyMemory(): UserMemory {
   return { userId: uuid(), entries: [], edges: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 };
 }
 
+/** Normalise a fact value for duplicate detection (case/whitespace/trailing punctuation). */
+function normValue(v: string): string {
+  return v.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.!?,;:]+$/, '');
+}
+
+/**
+ * Collapse duplicate facts already in the store: entries in the same category
+ * with the same (normalised) value are the same fact saved more than once. Keeps
+ * the strongest copy (most reinforced, then most confident), folds the rest into
+ * its reinforcement count. Pure; run once on rehydration to clean legacy data.
+ */
+export function dedupeEntries(entries: MemoryEntry[]): MemoryEntry[] {
+  const byFact = new Map<string, MemoryEntry>();
+  for (const e of entries) {
+    const sig = `${e.category}\n${normValue(e.value)}`;
+    const prev = byFact.get(sig);
+    if (!prev) {
+      byFact.set(sig, { ...e });
+      continue;
+    }
+    const stronger =
+      e.timesReinforced > prev.timesReinforced ||
+      (e.timesReinforced === prev.timesReinforced && e.confidence > prev.confidence)
+        ? e : prev;
+    const weaker = stronger === e ? prev : e;
+    byFact.set(sig, {
+      ...stronger,
+      confidence: Math.max(prev.confidence, e.confidence),
+      timesReinforced: prev.timesReinforced + e.timesReinforced + 1,
+      createdAt: Math.min(prev.createdAt, e.createdAt),
+      updatedAt: Math.max(prev.updatedAt, e.updatedAt),
+      lastSeenAt: Math.max(prev.lastSeenAt, e.lastSeenAt),
+      stale: stronger.stale && weaker.stale,
+    });
+  }
+  return [...byFact.values()];
+}
+
 interface SecondBrainState {
   memory: UserMemory;
   /** When false, no extraction runs and memory is not injected. Defaults true. */
@@ -55,9 +93,15 @@ export const useMemoryStore = create<SecondBrainState>()(
       addOrUpdateEntry: (entry) => {
         const now = Date.now();
         const entries = [...get().memory.entries];
-        const idx = entries.findIndex(
+        let idx = entries.findIndex(
           (e) => e.category === entry.category && e.key === entry.key,
         );
+        // No key match? The model often re-emits the same fact under a fresh key.
+        // Same category + same value = the same fact → reinforce, don't duplicate.
+        if (idx < 0) {
+          const nv = normValue(entry.value);
+          idx = entries.findIndex((e) => e.category === entry.category && normValue(e.value) === nv);
+        }
         if (idx >= 0) {
           const prev = entries[idx];
           entries[idx] = {
@@ -179,6 +223,12 @@ export const useMemoryStore = create<SecondBrainState>()(
             ...e,
             lastSeenAt: e.lastSeenAt ?? e.updatedAt ?? e.createdAt ?? Date.now(),
           }));
+          // Clean up duplicates already saved before dedup existed.
+          state.memory.entries = dedupeEntries(state.memory.entries);
+          const liveKeys = new Set(state.memory.entries.map((e) => e.key));
+          state.memory.edges = (state.memory.edges ?? []).filter(
+            (e) => liveKeys.has(e.fromKey) && liveKeys.has(e.toKey),
+          );
           // Recompute stale on every rehydration so decay is applied at startup.
           const now = Date.now();
           state.memory.entries = state.memory.entries.map((e) => ({

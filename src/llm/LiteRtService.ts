@@ -17,7 +17,7 @@ export interface LoadOptions {
  * so a background Second-Brain extraction never overlaps a chat reply.
  */
 const LiteRt = NativeModules.LiteRt as {
-  init(path: string, maxTokens: number): Promise<boolean>;
+  init(path: string, maxTokens: number): Promise<string>;
   generate(
     prompt: string, imagePaths: string[], topK: number, topP: number,
     temperature: number, stream: boolean,
@@ -42,22 +42,34 @@ let currentPath: string | null = null;
 let activeCompletion: Promise<unknown> | null = null;
 let activeKind: 'chat' | 'extract' | null = null;
 let cancelled = false;
+let visionEnabled = false;
+let gpuActive = false;
 
 export async function initLlm(modelPath: string, opts: LoadOptions = {}): Promise<void> {
-  if (!LiteRt) throw new Error('LiteRT engine unavailable');
+  if (!LiteRt) throw new Error('LiteRT engine not available in this build');
   const path = modelPath.replace(/^file:\/\//, '');
   if (currentPath === path) return;
   if (opts.modelSizeGb != null && !opts.bypassRamCheck) assertRAMSufficient(opts.modelSizeGb);
   try {
-    await LiteRt.init(path, MAX_TOKENS);
+    const caps = await LiteRt.init(path, MAX_TOKENS);
+    try {
+      const parsed = JSON.parse(caps) as { gpu?: boolean; vision?: boolean };
+      visionEnabled = !!parsed.vision;
+      gpuActive = !!parsed.gpu;
+    } catch { visionEnabled = false; gpuActive = false; }
   } catch (e) {
-    const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
-    if (/memory|oom|out of mem|alloc/.test(msg)) throw new Error('INSUFFICIENT_RAM');
-    if (/not found|no such file|enoent/.test(msg)) throw new Error('MODEL_NOT_FOUND');
-    throw new Error('MODEL_LOAD_FAILED');
+    const raw = e instanceof Error ? e.message : String(e);
+    const low = raw.toLowerCase();
+    if (/memory|oom|out of mem|alloc/.test(low)) throw new Error('INSUFFICIENT_RAM');
+    if (/not found|no such file|enoent|incomplete/.test(low)) throw new Error('MODEL_NOT_FOUND');
+    // Surface the actual native reason instead of a generic message.
+    throw new Error(raw || 'Could not load this model');
   }
   currentPath = path;
 }
+
+export const isVisionEnabled = (): boolean => visionEnabled;
+export const isGpuActive = (): boolean => gpuActive;
 
 /** Flatten a conversation into a plain transcript. MediaPipe wraps it in the
  *  model's own turn template, so we must NOT emit Gemma `<start_of_turn>` markers. */
@@ -141,6 +153,8 @@ export async function releaseLlm(): Promise<void> {
   currentPath = null;
   activeCompletion = null;
   activeKind = null;
+  visionEnabled = false;
+  gpuActive = false;
 }
 
 export const isModelLoaded = (): boolean => currentPath !== null;

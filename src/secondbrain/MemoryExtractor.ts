@@ -34,6 +34,8 @@ const PROMPT_TEMPLATE =
   'preferences, goals, knowledge, relationships, patterns, emotional, context. ' +
   'Only include facts clearly stated or strongly implied — never invent. ' +
   'Keep each "value" concise (a dozen words max). Reuse an existing key when updating a known fact; do not emit duplicates.\n\n' +
+  'ALREADY IN MEMORY (do NOT output any of these again unless the value has ' +
+  'genuinely CHANGED; when updating, reuse the EXACT same key shown):\n{KNOWN_FACTS}\n\n' +
   'Example conversation:\n' +
   'User: Hey, I run a barber shop called Mitruk here in Warsaw and I want to grow it on Instagram\n' +
   'Example output:\n' +
@@ -63,8 +65,24 @@ export function buildTranscript(messages: Message[], maxChars = MAX_TRANSCRIPT_C
   return lines.join('\n');
 }
 
+// Cap the known-facts list so the extraction prompt stays well inside the context
+// window (each fact line is short; the transcript already eats most of the budget).
+const MAX_KNOWN_FACTS = 50;
+
+/** A compact list of facts already saved, so the model reuses keys and skips repeats. */
+function buildKnownFacts(): string {
+  const entries = MemoryStore.getAllEntries();
+  if (!entries.length) return '(nothing yet)';
+  return entries
+    .slice(0, MAX_KNOWN_FACTS)
+    .map((e) => `- [${e.category}] ${e.key}: ${e.value}`)
+    .join('\n');
+}
+
 function buildPrompt(messages: Message[]): string {
-  const instruction = PROMPT_TEMPLATE.replace('{CONVERSATION_TEXT}', buildTranscript(messages));
+  const instruction = PROMPT_TEMPLATE
+    .replace('{KNOWN_FACTS}', buildKnownFacts())
+    .replace('{CONVERSATION_TEXT}', buildTranscript(messages));
   // Wrap in Gemma turn markers so the model answers the instruction (and emits
   // a closing turn the STOP tokens catch) rather than continuing the text.
   return buildGemmaPrompt('', [

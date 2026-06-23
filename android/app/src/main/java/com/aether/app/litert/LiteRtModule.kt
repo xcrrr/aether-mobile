@@ -1,3 +1,5 @@
+@file:OptIn(com.google.ai.edge.litertlm.ExperimentalApi::class)
+
 package com.aether.app.litert
 
 import android.graphics.BitmapFactory
@@ -8,23 +10,32 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.google.mediapipe.tasks.genai.llminference.GraphOptions
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Conversation
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.MessageCallback
+import com.google.ai.edge.litertlm.SamplerConfig
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 
 /**
- * React Native bridge over Google's MediaPipe LiteRT GenAI engine
- * (`com.google.mediapipe:tasks-genai`) — the GPU-native on-device LLM stack behind
- * Google's AI Edge Gallery, running `.task` models. Replaces llama.rn for chat +
- * vision so Gemma decodes images and replies at GPU speed.
+ * React Native bridge over Google's LiteRT-LM engine (`com.google.ai.edge.litertlm`)
+ * — the exact GPU-native engine Google's AI Edge Gallery ships, running the ungated
+ * `.litertlm` Gemma models. Replaces llama.rn for chat + vision.
  *
- * The `LlmInference` engine is created once per loaded model. Each `generate` opens
- * a fresh session (sampler + optional vision), streams the reply token-by-token over
- * the `LiteRtToken` device event, and resolves with the full text. JS serialises
- * calls so only one session runs at a time.
+ * litertlm is built with Kotlin 2.x metadata; we read it from Kotlin 1.9 via the
+ * `-Xskip-metadata-version-check` compiler flag (see app/build.gradle).
+ *
+ * The engine is created once per model with a GPU→CPU / vision→text fallback ladder.
+ * Each `generate` opens a fresh conversation and streams the reply token-by-token
+ * over the `LiteRtToken` device event. JS serialises calls.
  */
 class LiteRtModule(reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -32,9 +43,10 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
   private val ctx = reactContext
   private val worker = Executors.newSingleThreadExecutor()
 
-  @Volatile private var engine: LlmInference? = null
+  @Volatile private var engine: Engine? = null
   @Volatile private var modelPath: String? = null
-  @Volatile private var session: LlmInferenceSession? = null
+  @Volatile private var conversation: Conversation? = null
+  @Volatile private var visionEnabled = false
   @Volatile private var cancelled = false
 
   override fun getName() = "LiteRt"
@@ -47,36 +59,66 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
   @ReactMethod fun isLoaded(promise: Promise) = promise.resolve(engine != null)
   @ReactMethod fun getLoadedPath(promise: Promise) = promise.resolve(modelPath)
 
-  /** Create the LlmInference engine for a `.task` model (GPU backend, vision-capable). */
+  private class EngineResult(val engine: Engine, val gpu: Boolean, val vision: Boolean)
+
+  /** Build + initialise the engine, trying GPU+vision → GPU text-only → CPU text-only,
+   *  so a model still loads if the GPU or the vision graph is unavailable. */
+  private fun createEngine(path: String, maxTokens: Int): EngineResult {
+    val cacheDir = ctx.cacheDir.absolutePath
+    data class Attempt(val gpu: Boolean, val vision: Boolean)
+    val ladder = listOf(Attempt(true, true), Attempt(true, false), Attempt(false, false))
+    var lastErr: Throwable? = null
+    for (a in ladder) {
+      try {
+        val backend = if (a.gpu) Backend.GPU() else Backend.CPU()
+        val config = EngineConfig(
+          modelPath = path,
+          backend = backend,
+          visionBackend = if (a.vision) Backend.GPU() else null,
+          audioBackend = null,
+          maxNumTokens = maxTokens,
+          cacheDir = cacheDir,
+        )
+        val eng = Engine(config)
+        eng.initialize()
+        Log.i("LiteRt", "engine ready (gpu=${a.gpu} vision=${a.vision})")
+        return EngineResult(eng, a.gpu, a.vision)
+      } catch (t: Throwable) {
+        lastErr = t
+        Log.w("LiteRt", "engine attempt failed (gpu=${a.gpu} vision=${a.vision}): ${t.message}")
+      }
+    }
+    throw lastErr ?: RuntimeException("Could not create LiteRT engine")
+  }
+
+  /** Resolves a JSON capability string `{"gpu":bool,"vision":bool}`. */
   @ReactMethod
   fun init(path: String, maxTokens: Int, promise: Promise) {
     worker.execute {
       try {
         val clean = path.removePrefix("file://")
-        if (engine != null && modelPath == clean) { promise.resolve(true); return@execute }
-        if (!File(clean).exists()) { promise.reject("LITERT_NO_FILE", "Model file not found: $clean"); return@execute }
+        if (engine != null && modelPath == clean) {
+          promise.resolve("{\"gpu\":true,\"vision\":$visionEnabled}"); return@execute
+        }
+        val file = File(clean)
+        if (!file.exists()) { promise.reject("LITERT_NO_FILE", "Model file not found"); return@execute }
+        if (file.length() < 1_000_000L) {
+          promise.reject("LITERT_BAD_FILE", "Model file looks incomplete (${file.length()} bytes) — re-download it")
+          return@execute
+        }
         releaseInternal()
-        val options = LlmInference.LlmInferenceOptions.builder()
-          .setModelPath(clean)
-          .setMaxTokens(maxTokens)
-          .setPreferredBackend(LlmInference.Backend.GPU)
-          .setMaxNumImages(1)
-          .build()
-        engine = LlmInference.createFromOptions(ctx, options)
+        val res = createEngine(clean, maxTokens)
+        engine = res.engine
+        visionEnabled = res.vision
         modelPath = clean
-        promise.resolve(true)
+        promise.resolve("{\"gpu\":${res.gpu},\"vision\":${res.vision}}")
       } catch (t: Throwable) {
         Log.e("LiteRt", "init failed", t)
-        promise.reject("LITERT_INIT", t.message ?: "init failed", t)
+        promise.reject("LITERT_INIT", t.message ?: "Could not load this model", t)
       }
     }
   }
 
-  /**
-   * Stream a reply for an already-assembled `prompt` (JS builds the full transcript)
-   * plus any images. Tokens emit on `LiteRtToken` when `stream` is true; the full
-   * text resolves the promise.
-   */
   @ReactMethod
   fun generate(
     prompt: String,
@@ -91,49 +133,65 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
       val e = engine
       if (e == null) { promise.reject("LITERT_NO_MODEL", "No model loaded"); return@execute }
       cancelled = false
-      var s: LlmInferenceSession? = null
+      val useImages = visionEnabled && imagePaths.size() > 0
       try {
-        val hasImages = imagePaths.size() > 0
-        val sessionOptions = LlmInferenceSession.LlmInferenceSessionOptions.builder()
-          .setTopK(topK)
-          .setTopP(topP.toFloat())
-          .setTemperature(temperature.toFloat())
-          .setGraphOptions(GraphOptions.builder().setEnableVisionModality(hasImages).build())
-          .build()
-        s = LlmInferenceSession.createFromOptions(e, sessionOptions)
-        session = s
+        val convo = e.createConversation(
+          ConversationConfig(
+            samplerConfig = SamplerConfig(topK = topK, topP = topP, temperature = temperature),
+            systemInstruction = null,
+            initialMessages = emptyList<Message>(),
+          ),
+        )
+        conversation = convo
 
-        if (prompt.isNotBlank()) s.addQueryChunk(prompt)
-        for (i in 0 until imagePaths.size()) {
-          val p = imagePaths.getString(i)?.removePrefix("file://") ?: continue
-          val bmp = BitmapFactory.decodeFile(p) ?: continue
-          s.addImage(BitmapImageBuilder(bmp).build())
+        val contents = mutableListOf<Content>()
+        if (useImages) {
+          for (i in 0 until imagePaths.size()) {
+            val p = imagePaths.getString(i)?.removePrefix("file://") ?: continue
+            pngBytes(p)?.let { contents.add(Content.ImageBytes(it)) }
+          }
         }
+        if (prompt.isNotBlank()) contents.add(Content.Text(prompt))
 
         val sb = StringBuilder()
-        s.generateResponseAsync { partial, done ->
-          if (!cancelled && partial != null && partial.isNotEmpty()) {
-            sb.append(partial)
-            if (stream) emit("LiteRtToken", partial)
-          }
-          if (done) {
-            closeSession()
-            promise.resolve(sb.toString())
-          }
-        }
+        convo.sendMessageAsync(
+          Contents.of(contents),
+          object : MessageCallback {
+            override fun onMessage(message: Message) {
+              val piece = message.toString()
+              if (!cancelled && piece.isNotEmpty()) {
+                sb.append(piece)
+                if (stream) emit("LiteRtToken", piece)
+              }
+            }
+            override fun onDone() {
+              closeConversation()
+              promise.resolve(sb.toString())
+            }
+            override fun onError(throwable: Throwable) {
+              closeConversation()
+              if (throwable is CancellationException) {
+                promise.resolve(sb.toString())
+              } else {
+                Log.e("LiteRt", "generate error", throwable)
+                promise.reject("LITERT_GEN", throwable.message ?: "generation failed", throwable)
+              }
+            }
+          },
+          emptyMap(),
+        )
       } catch (t: Throwable) {
-        closeSession()
+        closeConversation()
         Log.e("LiteRt", "generate failed", t)
         promise.reject("LITERT_GEN", t.message ?: "generation failed", t)
       }
     }
   }
 
-  /** Best-effort cancel — stops emitting and closes the session. */
   @ReactMethod
   fun stop(promise: Promise) {
     cancelled = true
-    closeSession()
+    try { conversation?.cancelProcess() } catch (_: Throwable) {}
     promise.resolve(true)
   }
 
@@ -145,19 +203,31 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  // Required so NativeEventEmitter works on the JS side.
   @ReactMethod fun addListener(eventName: String) {}
   @ReactMethod fun removeListeners(count: Int) {}
 
-  private fun closeSession() {
-    try { session?.close() } catch (_: Throwable) {}
-    session = null
+  private fun pngBytes(path: String): ByteArray? {
+    return try {
+      val bmp = BitmapFactory.decodeFile(path) ?: return null
+      val stream = ByteArrayOutputStream()
+      bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+      stream.toByteArray()
+    } catch (t: Throwable) {
+      Log.w("LiteRt", "image decode failed", t)
+      null
+    }
+  }
+
+  private fun closeConversation() {
+    try { conversation?.close() } catch (_: Throwable) {}
+    conversation = null
   }
 
   private fun releaseInternal() {
-    closeSession()
+    closeConversation()
     try { engine?.close() } catch (_: Throwable) {}
     engine = null
     modelPath = null
+    visionEnabled = false
   }
 }

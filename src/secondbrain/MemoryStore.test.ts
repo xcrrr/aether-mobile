@@ -1,4 +1,11 @@
-import { useMemoryStore, MemoryStore } from './MemoryStore';
+import { useMemoryStore, MemoryStore, dedupeEntries } from './MemoryStore';
+import { MemoryEntry } from './types';
+
+const mkEntry = (over: Partial<MemoryEntry>): MemoryEntry => ({
+  id: over.id ?? 'i', category: over.category ?? 'identity', key: over.key ?? 'k',
+  value: over.value ?? 'v', confidence: over.confidence ?? 0.8, sourceConversationId: 'c',
+  createdAt: 0, updatedAt: 0, lastSeenAt: 0, timesReinforced: 0, ...over,
+});
 
 function reset() {
   useMemoryStore.setState({
@@ -41,6 +48,23 @@ describe('MemoryStore', () => {
     expect(MemoryStore.getAllEntries()).toHaveLength(2);
   });
 
+  it('merges a re-keyed duplicate value within a category instead of saving it twice', () => {
+    // The model often re-emits the same fact under a different key on a later
+    // extraction. Same category + same (normalised) value = the same fact.
+    MemoryStore.addOrUpdateEntry({ category: 'identity', key: 'name', value: 'Adam', confidence: 0.8, sourceConversationId: 'c1' });
+    MemoryStore.addOrUpdateEntry({ category: 'identity', key: 'preferred_name', value: 'adam.', confidence: 0.9, sourceConversationId: 'c2' });
+    const all = MemoryStore.getAllEntries();
+    expect(all).toHaveLength(1);
+    expect(all[0].key).toBe('name');           // original key is kept
+    expect(all[0].timesReinforced).toBe(1);     // counted as a reinforcement
+  });
+
+  it('does not merge identical values across different categories', () => {
+    MemoryStore.addOrUpdateEntry({ category: 'identity', key: 'k1', value: 'Warsaw', confidence: 1, sourceConversationId: 'c1' });
+    MemoryStore.addOrUpdateEntry({ category: 'context', key: 'k2', value: 'Warsaw', confidence: 1, sourceConversationId: 'c1' });
+    expect(MemoryStore.getAllEntries()).toHaveLength(2);
+  });
+
   it('filters by category', () => {
     MemoryStore.addOrUpdateEntry({ category: 'identity', key: 'a', value: '1', confidence: 1, sourceConversationId: 'c1' });
     MemoryStore.addOrUpdateEntry({ category: 'goals', key: 'b', value: '2', confidence: 1, sourceConversationId: 'c1' });
@@ -64,6 +88,27 @@ describe('MemoryStore', () => {
     const { memory } = useMemoryStore.getState();
     expect(memory.totalConversationsAnalyzed).toBe(1);
     expect(memory.lastExtractionAt).toBeGreaterThan(0);
+  });
+});
+
+describe('dedupeEntries', () => {
+  it('collapses same-category duplicate values, keeping the strongest and folding counts', () => {
+    const out = dedupeEntries([
+      mkEntry({ id: 'a', category: 'identity', key: 'name', value: 'Adam', confidence: 0.7, timesReinforced: 0 }),
+      mkEntry({ id: 'b', category: 'identity', key: 'preferred_name', value: 'adam.', confidence: 0.95, timesReinforced: 2 }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].key).toBe('preferred_name'); // stronger copy wins
+    expect(out[0].confidence).toBe(0.95);
+    expect(out[0].timesReinforced).toBe(3);    // 0 + 2 + 1 merge
+  });
+  it('leaves distinct facts and cross-category matches untouched', () => {
+    const out = dedupeEntries([
+      mkEntry({ id: 'a', category: 'identity', value: 'Warsaw' }),
+      mkEntry({ id: 'b', category: 'context', value: 'Warsaw' }),
+      mkEntry({ id: 'c', category: 'identity', value: 'Adam' }),
+    ]);
+    expect(out).toHaveLength(3);
   });
 });
 

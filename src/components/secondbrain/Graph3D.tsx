@@ -50,6 +50,17 @@ export function Graph3D({ data, onNodeTap, focusKey }: Props) {
         allowUniversalAccessFromFileURLs
         javaScriptEnabled
         domStorageEnabled
+        // WebGL (three.js) needs a GPU-backed surface — without an explicit hardware
+        // layer the canvas renders blank/black inside a nested ScrollView on Android.
+        androidLayerType="hardware"
+        // Let the 3D canvas own its drag gestures inside the parent ScrollView.
+        nestedScrollEnabled
+        // The graph is offline self-contained; never let it fall back to a network spinner.
+        cacheEnabled={false}
+        // Recover from a crashed renderer (large WebGL scenes can OOM the web process).
+        onRenderProcessGone={() => ref.current?.reload()}
+        onError={(e) => console.warn('[Graph3D] webview error', e.nativeEvent)}
+        onHttpError={(e) => console.warn('[Graph3D] webview http error', e.nativeEvent)}
         style={styles.fill}
         containerStyle={{ backgroundColor: colors.bg }}
         onMessage={(e) => {

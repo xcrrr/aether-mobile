@@ -87,6 +87,7 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace 'com.aether.app'
+    kotlinOptions { freeCompilerArgs += ['-Xskip-metadata-version-check'] }
     defaultConfig {
         applicationId 'com.aether.app'
         minSdkVersion rootProject.ext.minSdkVersion
@@ -176,8 +177,5 @@ dependencies {
 
     // LiteRT-LM (Google AI Edge) — GPU-native on-device LLM engine. Same artifact
     // Google's AI Edge Gallery ships; powers GPU chat + Gemma vision.
-    implementation("com.google.mediapipe:tasks-genai:0.10.35")
-    // Provides com.google.mediapipe.framework.image.* (MPImage / BitmapImageBuilder)
-    // used to feed images into the vision-enabled LLM session.
-    implementation("com.google.mediapipe:tasks-vision:0.10.35")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.11.0")
 }

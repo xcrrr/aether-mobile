@@ -36,16 +36,31 @@ export function toGraphData(
   recentKeys: Iterable<string> = [],
 ): GraphData {
   const recent = recentKeys instanceof Set ? recentKeys : new Set(recentKeys);
-  const nodes: GraphNode[] = entries.map((e) => ({
-    id: e.key,
-    label: shortLabel(e.value),
-    category: e.category,
-    color: CATEGORY_COLORS[e.category],
-    val: 1 + e.confidence * 4 + e.timesReinforced,
-    opacity: e.stale ? 0.4 : 0.95,
-    recent: recent.has(e.key),
-  }));
-  const keys = new Set(entries.map((e) => e.key));
+  // 3d-force-graph keys nodes by id and requires them unique. Two entries can
+  // share a key across categories, so collapse them to one node (keep the larger,
+  // carry the recent flag) — otherwise the graph's node map breaks and renders blank.
+  const byId = new Map<string, GraphNode>();
+  for (const e of entries) {
+    const node: GraphNode = {
+      id: e.key,
+      label: shortLabel(e.value),
+      category: e.category,
+      color: CATEGORY_COLORS[e.category],
+      val: 1 + e.confidence * 4 + e.timesReinforced,
+      opacity: e.stale ? 0.4 : 0.95,
+      recent: recent.has(e.key),
+    };
+    const prev = byId.get(node.id);
+    if (!prev) {
+      byId.set(node.id, node);
+    } else {
+      node.recent = node.recent || prev.recent;
+      if (node.val >= prev.val) byId.set(node.id, node);
+      else prev.recent = node.recent;
+    }
+  }
+  const nodes: GraphNode[] = [...byId.values()];
+  const keys = new Set(nodes.map((n) => n.id));
   const links: GraphLink[] = edges
     .filter((e) => keys.has(e.fromKey) && keys.has(e.toKey))
     .map((e) => ({ source: e.fromKey, target: e.toKey, relation: e.relation }));

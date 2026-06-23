@@ -145,6 +145,16 @@ describe('extractFromConversation', () => {
     await extractFromConversation(convo, 'c1', { force: true });
     expect(mockExtract).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ preempt: true }));
   });
+
+  it('injects already-known facts into the prompt so the model stops re-saving them', async () => {
+    MemoryStore.addOrUpdateEntry({ category: 'identity', key: 'city', value: 'Warsaw', confidence: 0.9, sourceConversationId: 'c0' });
+    mockExtract.mockResolvedValue('[]');
+    await extractFromConversation(convo, 'c1');
+    const prompt = mockExtract.mock.calls[0][0] as string;
+    expect(prompt).toContain('city');
+    expect(prompt).toContain('Warsaw');
+    expect(prompt.toLowerCase()).toContain('already');
+  });
 });
 
 describe('parseLinks', () => {

@@ -70,8 +70,9 @@ export function useInference(modelId: string | undefined) {
       const msg = e instanceof Error ? e.message : 'MODEL_LOAD_FAILED';
       setError(
         msg === 'INSUFFICIENT_RAM' ? 'Not enough memory — try Gemma 4 E2B.'
-        : msg === 'MODEL_NOT_FOUND' ? 'Model file missing — re-download it in Settings.'
-        : 'Failed to load the model.',
+        : msg === 'MODEL_NOT_FOUND' ? 'Model file missing or incomplete — re-download it in Settings.'
+        // Show the real native reason so failures are diagnosable, not generic.
+        : `Couldn't load the model: ${msg}`,
       );
     } finally {
       setLoading(false);
@@ -147,10 +148,11 @@ export function useInference(modelId: string | undefined) {
   const model = modelId ? getModelById(modelId) : undefined;
   const supportsVision = model?.supportsVision ?? false;
   // Vision is built into the LiteRT `.task` model — no separate pack, no extra
-  // download. It's available the moment the model is loaded.
+  // download. Ready once the model is loaded AND the engine actually enabled the
+  // vision graph (the fallback ladder may have loaded text-only).
   const vision = {
     supported: supportsVision,
-    ready: supportsVision && loaded,
+    ready: supportsVision && loaded && Llama.isVisionEnabled(),
     installed: true,
     works: true,
     error: null as string | null,

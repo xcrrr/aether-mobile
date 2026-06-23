@@ -10,13 +10,13 @@ describe('model registry', () => {
   it('every model URL ends with its filename', () => {
     for (const m of MODELS) expect(m.downloadUrl.endsWith(m.filename)).toBe(true);
   });
-  it('sizes are the verified .task byte counts', () => {
-    expect(getModelById('gemma4-e2b')!.sizeBytes).toBe(2003697664);
-    expect(getModelById('gemma4-e4b')!.sizeBytes).toBe(2964324352);
+  it('sizes are the verified .litertlm byte counts', () => {
+    expect(getModelById('gemma4-e2b')!.sizeBytes).toBe(2588147712);
+    expect(getModelById('gemma4-e4b')!.sizeBytes).toBe(3659530240);
   });
-  it('models are LiteRT .task bundles (multimodal, no separate vision pack)', () => {
+  it('models are LiteRT-LM bundles (multimodal, no separate vision pack)', () => {
     for (const m of MODELS) {
-      expect(m.filename.endsWith('.task')).toBe(true);
+      expect(m.filename.endsWith('.litertlm')).toBe(true);
       expect(m.supportsVision).toBe(true);
     }
   });
