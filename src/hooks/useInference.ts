@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import * as Llama from '@/llm/LlamaService';
+import { runVisionSelfTest, getVisionStatus } from '@/llm/LlamaService';
 import { buildSystemPrompt } from '@/llm/prompt';
 import { useChatStore } from '@/state/useChatStore';
 import { useProfileStore } from '@/state/useProfileStore';
@@ -10,6 +11,7 @@ import { FileAttachment } from '@/types';
 import { extractFromConversation } from '@/secondbrain/MemoryExtractor';
 import { runResearch } from '@/webresearch/ResearchEngine';
 import { formatResearchMarkdown } from '@/webresearch/format';
+import { deriveVisionStatus } from '@/llm/visionStatus';
 
 export interface RAMWarning { available: number; required: number; }
 
@@ -34,11 +36,20 @@ export function useInference(modelId: string | undefined) {
   const [visionReady, setVisionReady] = useState(false);
   const [visionInstalled, setVisionInstalled] = useState(false);
   const [visionProgress, setVisionProgress] = useState<number | null>(null);
+  const [visionWorks, setVisionWorks] = useState(false);
+  const [visionError, setVisionError] = useState<string | null>(null);
   const profile = useProfileStore((s) => s.profile);
   const chat = useChatStore();
 
   // Set true once the user chooses "Load Anyway" for the current model.
   const bypassRam = useRef(false);
+
+  const finishVisionInit = useCallback(async () => {
+    const ok = await runVisionSelfTest();
+    const st = getVisionStatus();
+    setVisionWorks(ok);
+    setVisionError(st.error);
+  }, []);
 
   const load = useCallback(async () => {
     const model = modelId ? getModelById(modelId) : undefined;
@@ -57,10 +68,18 @@ export function useInference(modelId: string | undefined) {
       setVisionReady(false);
       try {
         if (model.mmprojFilename) {
-          const inst = await MM.isMmprojInstalled(model);
+          const integ = await MM.verifyMmprojIntegrity(model);
+          const inst = integ.ok;
           setVisionInstalled(inst);
           const path = MM.mmprojLocalPath(model);
-          if (inst && path) setVisionReady(await Llama.initMultimodal(path));
+          if (inst && path) {
+            const ready = await Llama.initMultimodal(path);
+            setVisionReady(ready);
+            if (ready) await finishVisionInit();
+            else setVisionError(Llama.getVisionStatus().error);
+          } else if (integ.reason === 'corrupt') {
+            setVisionError('Vision pack was incomplete — re-download it.');
+          }
         } else {
           setVisionInstalled(false);
         }
@@ -81,7 +100,7 @@ export function useInference(modelId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [modelId]);
+  }, [modelId, finishVisionInit]);
 
   // Load the model whenever the chat (model) changes. Reset the bypass per model.
   useEffect(() => {
@@ -106,7 +125,11 @@ export function useInference(modelId: string | undefined) {
       const m = modelId ? getModelById(modelId) : undefined;
       const path = m ? MM.mmprojLocalPath(m) : null;
       if (m?.supportsVision && path && (await MM.isMmprojInstalled(m))) {
-        try { setVisionReady(await Llama.initMultimodal(path)); } catch { /* best-effort */ }
+        try {
+          const ready = await Llama.initMultimodal(path);
+          setVisionReady(ready);
+          if (ready) await finishVisionInit();
+        } catch { /* best-effort */ }
       }
     }
     await chat.appendUser(text, attachment ? [attachment] : undefined);
@@ -125,7 +148,7 @@ export function useInference(modelId: string | undefined) {
         useChatStore.getState().finishAssistant();
       },
     );
-  }, [chat, profile, modelId]);
+  }, [chat, profile, modelId, finishVisionInit]);
 
   /**
    * Web research mode: search → read sources → grounded, cited answer. Reuses
@@ -164,19 +187,32 @@ export function useInference(modelId: string | undefined) {
         setVisionProgress(null);
         setVisionInstalled(true);
         const path = MM.mmprojLocalPath(model);
-        if (path) setVisionReady(await Llama.initMultimodal(path));
+        if (path) {
+          const ready = await Llama.initMultimodal(path);
+          setVisionReady(ready);
+          if (ready) await finishVisionInit();
+        }
       },
       onError: () => setVisionProgress(null),
     });
-  }, [modelId]);
+  }, [modelId, finishVisionInit]);
 
   const model = modelId ? getModelById(modelId) : undefined;
   const vision = {
     supported: model?.supportsVision ?? false,
     ready: visionReady,
     installed: visionInstalled,
+    works: visionWorks,
+    error: visionError,
     progress: visionProgress,
     sizeBytes: model?.mmprojSizeBytes ?? 0,
+    status: deriveVisionStatus({
+      supported: model?.supportsVision ?? false,
+      installed: visionInstalled,
+      ready: visionReady,
+      selfTestPassed: visionWorks,
+      error: visionError,
+    }),
     download: downloadVision,
   };
 

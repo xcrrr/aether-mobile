@@ -16,6 +16,8 @@ export interface VisionState {
   supported: boolean;
   ready: boolean;
   installed: boolean;
+  works?: boolean;
+  error?: string | null;
   progress: number | null;
   sizeBytes: number;
   download: () => void;
@@ -206,6 +208,10 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
         </Pressable>
       </View>
 
+      {vision?.installed && !vision.works && vision.error ? (
+        <Text style={styles.visionErrorNote}>Image reading failed: {vision.error}</Text>
+      ) : null}
+
       <Text style={styles.footer}>Aether is an AI and can make mistakes. Replies run on-device.</Text>
 
       <AttachmentSheet
@@ -258,4 +264,5 @@ const styles = StyleSheet.create({
   visionPack: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm, paddingVertical: 9, paddingHorizontal: 11, borderRadius: radius.md, borderWidth: 1, borderColor: colors.violet, backgroundColor: colors.assistantBubble },
   visionPackText: { flex: 1, fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.text, lineHeight: 17 },
   voiceErr: { fontFamily: fonts.sans, fontSize: 12, color: colors.danger, marginBottom: spacing.sm, paddingHorizontal: 2 },
+  visionErrorNote: { fontFamily: fonts.sans, fontSize: 11, color: colors.textMuted, paddingHorizontal: 2, paddingTop: 2 },
 });

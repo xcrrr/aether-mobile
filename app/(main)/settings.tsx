@@ -15,6 +15,14 @@ import { colors, spacing, fonts } from '@/theme';
 
 const VISION_MODELS = MODELS.filter((m) => m.mmprojFilename);
 
+const VISION_STATUS_LABEL: Record<string, string> = {
+  unsupported: 'Not supported by this model',
+  not_downloaded: 'Not downloaded',
+  verifying: 'Verifying…',
+  working: '✓ Working',
+  error: 'Unavailable',
+};
+
 export default function Settings() {
   const {
     installed, downloads, download, cancel, remove,
@@ -137,7 +145,7 @@ function VisionPackRow({ model, installed, download, onDownload, onCancel, onDel
             <Text style={styles.visionMeta}>{Math.round(download?.pct ?? 0)}% · {(download?.mbps ?? 0).toFixed(1)} MB/s</Text>
           </View>
         ) : (
-          <Text style={styles.visionMeta}>{installed ? 'Installed' : `${sizeGb} GB download`}</Text>
+          <Text style={styles.visionMeta}>{installed ? 'Downloaded' : `${sizeGb} GB — ${VISION_STATUS_LABEL.not_downloaded}`}</Text>
         )}
       </View>
       {downloading ? (
