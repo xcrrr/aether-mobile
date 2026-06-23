@@ -14,18 +14,12 @@
       <category android:name="android.intent.category.BROWSABLE"/>
       <data android:scheme="https"/>
     </intent>
-    <!-- Make the on-device speech recognizer visible (Android 11+ package
-         visibility). Without this @react-native-voice/voice can't resolve a
-         RecognitionService and Voice.start() throws. -->
     <intent>
       <action android:name="android.speech.RecognitionService"/>
     </intent>
     <intent>
       <action android:name="android.speech.action.RECOGNIZE_SPEECH"/>
     </intent>
-    <!-- Explicit visibility for the common speech-recognizer providers so the
-         app can both resolve AND bind to them (the intent query alone is not
-         enough to bind on some devices). -->
     <package android:name="com.google.android.googlequicksearchbox"/>
     <package android:name="com.google.android.tts"/>
     <package android:name="com.google.android.as"/>

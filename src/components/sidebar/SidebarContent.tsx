@@ -59,6 +59,18 @@ export function SidebarContent(props: DrawerContentComponentProps) {
         </Pressable>
       </View>
 
+      {/* second brain */}
+      <View style={styles.sectionTight}>
+        <Pressable style={styles.brainBtn} onPress={() => { close(); router.push('/(main)/second-brain'); }}>
+          <Text style={styles.brainIcon}>🧠</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.brainLabel}>Second Brain</Text>
+            <Text style={styles.brainMeta}>Memory · thought graph</Text>
+          </View>
+          <Text style={styles.brainChevron}>›</Text>
+        </Pressable>
+      </View>
+
       {/* conversations */}
       <View style={styles.section}>
         <Text style={styles.label}>Conversations</Text>
@@ -94,6 +106,11 @@ const styles = StyleSheet.create({
   newBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md },
   plus: { fontSize: 18, color: colors.violet, fontFamily: fonts.sansHeavy },
   newLabel: { color: colors.text, fontSize: 14, fontFamily: fonts.sansSemibold },
+  brainBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.violet, borderRadius: radius.md, backgroundColor: colors.bgCard },
+  brainIcon: { fontSize: 18 },
+  brainLabel: { color: colors.text, fontSize: 14, fontFamily: fonts.sansSemibold },
+  brainMeta: { color: colors.textMuted, fontSize: 11, marginTop: 1, fontFamily: fonts.sans },
+  brainChevron: { color: colors.violet, fontSize: 20, fontFamily: fonts.sansHeavy },
   empty: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic', paddingVertical: 8 },
   settingsBtn: { borderTopWidth: 1, borderTopColor: colors.border, padding: 16, marginTop: spacing.sm },
   settingsLabel: { color: colors.text, fontSize: 14, fontFamily: fonts.sans },
