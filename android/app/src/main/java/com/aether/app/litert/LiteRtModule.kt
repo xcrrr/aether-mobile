@@ -2,6 +2,8 @@
 
 package com.aether.app.litert
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -19,6 +21,7 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
@@ -158,14 +161,15 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
         )
         conversation = convo
 
+        // EXACTLY how Google's AI Edge Gallery feeds images: decode to a Bitmap,
+        // PNG-compress, and pass Content.ImageBytes (Content.ImageFile is not wired
+        // through the 0.11.0 JNI). Image/audio go BEFORE the text so the last token
+        // is the prompt.
         val contents = mutableListOf<Content>()
         if (useImages) {
           for (i in 0 until imagePaths.size()) {
             val p = imagePaths.getString(i)?.removePrefix("file://") ?: continue
-            // Hand the file straight to litertlm — it decodes/resizes for the vision
-            // encoder. Re-encoding a 12 MP photo to PNG ourselves was wasteful and a
-            // source of decode failures.
-            if (File(p).exists()) contents.add(Content.ImageFile(p))
+            decodeScaled(p)?.let { contents.add(Content.ImageBytes(it.toPngByteArray())) }
           }
         }
         if (lastText.isNotBlank()) contents.add(Content.Text(lastText))
@@ -250,6 +254,29 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
       Log.w("LiteRt", "history parse failed", t)
     }
     return out
+  }
+
+  /** Decode an image file, downscaling so a full-res phone photo (12 MP+) doesn't OOM
+   *  when PNG-compressed. The vision encoder works fine from a ~1280px image. */
+  private fun decodeScaled(path: String, maxDim: Int = 1280): Bitmap? {
+    return try {
+      val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      BitmapFactory.decodeFile(path, bounds)
+      if (bounds.outWidth <= 0) return null
+      var sample = 1
+      val longest = maxOf(bounds.outWidth, bounds.outHeight)
+      while (longest / sample > maxDim) sample *= 2
+      BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+    } catch (t: Throwable) {
+      Log.w("LiteRt", "image decode failed", t)
+      null
+    }
+  }
+
+  private fun Bitmap.toPngByteArray(): ByteArray {
+    val stream = ByteArrayOutputStream()
+    compress(Bitmap.CompressFormat.PNG, 100, stream)
+    return stream.toByteArray()
   }
 
   /** Cancel any in-flight generation, then close the conversation. Always called from
