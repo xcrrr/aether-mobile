@@ -1,28 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, TextInput, Pressable, Text, Animated, Alert, StyleSheet } from 'react-native';
-import { ArrowUp, Square, Mic, Paperclip, Globe, Plus, X, Eye } from 'lucide-react-native';
+import { ArrowUp, Square, Mic, Paperclip, Globe, Plus, X } from 'lucide-react-native';
 import { useChatStore } from '@/state/useChatStore';
 import { useVoice } from '@/hooks/useVoice';
 import { type AttachmentState } from '@/hooks/useAttachment';
 import { AttachmentSheet } from './AttachmentSheet';
 import { AttachmentChip } from './AttachmentChip';
 import { ListeningWave } from './ListeningWave';
-import { formatBytes } from '@/files/FileProcessor';
 import { FileAttachment } from '@/types';
 import { colors, radius, spacing, fonts } from '@/theme';
 
-/** Active model's vision ("image understanding") pack state. */
+/** Active model's vision state. Vision is built into the model — no separate pack,
+ *  no download. `ready` is true once the engine has the vision graph loaded. */
 export interface VisionState {
   supported: boolean;
   ready: boolean;
-  installed: boolean;
-  works?: boolean;
-  error?: string | null;
-  progress: number | null;
-  sizeBytes: number;
-  download: () => void;
-  /** Re-sync with disk (pack may have been downloaded from Settings). */
-  refresh: () => void;
 }
 
 export function ChatInput({ onSend, onResearch, researchMode = false, onToggleResearch, disabled, supportsVision = true, att, vision }: {
@@ -65,8 +57,6 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
   const imageAttached = att.attachment?.type === 'image';
   const visionActive = imageAttached && supportsVision && !!vision?.ready;
   const visionUnsupported = imageAttached && !supportsVision;
-  // Image attached, model can see images, but the projector isn't loaded yet.
-  const needsVisionPack = imageAttached && supportsVision && !!vision && !vision.ready;
 
   const doSend = (t: string, attachment?: FileAttachment) => {
     setText('');
@@ -78,24 +68,6 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
     const t = text.trim();
     if (!t && !att.attachment) return;
     if (researchMode && onResearch) { setText(''); onResearch(t); return; }
-
-    // Image attached but the model can't see it yet → offer the vision pack at
-    // the moment it matters, instead of silently replying "I can't see it".
-    if (att.attachment?.type === 'image' && supportsVision && vision && !vision.ready) {
-      if (vision.progress != null) {
-        Alert.alert('Image understanding', 'The vision pack is still downloading — wait for it to finish, then send.');
-        return;
-      }
-      Alert.alert(
-        'Enable image understanding?',
-        `Aether can't actually see images until a one-time vision pack (~${formatBytes(vision.sizeBytes)}) is downloaded. Download it now so it can analyze your photo?`,
-        [
-          { text: 'Send anyway', style: 'cancel', onPress: () => doSend(t, att.attachment ?? undefined) },
-          { text: 'Download', onPress: () => vision.download() },
-        ],
-      );
-      return;
-    }
 
     // Don't ship an image the active model can't actually see.
     const attachment = att.attachment && !(att.attachment.type === 'image' && !supportsVision)
@@ -137,7 +109,7 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
         />
       )}
 
-      {/* Vision capability badge / vision-pack prompt */}
+      {/* Vision capability badge */}
       {visionActive && (
         <View style={styles.badgeRow}>
           <View style={styles.greenDot} />
@@ -146,20 +118,6 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
       )}
       {visionUnsupported && (
         <Text style={styles.visionWarn}>Vision not supported by this model</Text>
-      )}
-      {needsVisionPack && (
-        <Pressable
-          style={styles.visionPack}
-          onPress={() => vision?.progress == null && vision?.download()}
-          disabled={vision?.progress != null}
-        >
-          <Eye size={15} color={colors.violet} strokeWidth={2.2} />
-          <Text style={styles.visionPackText}>
-            {vision?.progress != null
-              ? `Downloading image understanding… ${Math.round(vision.progress)}%`
-              : `Tap to enable image understanding (${formatBytes(vision?.sizeBytes ?? 0)} one-time download)`}
-          </Text>
-        </Pressable>
       )}
 
       {/* Voice / permission error */}
@@ -210,10 +168,6 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
         </Pressable>
       </View>
 
-      {vision?.installed && !vision.works && vision.error ? (
-        <Text style={styles.visionErrorNote}>Image reading failed: {vision.error}</Text>
-      ) : null}
-
       <Text style={styles.footer}>Aether is an AI and can make mistakes. Replies run on-device.</Text>
 
       <AttachmentSheet
@@ -263,8 +217,5 @@ const styles = StyleSheet.create({
   greenDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22C55E' },
   visionActive: { fontFamily: fonts.sans, fontSize: 12, color: colors.textMuted },
   visionWarn: { fontFamily: fonts.sans, fontSize: 12, color: '#EAB308', marginBottom: spacing.sm, paddingHorizontal: 2 },
-  visionPack: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm, paddingVertical: 9, paddingHorizontal: 11, borderRadius: radius.md, borderWidth: 1, borderColor: colors.violet, backgroundColor: colors.assistantBubble },
-  visionPackText: { flex: 1, fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.text, lineHeight: 17 },
   voiceErr: { fontFamily: fonts.sans, fontSize: 12, color: colors.danger, marginBottom: spacing.sm, paddingHorizontal: 2 },
-  visionErrorNote: { fontFamily: fonts.sans, fontSize: 11, color: colors.textMuted, paddingHorizontal: 2, paddingTop: 2 },
 });

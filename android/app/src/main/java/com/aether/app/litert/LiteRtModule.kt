@@ -2,7 +2,6 @@
 
 package com.aether.app.litert
 
-import android.graphics.BitmapFactory
 import android.util.Log
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -20,7 +19,6 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
@@ -61,19 +59,26 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
 
   private class EngineResult(val engine: Engine, val gpu: Boolean, val vision: Boolean)
 
-  /** Build + initialise the engine, trying GPU+vision → GPU text-only → CPU text-only,
-   *  so a model still loads if the GPU or the vision graph is unavailable. */
+  /** Build + initialise the engine. We try, in order: GPU text + GPU vision (fastest);
+   *  CPU text + GPU vision (Google's documented multimodal combo — keeps vision alive
+   *  when the all-GPU graph won't init); then text-only GPU, then text-only CPU. The
+   *  key fix: never drop vision just because the main GPU backend failed — fall back the
+   *  text backend FIRST and only abandon vision as a last resort. */
   private fun createEngine(path: String, maxTokens: Int): EngineResult {
     val cacheDir = ctx.cacheDir.absolutePath
-    data class Attempt(val gpu: Boolean, val vision: Boolean)
-    val ladder = listOf(Attempt(true, true), Attempt(true, false), Attempt(false, false))
+    data class Attempt(val mainGpu: Boolean, val vision: Boolean)
+    val ladder = listOf(
+      Attempt(true, true),
+      Attempt(false, true),
+      Attempt(true, false),
+      Attempt(false, false),
+    )
     var lastErr: Throwable? = null
     for (a in ladder) {
       try {
-        val backend = if (a.gpu) Backend.GPU() else Backend.CPU()
         val config = EngineConfig(
           modelPath = path,
-          backend = backend,
+          backend = if (a.mainGpu) Backend.GPU() else Backend.CPU(),
           visionBackend = if (a.vision) Backend.GPU() else null,
           audioBackend = null,
           maxNumTokens = maxTokens,
@@ -81,11 +86,11 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
         )
         val eng = Engine(config)
         eng.initialize()
-        Log.i("LiteRt", "engine ready (gpu=${a.gpu} vision=${a.vision})")
-        return EngineResult(eng, a.gpu, a.vision)
+        Log.i("LiteRt", "engine ready (mainGpu=${a.mainGpu} vision=${a.vision})")
+        return EngineResult(eng, a.mainGpu, a.vision)
       } catch (t: Throwable) {
         lastErr = t
-        Log.w("LiteRt", "engine attempt failed (gpu=${a.gpu} vision=${a.vision}): ${t.message}")
+        Log.w("LiteRt", "engine attempt failed (mainGpu=${a.mainGpu} vision=${a.vision}): ${t.message}")
       }
     }
     throw lastErr ?: RuntimeException("Could not create LiteRT engine")
@@ -157,7 +162,10 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
         if (useImages) {
           for (i in 0 until imagePaths.size()) {
             val p = imagePaths.getString(i)?.removePrefix("file://") ?: continue
-            pngBytes(p)?.let { contents.add(Content.ImageBytes(it)) }
+            // Hand the file straight to litertlm — it decodes/resizes for the vision
+            // encoder. Re-encoding a 12 MP photo to PNG ourselves was wasteful and a
+            // source of decode failures.
+            if (File(p).exists()) contents.add(Content.ImageFile(p))
           }
         }
         if (lastText.isNotBlank()) contents.add(Content.Text(lastText))
@@ -242,18 +250,6 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
       Log.w("LiteRt", "history parse failed", t)
     }
     return out
-  }
-
-  private fun pngBytes(path: String): ByteArray? {
-    return try {
-      val bmp = BitmapFactory.decodeFile(path) ?: return null
-      val stream = ByteArrayOutputStream()
-      bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
-      stream.toByteArray()
-    } catch (t: Throwable) {
-      Log.w("LiteRt", "image decode failed", t)
-      null
-    }
   }
 
   /** Cancel any in-flight generation, then close the conversation. Always called from

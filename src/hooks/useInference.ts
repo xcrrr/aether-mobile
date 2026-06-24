@@ -147,19 +147,12 @@ export function useInference(modelId: string | undefined) {
 
   const model = modelId ? getModelById(modelId) : undefined;
   const supportsVision = model?.supportsVision ?? false;
-  // Vision is built into the LiteRT `.task` model — no separate pack, no extra
-  // download. Ready once the model is loaded AND the engine actually enabled the
-  // vision graph (the fallback ladder may have loaded text-only).
+  // Vision is built into the LiteRT model — no separate pack, no extra download.
+  // Ready once the model is loaded AND the engine actually enabled the vision graph
+  // (the load ladder keeps vision even when it has to run text on the CPU).
   const vision = {
     supported: supportsVision,
     ready: supportsVision && loaded && Llama.isVisionEnabled(),
-    installed: true,
-    works: true,
-    error: null as string | null,
-    progress: null as number | null,
-    sizeBytes: 0,
-    download: () => {},
-    refresh: () => {},
   };
 
   return { loading, error, ramWarning, loadAnyway, dismissRamWarning, send, research, stop, vision };
