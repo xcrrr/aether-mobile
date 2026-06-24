@@ -62,38 +62,43 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
 
   private class EngineResult(val engine: Engine, val gpu: Boolean, val vision: Boolean)
 
-  /** Build + initialise the engine. We try, in order: GPU text + GPU vision (fastest);
-   *  CPU text + GPU vision (Google's documented multimodal combo — keeps vision alive
-   *  when the all-GPU graph won't init); then text-only GPU, then text-only CPU. The
-   *  key fix: never drop vision just because the main GPU backend failed — fall back the
-   *  text backend FIRST and only abandon vision as a last resort. */
+  /** Build + initialise the engine. Gallery defaults vision to GPU ("must be GPU for Gemma
+   *  3n") but exposes a CPU vision option (Accelerator.CPU -> Backend.CPU); some devices
+   *  can't compile the GPU vision graph (vision_litert_compiled_model_executor INTERNAL
+   *  error). So we keep vision ALIVE by falling back GPU→CPU vision before ever going
+   *  text-only — a slower vision encoder still lets the model see the image, which a blind
+   *  text engine cannot. Text-only is the last resort just so the app always loads. */
   private fun createEngine(path: String, maxTokens: Int): EngineResult {
-    val cacheDir = ctx.cacheDir.absolutePath
-    data class Attempt(val mainGpu: Boolean, val vision: Boolean)
+    // Gallery only sets cacheDir for adb-pushed /data/local/tmp models; app-owned files
+    // pass null. Match that — an unexpected cacheDir can perturb graph init.
+    val cacheDir = if (path.startsWith("/data/local/tmp")) ctx.getExternalFilesDir(null)?.absolutePath else null
+    // (mainGpu, vision backend). Vision-preserving rungs first; text-only only as a fallback.
     val ladder = listOf(
-      Attempt(true, true),
-      Attempt(false, true),
-      Attempt(true, false),
-      Attempt(false, false),
+      Triple(true, Backend.GPU() as Backend?, "GPU"),
+      Triple(false, Backend.GPU() as Backend?, "GPU"),
+      Triple(true, Backend.CPU() as Backend?, "CPU"),
+      Triple(false, Backend.CPU() as Backend?, "CPU"),
+      Triple(true, null, "none"),
+      Triple(false, null, "none"),
     )
     var lastErr: Throwable? = null
-    for (a in ladder) {
+    for ((mainGpu, visionBackend, visLabel) in ladder) {
       try {
         val config = EngineConfig(
           modelPath = path,
-          backend = if (a.mainGpu) Backend.GPU() else Backend.CPU(),
-          visionBackend = if (a.vision) Backend.GPU() else null,
+          backend = if (mainGpu) Backend.GPU() else Backend.CPU(),
+          visionBackend = visionBackend,
           audioBackend = null,
           maxNumTokens = maxTokens,
           cacheDir = cacheDir,
         )
         val eng = Engine(config)
         eng.initialize()
-        Log.i("LiteRt", "engine ready (mainGpu=${a.mainGpu} vision=${a.vision})")
-        return EngineResult(eng, a.mainGpu, a.vision)
+        Log.i("LiteRt", "engine ready (mainGpu=$mainGpu vision=$visLabel)")
+        return EngineResult(eng, mainGpu, visionBackend != null)
       } catch (t: Throwable) {
         lastErr = t
-        Log.w("LiteRt", "engine attempt failed (mainGpu=${a.mainGpu} vision=${a.vision}): ${t.message}")
+        Log.w("LiteRt", "engine attempt failed (mainGpu=$mainGpu vision=$visLabel): ${t.message}")
       }
     }
     throw lastErr ?: RuntimeException("Could not create LiteRT engine")
