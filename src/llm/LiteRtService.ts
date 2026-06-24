@@ -140,6 +140,16 @@ export async function generate(
   await run;
 }
 
+/** Callers (Second Brain extractor, research) wrap prompts in Gemma `<start_of_turn>`
+ *  scaffolding for llama.rn. litertlm applies its own template, so strip the wrapper
+ *  and pass the plain instruction as a single user turn. */
+export function plainFromGemma(prompt: string): string {
+  return prompt
+    .replace(/<start_of_turn>(?:user|model)\n?/g, '')
+    .replace(/<end_of_turn>\n?/g, '')
+    .trim();
+}
+
 export async function extract(
   prompt: string,
   opts: { maxTokens?: number; temperature?: number; preempt?: boolean } = {},
@@ -149,7 +159,7 @@ export async function extract(
   else if (activeCompletion) return null;
 
   activeKind = 'extract';
-  const run = LiteRt.generate('', '[]', prompt, [], TOP_K, TOP_P, opts.temperature ?? 0.1, false);
+  const run = LiteRt.generate('', '[]', plainFromGemma(prompt), [], TOP_K, TOP_P, opts.temperature ?? 0.1, false);
   activeCompletion = run.finally(() => { activeCompletion = null; activeKind = null; });
   try {
     const text = await run;

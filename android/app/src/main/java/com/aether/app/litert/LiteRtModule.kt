@@ -137,10 +137,13 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
       cancelled = false
       val useImages = visionEnabled && imagePaths.size() > 0
       try {
-        // Proper turn structure (system + prior turns as initialMessages, then the new
-        // user turn) so litertlm applies Gemma's chat template and STOPS at the end of
-        // the turn. A flattened "User:/Assistant:" blob made the model keep generating
-        // fake turns and never fire onDone.
+        // litertlm supports ONE conversation/session at a time. Force-close the prior
+        // one HERE (start of the next generate), never inside the callback: closing
+        // from within onDone/onError runs on litertlm's generation thread and can
+        // deadlock, so onDone never returns → the reply "never stops" and the lingering
+        // session makes the next createConversation throw "session already exists".
+        forceCloseConversation()
+
         val convo = e.createConversation(
           ConversationConfig(
             samplerConfig = SamplerConfig(topK = topK, topP = topP, temperature = temperature),
@@ -159,25 +162,36 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
         }
         if (lastText.isNotBlank()) contents.add(Content.Text(lastText))
 
-        val sb = StringBuilder()
+        // litertlm's onMessage may deliver either a delta or the full text-so-far.
+        // Track both: keep the accumulated text and only emit the new tail.
+        val acc = StringBuilder()
+        var settled = false
         convo.sendMessageAsync(
           Contents.of(contents),
           object : MessageCallback {
             override fun onMessage(message: Message) {
-              val piece = message.toString()
-              if (!cancelled && piece.isNotEmpty()) {
-                sb.append(piece)
-                if (stream) emit("LiteRtToken", piece)
+              if (cancelled) return
+              val s = message.toString()
+              if (s.isEmpty()) return
+              val delta: String
+              if (s.length >= acc.length && s.startsWith(acc)) {
+                delta = s.substring(acc.length); acc.setLength(0); acc.append(s)
+              } else {
+                delta = s; acc.append(s)
               }
+              if (stream && delta.isNotEmpty()) emit("LiteRtToken", delta)
             }
             override fun onDone() {
-              closeConversation()
-              promise.resolve(sb.toString())
+              // Do NOT close the conversation here (would deadlock on the gen thread).
+              if (settled) return
+              settled = true
+              promise.resolve(acc.toString())
             }
             override fun onError(throwable: Throwable) {
-              closeConversation()
+              if (settled) return
+              settled = true
               if (throwable is CancellationException) {
-                promise.resolve(sb.toString())
+                promise.resolve(acc.toString())
               } else {
                 Log.e("LiteRt", "generate error", throwable)
                 promise.reject("LITERT_GEN", throwable.message ?: "generation failed", throwable)
@@ -187,7 +201,6 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
           emptyMap(),
         )
       } catch (t: Throwable) {
-        closeConversation()
         Log.e("LiteRt", "generate failed", t)
         promise.reject("LITERT_GEN", t.message ?: "generation failed", t)
       }
@@ -197,6 +210,8 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
   @ReactMethod
   fun stop(promise: Promise) {
     cancelled = true
+    // Only cancel the running generation; the conversation is closed by the next
+    // generate (closing here, possibly on the gen thread, risks a deadlock).
     try { conversation?.cancelProcess() } catch (_: Throwable) {}
     promise.resolve(true)
   }
@@ -241,13 +256,17 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  private fun closeConversation() {
-    try { conversation?.close() } catch (_: Throwable) {}
+  /** Cancel any in-flight generation, then close the conversation. Always called from
+   *  the worker thread (start of generate / release), never the litertlm gen thread. */
+  private fun forceCloseConversation() {
+    val c = conversation ?: return
     conversation = null
+    try { c.cancelProcess() } catch (_: Throwable) {}
+    try { c.close() } catch (_: Throwable) {}
   }
 
   private fun releaseInternal() {
-    closeConversation()
+    forceCloseConversation()
     try { engine?.close() } catch (_: Throwable) {}
     engine = null
     modelPath = null
