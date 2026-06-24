@@ -6,11 +6,13 @@ import * as Haptics from 'expo-haptics';
 import { Message, FileAttachment } from '@/types';
 import { MarkdownView } from '@/components/common/Markdown';
 import { stripSpecialTokens } from '@/llm/prompt';
+import { parseQuestion, segmentMessage } from '@/llm/messageParse';
+import { QuestionCard } from './QuestionCard';
+import { CopyBlock } from './CopyBlock';
 import { TypingIndicator } from './TypingIndicator';
 import { ImageViewer } from './ImageViewer';
 import { formatBytes } from '@/files/FileProcessor';
 import { useToast } from '@/state/useToast';
-import { LOGO_PURPLE } from '@/components/ds/Logo';
 import { colors, radius, spacing, fonts } from '@/theme';
 
 const DOC_LABEL: Record<FileAttachment['type'], string> = {
@@ -47,14 +49,6 @@ function MessageAttachments({ attachments }: { attachments: FileAttachment[] }) 
   );
 }
 
-function Avatar() {
-  return (
-    <View style={styles.avatar}>
-      <Image source={LOGO_PURPLE} style={{ width: 17, height: 17 }} resizeMode="contain" />
-    </View>
-  );
-}
-
 /** Copy a message's text to the clipboard with haptic + toast confirmation. */
 function useCopy(content: string) {
   const show = useToast((s) => s.show);
@@ -66,9 +60,14 @@ function useCopy(content: string) {
   }, [content, show]);
 }
 
-export function MessageBubble({ message }: { message: Message }) {
+export function MessageBubble({ message, isLast = false, onOptionSelect }: {
+  message: Message;
+  isLast?: boolean;
+  onOptionSelect?: (option: string) => void;
+}) {
   const isUser = message.role === 'user';
-  const copy = useCopy(message.content);
+  const stripped = stripSpecialTokens(message.content);
+  const copy = useCopy(stripped);
 
   const hasAttachments = !!message.attachments?.length;
 
@@ -87,45 +86,50 @@ export function MessageBubble({ message }: { message: Message }) {
       </View>
     );
   }
+  const question = stripped ? parseQuestion(stripped) : null;
+  // A clarifying-question JSON still mid-stream: hold the typing indicator
+  // instead of flashing the half-typed raw JSON.
+  const pendingQuestion = !question && stripped.includes('__aether_question');
+  // Assistant: no bubble, no avatar — bare text on black, name above. Like Claude.
   return (
     <View style={styles.assistantRow}>
-      <Avatar />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.name}>Aether</Text>
-        {message.content
-          ? (
-            <Pressable onLongPress={copy} delayLongPress={300} style={[styles.bubble, styles.assistant]}>
-              <MarkdownView content={stripSpecialTokens(message.content)} />
-              {message.stopped && <Text style={styles.stopped}>(stopped)</Text>}
-            </Pressable>
-          )
-          : <TypingIndicator />}
-      </View>
+      <Text style={styles.name}>Aether</Text>
+      {question ? (
+        <QuestionCard question={question} answered={!isLast} onSelect={onOptionSelect} />
+      ) : !stripped || pendingQuestion ? (
+        <TypingIndicator />
+      ) : (
+        <Pressable onLongPress={copy} delayLongPress={300}>
+          {segmentMessage(stripped).map((seg, i) =>
+            seg.type === 'text' ? (
+              <MarkdownView key={i} content={seg.content} />
+            ) : (
+              <CopyBlock key={i} content={seg.content} mono={seg.type === 'code'} lang={seg.type === 'code' ? seg.lang : undefined} />
+            ),
+          )}
+          {message.stopped && <Text style={styles.stopped}>(stopped)</Text>}
+        </Pressable>
+      )}
     </View>
   );
 }
 const styles = StyleSheet.create({
-  row: { marginBottom: spacing.lg, flexDirection: 'row' },
+  row: { marginBottom: spacing.xl, flexDirection: 'row' },
   right: { justifyContent: 'flex-end' },
-  // flex:1 gives the column a definite width so the bubble's `maxWidth:'85%'`
-  // resolves. Without it, nested percentage widths collapsed to min-content and
-  // short text wrapped one character per line ("hi" -> "h"/"i").
+  // flex:1 gives the column a definite width so the bubble's `maxWidth` resolves.
   userCol: { flex: 1, alignItems: 'flex-end', gap: spacing.sm },
   attachments: { gap: spacing.sm, alignItems: 'flex-end' },
-  // Fixed width: a percentage width has no definite parent to resolve against
-  // here (parents are content-sized with only maxWidth), so it collapsed to ~0
-  // and the image never showed.
-  attachImage: { width: 220, height: 220, borderRadius: radius.md, backgroundColor: colors.assistantBubble },
-  fileCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: 8, paddingHorizontal: 10, maxWidth: 240 },
-  fileCardIcon: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: colors.assistantBubble, alignItems: 'center', justifyContent: 'center' },
+  attachImage: { width: 220, height: 220, borderRadius: radius.lg, backgroundColor: colors.bgInput },
+  fileCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingVertical: 9, paddingHorizontal: 11, maxWidth: 240 },
+  fileCardIcon: { width: 34, height: 34, borderRadius: radius.sm, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   fileCardName: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.text },
   fileCardMeta: { fontFamily: fonts.sans, fontSize: 11, color: colors.textMuted, marginTop: 1 },
-  assistantRow: { marginBottom: spacing.lg, flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  avatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  name: { fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.textMuted, marginBottom: 4 },
-  bubble: { borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  user: { maxWidth: '85%', backgroundColor: colors.userBubble },
-  assistant: { alignSelf: 'flex-start', maxWidth: '100%', backgroundColor: colors.assistantBubble },
+  // Assistant turn: bare on the background, name label above, roomy gap below.
+  assistantRow: { marginBottom: spacing.xxl },
+  name: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.textMuted, marginBottom: 6, letterSpacing: 0.2 },
+  // User turn: a single solid-purple bubble, right-aligned.
+  bubble: { borderRadius: radius.lg, paddingHorizontal: 15, paddingVertical: 10 },
+  user: { maxWidth: '82%', backgroundColor: colors.violet, borderBottomRightRadius: radius.sm },
   userText: { color: colors.white, fontSize: 15, lineHeight: 22, fontFamily: fonts.sans },
   stopped: { marginTop: 4, color: colors.textMuted, fontSize: 12, fontStyle: 'italic', fontFamily: fonts.sans },
 });

@@ -45,7 +45,7 @@ export function RAMWarningModal({ visible, available, required, onLoadAnyway, on
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: colors.scrim, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   card: { width: '100%', maxWidth: 340, backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: spacing.xl, gap: spacing.md },
-  title: { color: colors.text, fontSize: 18, fontFamily: fonts.sansHeavy },
+  title: { color: colors.text, fontSize: 19, fontFamily: fonts.displayBold },
   body: { color: colors.textMuted, fontSize: 14, lineHeight: 21, fontFamily: fonts.sans },
   stats: { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
   statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

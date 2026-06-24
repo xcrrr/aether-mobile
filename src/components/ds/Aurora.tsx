@@ -67,7 +67,7 @@ export function Aurora({ active = true, intensity = 1 }: { active?: boolean; int
   const blobOpacity = 0.6 * intensity;
   return (
     <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade }]} pointerEvents="none">
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.black, opacity: intensity < 1 ? intensity : 1 }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, opacity: intensity < 1 ? intensity : 1 }]} />
       <Blob size={380} color={colors.aurora1} from={{ x: -60, y: -40, s: 1 }} to={{ x: 80, y: 30, s: 1.3 }} duration={11000} opacity={blobOpacity} active={active} />
       <Blob size={340} color={colors.aurora2} from={{ x: 180, y: 80, s: 1.1 }} to={{ x: -40, y: -60, s: 0.85 }} duration={13000} delay={400} opacity={blobOpacity} active={active} />
       <Blob size={320} color={colors.aurora3} from={{ x: 20, y: 320, s: 0.9 }} to={{ x: -80, y: 120, s: 1.3 }} duration={12000} delay={800} opacity={blobOpacity} active={active} />

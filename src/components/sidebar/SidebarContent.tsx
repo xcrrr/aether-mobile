@@ -6,7 +6,7 @@ import { useModelStore } from '@/state/useModelStore';
 import { MODELS } from '@/models/registry';
 import { ConversationRow } from './ConversationRow';
 import { Logo } from '@/components/ds/Logo';
-import { colors, radius, spacing, fonts } from '@/theme';
+import { colors, spacing, fonts } from '@/theme';
 
 export function SidebarContent(props: DrawerContentComponentProps) {
   const { index, current, newChat, remove } = useChatStore();
@@ -22,7 +22,7 @@ export function SidebarContent(props: DrawerContentComponentProps) {
   };
 
   return (
-    <DrawerContentScrollView {...props} style={{ backgroundColor: colors.bgCard }} contentContainerStyle={{ paddingTop: 0 }}>
+    <DrawerContentScrollView {...props} style={{ backgroundColor: colors.bgSidebar }} contentContainerStyle={{ paddingTop: 0 }}>
       {/* header */}
       <View style={styles.header}>
         <Logo size={26} withWordmark />
@@ -94,24 +94,25 @@ export function SidebarContent(props: DrawerContentComponentProps) {
   );
 }
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 14 },
-  section: { paddingHorizontal: 16, paddingBottom: 12 },
-  sectionTight: { paddingHorizontal: 16, paddingBottom: 8 },
-  label: { color: colors.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8, fontFamily: fonts.sans },
-  modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.bgCard, borderWidth: 1, borderRadius: radius.md, marginBottom: 8 },
-  disabled: { opacity: 0.45 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  modelName: { fontSize: 14, fontFamily: fonts.sansBold },
+  header: { paddingHorizontal: 18, paddingTop: 22, paddingBottom: 18 },
+  section: { paddingHorizontal: 18, paddingBottom: 16 },
+  sectionTight: { paddingHorizontal: 18, paddingBottom: 4 },
+  label: { color: colors.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, fontFamily: fonts.sansSemibold },
+  // Flat rows — no card, no border. Just a colour dot + serif name on black.
+  modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9 },
+  disabled: { opacity: 0.4 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  modelName: { fontSize: 15, fontFamily: fonts.sansSemibold },
   modelMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2, fontFamily: fonts.sans },
-  newBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md },
-  plus: { fontSize: 18, color: colors.violet, fontFamily: fonts.sansHeavy },
-  newLabel: { color: colors.text, fontSize: 14, fontFamily: fonts.sansSemibold },
-  brainBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.violet, borderRadius: radius.md, backgroundColor: colors.bgCard },
-  brainIcon: { fontSize: 18 },
-  brainLabel: { color: colors.text, fontSize: 14, fontFamily: fonts.sansSemibold },
+  newBtn: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 10 },
+  plus: { fontSize: 20, color: colors.violet, fontFamily: fonts.sans, lineHeight: 22 },
+  newLabel: { color: colors.text, fontSize: 15, fontFamily: fonts.display },
+  brainBtn: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 10 },
+  brainIcon: { fontSize: 16 },
+  brainLabel: { color: colors.text, fontSize: 15, fontFamily: fonts.display },
   brainMeta: { color: colors.textMuted, fontSize: 11, marginTop: 1, fontFamily: fonts.sans },
-  brainChevron: { color: colors.violet, fontSize: 20, fontFamily: fonts.sansHeavy },
-  empty: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic', paddingVertical: 8 },
-  settingsBtn: { borderTopWidth: 1, borderTopColor: colors.border, padding: 16, marginTop: spacing.sm },
-  settingsLabel: { color: colors.text, fontSize: 14, fontFamily: fonts.sans },
+  brainChevron: { color: colors.textMuted, fontSize: 20, fontFamily: fonts.sans },
+  empty: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic', paddingVertical: 8, fontFamily: fonts.sans },
+  settingsBtn: { borderTopWidth: 1, borderTopColor: colors.separator, paddingHorizontal: 18, paddingVertical: 16, marginTop: spacing.sm },
+  settingsLabel: { color: colors.textMuted, fontSize: 14, fontFamily: fonts.sans },
 });

@@ -21,6 +21,7 @@ export default function MainIndex() {
     <View style={styles.c}>
       <Aurora />
       <Logo size={56} tone="white" style={styles.logo} />
+      <Text style={styles.title}>Aether</Text>
       <Text style={styles.sub}>
         {activeModelId ? 'Private, on-device AI. Start a conversation — nothing leaves your phone.' : 'Download a model to begin.'}
       </Text>
@@ -32,6 +33,7 @@ export default function MainIndex() {
 const styles = StyleSheet.create({
   c: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
   logo: { alignSelf: 'center' },
+  title: { fontFamily: fonts.sansHeavy, fontSize: 34, color: colors.text, letterSpacing: -0.5, marginTop: spacing.sm },
   cta: { alignSelf: 'center' },
   sub: { color: colors.textMuted, fontSize: 15, textAlign: 'center', lineHeight: 22, maxWidth: 280, fontFamily: fonts.sans },
 });

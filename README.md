@@ -23,6 +23,12 @@ Tap the mic and speak. Aether transcribes your voice on-device, no internet need
 ### 🧠 Second Brain
 Aether quietly remembers what matters about you — your goals, your projects, the people and details you mention — and uses that context in every chat. After each message it learns automatically and shows you what it saved. Explore everything it knows as a living **3D thought graph**, where new memories light up. Fully private, stored only on your device, and yours to edit or clear anytime.
 
+### ❓ Asks before it assumes
+When a request could go several ways, Aether asks a short clarifying question with tappable options — pick one and it carries on. Less guessing, better answers.
+
+### 📋 Copy what matters
+When Aether writes something you'll actually use — a post, an email, a command, a caption, a snippet of code — it drops it into a clean copy block. One tap to copy, no clutter around it.
+
 ### ⚡ Two models, your choice
 Pick **Fast** for snappy everyday chat, or **Thinking** for deeper, more capable answers — switch anytime from the chat header.
 

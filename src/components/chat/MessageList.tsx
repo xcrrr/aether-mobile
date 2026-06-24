@@ -4,7 +4,10 @@ import { Message } from '@/types';
 import { MessageBubble } from './MessageBubble';
 import { spacing } from '@/theme';
 
-export function MessageList({ messages }: { messages: Message[] }) {
+export function MessageList({ messages, onOptionSelect }: {
+  messages: Message[];
+  onOptionSelect?: (option: string) => void;
+}) {
   const ref = useRef<FlatList<Message>>(null);
   const lastLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
@@ -15,7 +18,13 @@ export function MessageList({ messages }: { messages: Message[] }) {
       ref={ref}
       data={messages}
       keyExtractor={(m) => m.id}
-      renderItem={({ item }) => <MessageBubble message={item} />}
+      renderItem={({ item, index }) => (
+        <MessageBubble
+          message={item}
+          isLast={index === messages.length - 1}
+          onOptionSelect={onOptionSelect}
+        />
+      )}
       contentContainerStyle={{ padding: spacing.lg }}
       onContentSizeChange={() => ref.current?.scrollToEnd({ animated: true })}
     />

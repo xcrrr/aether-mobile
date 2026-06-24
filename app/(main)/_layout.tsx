@@ -9,13 +9,12 @@ export default function MainLayout() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.bg, shadowColor: 'transparent', elevation: 0 },
         headerTintColor: colors.text,
-        headerTitleStyle: { fontFamily: fonts.sansHeavy, letterSpacing: -0.4 },
-        headerTitle: 'Aether',
-        drawerStyle: { backgroundColor: colors.bgCard, width: 300 },
+        headerTitleStyle: { fontFamily: fonts.sansHeavy, fontSize: 19, letterSpacing: -0.3 },
+        drawerStyle: { backgroundColor: colors.bgSidebar, width: 300 },
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Drawer.Screen name="index" options={{ title: 'Aether' }} />
+      <Drawer.Screen name="index" options={{ title: 'Aether', headerTitle: () => null }} />
       <Drawer.Screen name="chat/[id]" options={{ headerShown: false, drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="settings" options={{ headerShown: false, drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="second-brain" options={{ headerShown: false, drawerItemStyle: { display: 'none' } }} />

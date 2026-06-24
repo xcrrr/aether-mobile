@@ -4,6 +4,7 @@ import {
   Modal, TextInput,
 } from 'react-native';
 import { Graph3D } from '@/components/secondbrain/Graph3D';
+import { GraphErrorBoundary } from '@/components/secondbrain/GraphErrorBoundary';
 import { toGraphData, CATEGORY_COLORS } from '@/components/secondbrain/graphData';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -272,11 +273,13 @@ export default function SecondBrainScreen() {
             {/* ── Graph or List ── */}
             {view === 'graph' ? (
               <View style={styles.graphContainer}>
-                <Graph3D
-                  data={graphData}
-                  onNodeTap={onNodeTap}
-                  focusKey={selected?.key ?? null}
-                />
+                <GraphErrorBoundary>
+                  <Graph3D
+                    data={graphData}
+                    onNodeTap={onNodeTap}
+                    focusKey={selected?.key ?? null}
+                  />
+                </GraphErrorBoundary>
                 <Pressable
                   style={styles.expandBtn}
                   onPress={() => setFullscreen(true)}
@@ -457,7 +460,9 @@ export default function SecondBrainScreen() {
             </Pressable>
           </View>
           <View style={{ flex: 1 }}>
-            <Graph3D data={graphData} onNodeTap={onNodeTap} focusKey={selected?.key ?? null} />
+            <GraphErrorBoundary>
+              <Graph3D data={graphData} onNodeTap={onNodeTap} focusKey={selected?.key ?? null} />
+            </GraphErrorBoundary>
           </View>
         </SafeAreaView>
       </Modal>
@@ -469,17 +474,17 @@ const styles = StyleSheet.create({
   c: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: spacing.lg, paddingVertical: 14 },
   back: { fontSize: 28, color: colors.text, lineHeight: 30 },
-  title: { color: colors.text, fontSize: 18, fontFamily: fonts.sansHeavy, flex: 1 },
+  title: { color: colors.text, fontSize: 20, fontFamily: fonts.displayBold, flex: 1 },
   subtitle: { color: colors.textMuted, fontSize: 13, lineHeight: 19, fontFamily: fonts.sans },
 
-  // Cards
-  card: { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg },
+  // Flat sections — no card, no border (Claude-style on black).
+  card: { paddingVertical: spacing.xs },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  toggleLabel: { color: colors.text, fontSize: 15, fontFamily: fonts.sansSemibold },
+  toggleLabel: { color: colors.text, fontSize: 15, fontFamily: fonts.display },
   toggleHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17, fontFamily: fonts.sans, marginTop: 3 },
 
-  // New-memory banner
-  recentBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: 'rgba(124,58,237,0.12)', borderColor: colors.violet, borderWidth: 1, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: spacing.md },
+  // New-memory banner — subtle violet wash, no border.
+  recentBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.violetDim, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: spacing.md },
   recentText: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 18, fontFamily: fonts.sansMedium },
 
   // Status card
@@ -488,7 +493,7 @@ const styles = StyleSheet.create({
   statusValue: { color: colors.text, fontSize: 13, fontFamily: fonts.sansMedium },
 
   // Segment control
-  segment: { flexDirection: 'row', marginLeft: 'auto', backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
+  segment: { flexDirection: 'row', marginLeft: 'auto', backgroundColor: colors.bgInput, borderRadius: radius.md, overflow: 'hidden' },
   segmentBtn: { paddingHorizontal: spacing.md, paddingVertical: 6 },
   segmentBtnActive: { backgroundColor: colors.violet },
   segmentText: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sansSemibold },
@@ -498,9 +503,7 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchInput: {
     flex: 1,
-    backgroundColor: colors.bgCard,
-    borderColor: colors.border,
-    borderWidth: 1,
+    backgroundColor: colors.bgInput,
     borderRadius: radius.full,
     paddingHorizontal: spacing.md,
     paddingVertical: 9,
@@ -513,8 +516,8 @@ const styles = StyleSheet.create({
 
   // Category chips
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
-  chipActive: { borderColor: colors.violet, backgroundColor: 'rgba(124,58,237,0.15)' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full, backgroundColor: colors.bgInput },
+  chipActive: { backgroundColor: colors.violetDim },
   chipDot: { width: 8, height: 8, borderRadius: 4 },
   chipText: { color: colors.textMuted, fontSize: 11, fontFamily: fonts.sansSemibold },
   chipTextActive: { color: colors.violet },
@@ -523,14 +526,15 @@ const styles = StyleSheet.create({
 
   // Graph container
   graphContainer: { height: 420, borderRadius: radius.lg, overflow: 'hidden' },
-  expandBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm, backgroundColor: 'rgba(22,22,29,0.85)', borderRadius: radius.sm, padding: 7, borderWidth: 1, borderColor: colors.border },
+  graphFallback: { flex: 1, backgroundColor: colors.bg },
+  expandBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.sm, padding: 7 },
 
-  // List rows
-  label: { color: colors.textMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.md, fontFamily: fonts.sansSemibold },
-  entryRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
-  entryKey: { color: colors.text, fontSize: 14, fontFamily: fonts.sansSemibold },
+  // List rows — flat, separated by a hairline.
+  label: { color: colors.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md, fontFamily: fonts.sansSemibold },
+  entryRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.separator },
+  entryKey: { color: colors.text, fontSize: 15, fontFamily: fonts.display },
   entryValue: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sans, marginTop: 2 },
-  confidence: { backgroundColor: colors.bg, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 3 },
+  confidence: { paddingHorizontal: spacing.xs, paddingVertical: 3 },
   confidenceText: { color: colors.violet, fontSize: 11, fontFamily: fonts.sansBold },
   trash: { padding: 4 },
 
@@ -541,7 +545,7 @@ const styles = StyleSheet.create({
   dangerRow: { gap: spacing.sm },
   clearBtn: { borderColor: colors.danger, borderWidth: 1, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center', backgroundColor: colors.dangerBg },
   clearLabel: { color: colors.danger, fontSize: 14, fontFamily: fonts.sansBold },
-  purgeBtn: { borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, paddingVertical: 12, alignItems: 'center', backgroundColor: colors.bgCard },
+  purgeBtn: { borderRadius: radius.md, paddingVertical: 12, alignItems: 'center', backgroundColor: colors.bgInput },
   purgeLabel: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sansSemibold },
 
   // Footer
@@ -552,7 +556,7 @@ const styles = StyleSheet.create({
   modalCard: { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, width: '90%' },
   addModalCard: { width: '95%', maxHeight: '85%' },
   modalHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
-  modalTitle: { color: colors.text, fontSize: 16, fontFamily: fonts.sansBold },
+  modalTitle: { color: colors.text, fontSize: 18, fontFamily: fonts.displayBold },
   modalCatRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm },
   editInput: {
     backgroundColor: colors.bg,

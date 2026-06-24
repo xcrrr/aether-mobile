@@ -20,7 +20,7 @@ export interface GraphLink { source: string; target: string; relation: string; }
 export interface GraphData { nodes: GraphNode[]; links: GraphLink[]; }
 
 /** Short node caption for the always-on label sprite (the full value lives in the popup). */
-export function shortLabel(value: string, max = 24): string {
+export function shortLabel(value: string, max = 18): string {
   const v = value.trim();
   return v.length <= max ? v : `${v.slice(0, max - 1).trimEnd()}…`;
 }

@@ -131,22 +131,22 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
       {/* Collapsible actions bar (Claude-style "+") */}
       {showBar && (
         <View style={styles.actionsBar}>
-          <ActionPill icon={<Paperclip size={18} color={researchMode ? colors.border : colors.text} strokeWidth={2} />} label="Attach" onPress={openAttach} disabled={researchMode} />
-          <ActionPill icon={<Globe size={18} color={researchMode ? colors.violet : colors.text} strokeWidth={2} />} label="Research" active={researchMode} onPress={toggleResearch} />
-          <ActionPill icon={<Mic size={18} color={voice.listening ? colors.danger : colors.text} strokeWidth={2} />} label={voice.listening ? 'Listening' : 'Voice'} active={voice.listening} onPress={toggleVoice} />
+          <ActionPill icon={<Paperclip size={17} color={researchMode ? colors.border : colors.textMuted} strokeWidth={1.8} />} label="Attach" onPress={openAttach} disabled={researchMode} />
+          <ActionPill icon={<Globe size={17} color={researchMode ? colors.violet : colors.textMuted} strokeWidth={1.8} />} label="Research" active={researchMode} onPress={toggleResearch} />
+          <ActionPill icon={<Mic size={17} color={voice.listening ? colors.danger : colors.textMuted} strokeWidth={1.8} />} label={voice.listening ? 'Listening' : 'Voice'} active={voice.listening} onPress={toggleVoice} />
         </View>
       )}
 
       <View style={styles.row}>
         <Pressable
-          style={[styles.plusBtn, showBar && styles.plusBtnOpen]}
+          style={styles.plusBtn}
           onPress={() => setBarOpen((v) => !v)}
           disabled={disabled}
           hitSlop={6}
         >
           {showBar
-            ? <X size={20} color={colors.text} strokeWidth={2.2} />
-            : <Plus size={22} color={disabled ? colors.border : colors.textMuted} strokeWidth={2.2} />}
+            ? <X size={20} color={colors.textMuted} strokeWidth={1.8} />
+            : <Plus size={21} color={disabled ? colors.border : colors.textMuted} strokeWidth={1.8} />}
         </Pressable>
 
         <TextInput
@@ -162,14 +162,14 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
         <Pressable
           style={[
             styles.send,
-            { backgroundColor: isGenerating ? colors.danger : sendDisabled ? colors.bgCard : colors.violet },
+            { backgroundColor: isGenerating ? colors.danger : sendDisabled ? colors.bgInput : colors.violet },
           ]}
           onPress={isGenerating ? stopGeneration : send}
           disabled={sendDisabled}
         >
           {isGenerating
-            ? <Square size={14} color={colors.white} fill={colors.white} />
-            : <ArrowUp size={20} color={colors.white} strokeWidth={2.4} />}
+            ? <Square size={13} color={colors.white} fill={colors.white} />
+            : <ArrowUp size={19} color={sendDisabled ? colors.textMuted : colors.white} strokeWidth={2.2} />}
         </Pressable>
       </View>
 
@@ -204,19 +204,18 @@ function ActionPill({ icon, label, onPress, active, disabled }: {
 }
 
 const styles = StyleSheet.create({
-  wrap: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.xs },
-  row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  input: { flex: 1, maxHeight: 120, backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg, color: colors.text, paddingHorizontal: 14, paddingVertical: 11, fontSize: 16, fontFamily: fonts.sans, lineHeight: 22 },
-  plusBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
-  plusBtnOpen: { borderColor: colors.violet, backgroundColor: colors.assistantBubble },
-  send: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  wrap: { backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  row: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  input: { flex: 1, maxHeight: 120, backgroundColor: colors.bgInput, borderRadius: radius.xl, color: colors.text, paddingHorizontal: 16, paddingVertical: 11, fontSize: 15, fontFamily: fonts.sans, lineHeight: 21 },
+  plusBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   actionsBar: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm, flexWrap: 'wrap' },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgCard },
-  pillActive: { borderColor: colors.violet, backgroundColor: colors.assistantBubble },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 8, paddingHorizontal: 13, borderRadius: 999, backgroundColor: colors.bgInput },
+  pillActive: { backgroundColor: colors.violetDim },
   pillDisabled: { opacity: 0.5 },
-  pillLabel: { fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.text },
+  pillLabel: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.text },
   footer: { textAlign: 'center', fontSize: 11, color: colors.textMuted, paddingVertical: spacing.sm, fontFamily: fonts.sans },
-  transcript: { alignSelf: 'stretch', backgroundColor: colors.assistantBubble, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  transcript: { alignSelf: 'stretch', backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
   transcriptText: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sans, lineHeight: 18 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm, paddingHorizontal: 2 },
   greenDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22C55E' },

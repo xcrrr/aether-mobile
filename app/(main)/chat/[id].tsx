@@ -101,7 +101,7 @@ export default function ChatScreen() {
           />
           {empty
             ? <EmptyState name={profileName} />
-            : <MessageList messages={current!.messages} />}
+            : <MessageList messages={current!.messages} onOptionSelect={send} />}
           {error && <Text style={styles.err}>{error}</Text>}
           <BrainNoticePill />
           <ChatInput
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1, alignItems: 'center' },
   menuGlyph: { fontSize: 22, color: colors.text },
   gearGlyph: { fontSize: 20, color: colors.text },
-  wordmark: { fontFamily: fonts.sansHeavy, fontSize: 18, color: colors.text, letterSpacing: -0.4, lineHeight: 20 },
+  wordmark: { fontFamily: fonts.sansHeavy, fontSize: 18, color: colors.text, letterSpacing: -0.3, lineHeight: 22 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 20 },
   greeting: { fontFamily: fonts.displayBold, fontSize: 24, color: colors.text },
   emptyBody: { fontFamily: fonts.sans, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 21, maxWidth: 260 },

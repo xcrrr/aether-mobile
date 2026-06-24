@@ -3,7 +3,7 @@ import { ModelDef } from '@/types';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { Badge } from '@/components/ds/Badge';
 import { Button } from '@/components/ds/Button';
-import { colors, radius, spacing, fonts } from '@/theme';
+import { colors, spacing, fonts } from '@/theme';
 
 export function ModelManagerRow({ model, installed, download, onDownload, onCancel, onDelete }: {
   model: ModelDef;
@@ -44,10 +44,10 @@ export function ModelManagerRow({ model, installed, download, onDownload, onCanc
   );
 }
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  card: { paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.separator },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.xs },
   name: { color: colors.text, fontFamily: fonts.sansBold, fontSize: 15 },
-  desc: { color: colors.textMuted, fontSize: 13, lineHeight: 20, marginBottom: spacing.md, fontFamily: fonts.sans },
+  desc: { color: colors.textMuted, fontSize: 13.5, lineHeight: 21, marginBottom: spacing.md, fontFamily: fonts.display },
   footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   meta: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sans },
 });

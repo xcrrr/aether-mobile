@@ -5,12 +5,17 @@ export const colors = {
   // base palette
   black: '#000000',
   white: '#ffffff',
-  bg: '#0B0B0F',
-  bgCard: '#16161D',
-  assistantBubble: '#1C1C24',
-  border: '#26262F',
-  text: '#F5F5F7',
-  textMuted: '#9A9AA8',
+  // Claude palette — warm dark gray, NOT pure black.
+  bg: '#1C1C1C',
+  bgSidebar: '#161616',
+  bgCard: '#252525',
+  bgInput: '#252525',
+  assistantBubble: '#252525',
+  border: '#2E2E2E',
+  // Barely-visible hairline divider for flat, card-less sections.
+  separator: '#2E2E2E',
+  text: '#FFFFFF',
+  textMuted: '#8E8E8E',
   textCode: '#E2E2E2',
   violet: '#7C3AED',
   violetStrong: '#6D28D9',
