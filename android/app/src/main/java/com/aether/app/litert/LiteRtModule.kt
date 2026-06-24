@@ -137,6 +137,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
     topP: Double,
     temperature: Double,
     stream: Boolean,
+    maxOutputTokens: Int,
     promise: Promise,
   ) {
     worker.execute {
@@ -182,7 +183,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
           Contents.of(contents),
           object : MessageCallback {
             override fun onMessage(message: Message) {
-              if (cancelled) return
+              if (cancelled || settled) return
               val s = message.toString()
               if (s.isEmpty()) return
               val delta: String
@@ -192,6 +193,14 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
                 delta = s; acc.append(s)
               }
               if (stream && delta.isNotEmpty()) emit("LiteRtToken", delta)
+              // Hard output cap (used by research to keep answers — and latency —
+              // bounded). ~4 chars/token is a safe approximation. Resolve now and
+              // cancel the run from the worker thread (never this gen thread).
+              if (maxOutputTokens > 0 && acc.length >= maxOutputTokens * 4) {
+                settled = true
+                promise.resolve(acc.toString())
+                worker.execute { try { conversation?.cancelProcess() } catch (_: Throwable) {} }
+              }
             }
             override fun onDone() {
               // Do NOT close the conversation here (would deadlock on the gen thread).

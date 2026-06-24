@@ -85,8 +85,13 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
     : 'Message Aether';
 
   const openAttach = () => { setBarOpen(false); setSheetOpen(true); };
-  const toggleResearch = () => { setBarOpen(false); onToggleResearch?.(); };
+  // Keep the actions bar open while research is on so the active toggle stays
+  // visible — otherwise the user can't tell research is engaged.
+  const toggleResearch = () => onToggleResearch?.();
   const toggleVoice = () => { setBarOpen(false); void voice.toggle(); };
+
+  // Force the bar open whenever research is active, regardless of manual collapse.
+  const showBar = (barOpen || researchMode) && !disabled;
 
   return (
     <View style={styles.wrap}>
@@ -124,7 +129,7 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
       {voice.error && <Text style={styles.voiceErr}>{voice.error}</Text>}
 
       {/* Collapsible actions bar (Claude-style "+") */}
-      {barOpen && !disabled && (
+      {showBar && (
         <View style={styles.actionsBar}>
           <ActionPill icon={<Paperclip size={18} color={researchMode ? colors.border : colors.text} strokeWidth={2} />} label="Attach" onPress={openAttach} disabled={researchMode} />
           <ActionPill icon={<Globe size={18} color={researchMode ? colors.violet : colors.text} strokeWidth={2} />} label="Research" active={researchMode} onPress={toggleResearch} />
@@ -134,12 +139,12 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
 
       <View style={styles.row}>
         <Pressable
-          style={[styles.plusBtn, barOpen && styles.plusBtnOpen]}
+          style={[styles.plusBtn, showBar && styles.plusBtnOpen]}
           onPress={() => setBarOpen((v) => !v)}
           disabled={disabled}
           hitSlop={6}
         >
-          {barOpen
+          {showBar
             ? <X size={20} color={colors.text} strokeWidth={2.2} />
             : <Plus size={22} color={disabled ? colors.border : colors.textMuted} strokeWidth={2.2} />}
         </Pressable>

@@ -20,7 +20,7 @@ const LiteRt = NativeModules.LiteRt as {
   init(path: string, maxTokens: number): Promise<string>;
   generate(
     systemPrompt: string, historyJson: string, lastText: string, imagePaths: string[],
-    topK: number, topP: number, temperature: number, stream: boolean,
+    topK: number, topP: number, temperature: number, stream: boolean, maxOutputTokens: number,
   ): Promise<string>;
   stop(): Promise<boolean>;
   release(): Promise<boolean>;
@@ -132,7 +132,7 @@ export async function generate(
   activeKind = 'chat';
 
   const sub = emitter.addListener('LiteRtToken', (piece: string) => onToken(piece));
-  const run = LiteRt.generate(sys, historyJson, lastText, imagePaths, TOP_K, TOP_P, TEMPERATURE, true)
+  const run = LiteRt.generate(sys, historyJson, lastText, imagePaths, TOP_K, TOP_P, TEMPERATURE, true, 0)
     .then(() => onDone())
     .catch((e) => onError(e instanceof Error ? e.message : String(e)))
     .finally(() => { sub.remove(); activeCompletion = null; activeKind = null; });
@@ -152,15 +152,22 @@ export function plainFromGemma(prompt: string): string {
 
 export async function extract(
   prompt: string,
-  opts: { maxTokens?: number; temperature?: number; preempt?: boolean } = {},
+  opts: { maxTokens?: number; temperature?: number; preempt?: boolean; onToken?: (t: string) => void } = {},
 ): Promise<string | null> {
   if (!LiteRt) return null;
   if (opts.preempt) await drainActive();
   else if (activeCompletion) return null;
 
   activeKind = 'extract';
-  const run = LiteRt.generate('', '[]', plainFromGemma(prompt), [], TOP_K, TOP_P, opts.temperature ?? 0.1, false);
-  activeCompletion = run.finally(() => { activeCompletion = null; activeKind = null; });
+  // Stream only when a token sink is given (research answer → live bubble). The
+  // maxTokens cap is now enforced natively, so research no longer runs to the 4096
+  // engine ceiling — the single biggest latency win.
+  const stream = !!opts.onToken;
+  const sub = stream && emitter ? emitter.addListener('LiteRtToken', (p: string) => opts.onToken!(p)) : null;
+  const run = LiteRt.generate(
+    '', '[]', plainFromGemma(prompt), [], TOP_K, TOP_P, opts.temperature ?? 0.1, stream, opts.maxTokens ?? 0,
+  );
+  activeCompletion = run.finally(() => { sub?.remove(); activeCompletion = null; activeKind = null; });
   try {
     const text = await run;
     return text && text.length ? text : null;

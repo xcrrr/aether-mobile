@@ -133,7 +133,12 @@ export function useInference(modelId: string | undefined) {
     chat.startAssistant();
     const setContent = useChatStore.getState().setAssistantContent;
     try {
-      const result = await runResearch(text, (status) => setContent(`_${status}_`), history);
+      const result = await runResearch(
+        text,
+        (status) => setContent(`_${status}_`),
+        history,
+        (answer) => setContent(answer),
+      );
       setContent(formatResearchMarkdown(result));
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'research failed';

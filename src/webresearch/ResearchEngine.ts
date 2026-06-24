@@ -124,6 +124,7 @@ export async function runResearch(
   query: string,
   onProgress: (status: string) => void,
   history: Message[] = [],
+  onAnswer?: (text: string) => void,
 ): Promise<ResearchResult> {
   // Resolve follow-ups ("are you sure he died?") into a standalone query so the
   // web search actually finds the right thing.
@@ -155,7 +156,16 @@ export async function runResearch(
 
   onProgress(`Read ${sources.length} source${sources.length === 1 ? '' : 's'} — writing your answer…`);
   const prompt = buildResearchPrompt(query, sources, history);
-  const raw = await Llama.extract(prompt, { maxTokens: ANSWER_MAX_TOKENS, temperature: ANSWER_TEMPERATURE, preempt: true });
+  // Stream the answer into the bubble as it's written so the user sees progress
+  // immediately instead of a blank wait. The final formatted markdown (citations
+  // stripped, Sources list appended) replaces it once generation completes.
+  let streamed = '';
+  const raw = await Llama.extract(prompt, {
+    maxTokens: ANSWER_MAX_TOKENS,
+    temperature: ANSWER_TEMPERATURE,
+    preempt: true,
+    onToken: onAnswer ? (t) => { streamed += t; onAnswer(stripSpecialTokens(streamed).trim()); } : undefined,
+  });
 
   if (!raw) {
     // Model unavailable/busy — still return the sources we gathered.
