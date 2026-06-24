@@ -19,8 +19,8 @@ export interface LoadOptions {
 const LiteRt = NativeModules.LiteRt as {
   init(path: string, maxTokens: number): Promise<string>;
   generate(
-    prompt: string, imagePaths: string[], topK: number, topP: number,
-    temperature: number, stream: boolean,
+    systemPrompt: string, historyJson: string, lastText: string, imagePaths: string[],
+    topK: number, topP: number, temperature: number, stream: boolean,
   ): Promise<string>;
   stop(): Promise<boolean>;
   release(): Promise<boolean>;
@@ -71,17 +71,22 @@ export async function initLlm(modelPath: string, opts: LoadOptions = {}): Promis
 export const isVisionEnabled = (): boolean => visionEnabled;
 export const isGpuActive = (): boolean => gpuActive;
 
-/** Flatten a conversation into a plain transcript. MediaPipe wraps it in the
- *  model's own turn template, so we must NOT emit Gemma `<start_of_turn>` markers. */
-export function buildPrompt(system: string, messages: Message[]): string {
-  const parts: string[] = [];
-  if (system.trim()) parts.push(system.trim());
-  for (const m of messages) {
-    const who = m.role === 'user' ? 'User' : 'Assistant';
-    if (m.content.trim()) parts.push(`${who}: ${m.content.trim()}`);
-  }
-  parts.push('Assistant:');
-  return parts.join('\n\n');
+export interface ConversationParts { system: string; historyJson: string; lastText: string; }
+
+/**
+ * Split a conversation into the pieces litertlm needs: the system instruction, the
+ * prior turns (seeded as `initialMessages`), and the new user turn. litertlm applies
+ * Gemma's own chat template, so we pass STRUCTURED turns — never a flattened
+ * "User:/Assistant:" blob (that made the model invent turns and never stop).
+ */
+export function splitConversation(system: string, messages: Message[]): ConversationParts {
+  let lastUserIdx = -1;
+  for (let i = 0; i < messages.length; i++) if (messages[i].role === 'user') lastUserIdx = i;
+  const history = (lastUserIdx >= 0 ? messages.slice(0, lastUserIdx) : messages)
+    .filter((m) => m.content.trim())
+    .map((m) => ({ role: m.role === 'user' ? 'user' : 'model', text: m.content.trim() }));
+  const lastText = lastUserIdx >= 0 ? messages[lastUserIdx].content.trim() : '';
+  return { system: system.trim(), historyJson: JSON.stringify(history), lastText };
 }
 
 /** Persist the last user message's images to cache files for the native side. */
@@ -100,7 +105,16 @@ async function writeImagePaths(messages: Message[]): Promise<string[]> {
 async function drainActive(): Promise<void> {
   if (!activeCompletion) return;
   try { await LiteRt?.stop(); } catch {}
-  try { await activeCompletion; } catch {}
+  // Guard against a native completion that never settles: don't wait forever, or a
+  // single stuck generation would deadlock every future message.
+  try {
+    await Promise.race([
+      activeCompletion,
+      new Promise((r) => setTimeout(r, 4000)),
+    ]);
+  } catch {}
+  activeCompletion = null;
+  activeKind = null;
 }
 
 export async function generate(
@@ -112,13 +126,13 @@ export async function generate(
 ): Promise<void> {
   if (!LiteRt || !emitter) return onError('LiteRT engine unavailable');
   const imagePaths = await writeImagePaths(messages);
-  const prompt = buildPrompt(system, messages);
+  const { system: sys, historyJson, lastText } = splitConversation(system, messages);
   await drainActive();
   cancelled = false;
   activeKind = 'chat';
 
   const sub = emitter.addListener('LiteRtToken', (piece: string) => onToken(piece));
-  const run = LiteRt.generate(prompt, imagePaths, TOP_K, TOP_P, TEMPERATURE, true)
+  const run = LiteRt.generate(sys, historyJson, lastText, imagePaths, TOP_K, TOP_P, TEMPERATURE, true)
     .then(() => onDone())
     .catch((e) => onError(e instanceof Error ? e.message : String(e)))
     .finally(() => { sub.remove(); activeCompletion = null; activeKind = null; });
@@ -135,7 +149,7 @@ export async function extract(
   else if (activeCompletion) return null;
 
   activeKind = 'extract';
-  const run = LiteRt.generate(prompt, [], TOP_K, TOP_P, opts.temperature ?? 0.1, false);
+  const run = LiteRt.generate('', '[]', prompt, [], TOP_K, TOP_P, opts.temperature ?? 0.1, false);
   activeCompletion = run.finally(() => { activeCompletion = null; activeKind = null; });
   try {
     const text = await run;

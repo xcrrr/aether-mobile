@@ -121,7 +121,9 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun generate(
-    prompt: String,
+    systemPrompt: String,
+    historyJson: String,
+    lastText: String,
     imagePaths: ReadableArray,
     topK: Int,
     topP: Double,
@@ -135,11 +137,15 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
       cancelled = false
       val useImages = visionEnabled && imagePaths.size() > 0
       try {
+        // Proper turn structure (system + prior turns as initialMessages, then the new
+        // user turn) so litertlm applies Gemma's chat template and STOPS at the end of
+        // the turn. A flattened "User:/Assistant:" blob made the model keep generating
+        // fake turns and never fire onDone.
         val convo = e.createConversation(
           ConversationConfig(
             samplerConfig = SamplerConfig(topK = topK, topP = topP, temperature = temperature),
-            systemInstruction = null,
-            initialMessages = emptyList<Message>(),
+            systemInstruction = if (systemPrompt.isNotBlank()) Contents.of(systemPrompt) else null,
+            initialMessages = parseHistory(historyJson),
           ),
         )
         conversation = convo
@@ -151,7 +157,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
             pngBytes(p)?.let { contents.add(Content.ImageBytes(it)) }
           }
         }
-        if (prompt.isNotBlank()) contents.add(Content.Text(prompt))
+        if (lastText.isNotBlank()) contents.add(Content.Text(lastText))
 
         val sb = StringBuilder()
         convo.sendMessageAsync(
@@ -205,6 +211,23 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod fun addListener(eventName: String) {}
   @ReactMethod fun removeListeners(count: Int) {}
+
+  /** Parse `[{"role":"user|model","text":...}]` into litertlm seed messages. */
+  private fun parseHistory(json: String): List<Message> {
+    val out = ArrayList<Message>()
+    try {
+      val arr = org.json.JSONArray(json)
+      for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        val text = o.optString("text")
+        if (text.isBlank()) continue
+        if (o.optString("role") == "user") out.add(Message.user(text)) else out.add(Message.model(text))
+      }
+    } catch (t: Throwable) {
+      Log.w("LiteRt", "history parse failed", t)
+    }
+    return out
+  }
 
   private fun pngBytes(path: String): ByteArray? {
     return try {
