@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
 import { FileText } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -13,7 +13,8 @@ import { TypingIndicator } from './TypingIndicator';
 import { ImageViewer } from './ImageViewer';
 import { formatBytes } from '@/files/FileProcessor';
 import { useToast } from '@/state/useToast';
-import { colors, radius, spacing, fonts } from '@/theme';
+import { radius, spacing, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 const DOC_LABEL: Record<FileAttachment['type'], string> = {
   image: 'Image', pdf: 'PDF', text: 'Text', docx: 'Word',
@@ -21,6 +22,8 @@ const DOC_LABEL: Record<FileAttachment['type'], string> = {
 
 /** Attachment previews rendered above a user message's text. */
 function MessageAttachments({ attachments }: { attachments: FileAttachment[] }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [viewer, setViewer] = useState<string | null>(null);
   return (
     <View style={styles.attachments}>
@@ -32,7 +35,7 @@ function MessageAttachments({ attachments }: { attachments: FileAttachment[] }) 
         ) : (
           <View key={a.id} style={styles.fileCard}>
             <View style={styles.fileCardIcon}>
-              <FileText size={18} color={colors.violet} />
+              <FileText size={18} color={c.violet} />
             </View>
             <View style={{ flexShrink: 1 }}>
               <Text style={styles.fileCardName} numberOfLines={1}>{a.name}</Text>
@@ -65,6 +68,8 @@ export function MessageBubble({ message, isLast = false, onOptionSelect }: {
   isLast?: boolean;
   onOptionSelect?: (option: string) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const isUser = message.role === 'user';
   const stripped = stripSpecialTokens(message.content);
   const copy = useCopy(stripped);
@@ -120,23 +125,23 @@ export function MessageBubble({ message, isLast = false, onOptionSelect }: {
     </View>
   );
 }
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   row: { marginBottom: spacing.xl, flexDirection: 'row' },
   right: { justifyContent: 'flex-end' },
   // flex:1 gives the column a definite width so the bubble's `maxWidth` resolves.
   userCol: { flex: 1, alignItems: 'flex-end', gap: spacing.sm },
   attachments: { gap: spacing.sm, alignItems: 'flex-end' },
-  attachImage: { width: 220, height: 220, borderRadius: radius.lg, backgroundColor: colors.bgInput },
-  fileCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.bgInput, borderRadius: radius.md, paddingVertical: 9, paddingHorizontal: 11, maxWidth: 240 },
-  fileCardIcon: { width: 34, height: 34, borderRadius: radius.sm, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  fileCardName: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.text },
-  fileCardMeta: { fontFamily: fonts.sans, fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  attachImage: { width: 220, height: 220, borderRadius: radius.lg, backgroundColor: c.bgInput },
+  fileCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: c.bgInput, borderRadius: radius.md, paddingVertical: 9, paddingHorizontal: 11, maxWidth: 240 },
+  fileCardIcon: { width: 34, height: 34, borderRadius: radius.sm, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center' },
+  fileCardName: { fontFamily: fonts.sansMedium, fontSize: 13, color: c.text },
+  fileCardMeta: { fontFamily: fonts.sans, fontSize: 11, color: c.textMuted, marginTop: 1 },
   // Assistant turn: bare on the background, name label above, roomy gap below.
   assistantRow: { marginBottom: spacing.xxl },
-  name: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.textMuted, marginBottom: 6, letterSpacing: 0.2 },
+  name: { fontFamily: fonts.sansMedium, fontSize: 12, color: c.textMuted, marginBottom: 6, letterSpacing: 0.2 },
   // User turn: a single solid-purple bubble, right-aligned.
   bubble: { borderRadius: radius.lg, paddingHorizontal: 15, paddingVertical: 10 },
-  user: { maxWidth: '82%', backgroundColor: colors.violet, borderBottomRightRadius: radius.sm },
-  userText: { color: colors.white, fontSize: 15, lineHeight: 22, fontFamily: fonts.sans },
-  stopped: { marginTop: 4, color: colors.textMuted, fontSize: 12, fontStyle: 'italic', fontFamily: fonts.sans },
+  user: { maxWidth: '82%', backgroundColor: c.violet, borderBottomRightRadius: radius.sm },
+  userText: { color: c.white, fontSize: 15, lineHeight: 22, fontFamily: fonts.sans },
+  stopped: { marginTop: 4, color: c.textMuted, fontSize: 12, fontStyle: 'italic', fontFamily: fonts.sans },
 });

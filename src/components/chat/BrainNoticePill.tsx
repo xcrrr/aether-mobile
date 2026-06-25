@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, Easing } from 'react-native';
 import { Brain, ChevronRight } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useBrainNotice } from '@/state/useBrainNotice';
-import { colors, radius, fonts } from '@/theme';
+import { radius, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 const VISIBLE_MS = 6500;
 
@@ -14,6 +15,8 @@ const VISIBLE_MS = 6500;
  * its entrance animation on every new save (tracked via `nonce`).
  */
 export function BrainNoticePill() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const count = useBrainNotice((s) => s.count);
   const nonce = useBrainNotice((s) => s.nonce);
   const dismiss = useBrainNotice((s) => s.dismiss);
@@ -52,23 +55,23 @@ export function BrainNoticePill() {
       ]}
     >
       <Pressable style={styles.pill} onPress={open} hitSlop={6}>
-        <Brain size={16} color={colors.violet} strokeWidth={2.2} />
+        <Brain size={16} color={c.violet} strokeWidth={2.2} />
         <Text style={styles.text}>
           {count} {count === 1 ? 'memory' : 'memories'} saved to your Second Brain
         </Text>
-        <ChevronRight size={16} color={colors.violet} strokeWidth={2.4} />
+        <ChevronRight size={16} color={c.violet} strokeWidth={2.4} />
       </Pressable>
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   wrap: { alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6 },
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(124,58,237,0.16)',
-    borderColor: colors.violet, borderWidth: 1,
+    backgroundColor: c.violetDim,
+    borderColor: c.violet, borderWidth: 1,
     borderRadius: radius.full, paddingVertical: 9, paddingHorizontal: 14,
   },
-  text: { color: colors.text, fontSize: 13, fontFamily: fonts.sansSemibold },
+  text: { color: c.text, fontSize: 13, fontFamily: fonts.sansSemibold },
 });

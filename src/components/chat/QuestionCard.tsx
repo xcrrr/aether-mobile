@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AetherQuestion } from '@/llm/messageParse';
-import { colors, radius, spacing, fonts } from '@/theme';
+import { radius, spacing, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 /**
  * Claude-style elicitation card: a prominent question with tappable option
@@ -15,6 +16,8 @@ export function QuestionCard({ question, answered, onSelect }: {
   answered: boolean;
   onSelect?: (option: string) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [picked, setPicked] = useState<string | null>(null);
   const locked = answered || picked !== null;
 
@@ -51,27 +54,27 @@ export function QuestionCard({ question, answered, onSelect }: {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   card: {
-    backgroundColor: colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
     borderRadius: radius.lg,
     padding: spacing.lg,
     marginTop: 2,
   },
-  question: { color: colors.text, fontSize: 16, lineHeight: 23, fontFamily: fonts.sansSemibold, marginBottom: spacing.md },
+  question: { color: c.text, fontSize: 16, lineHeight: 23, fontFamily: fonts.sansSemibold, marginBottom: spacing.md },
   options: { gap: spacing.sm },
   pill: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.assistantBubble,
+    borderColor: c.border,
+    backgroundColor: c.assistantBubble,
     borderRadius: radius.full,
     paddingVertical: 11,
     paddingHorizontal: 16,
   },
-  pillPicked: { backgroundColor: colors.violet, borderColor: colors.violet },
+  pillPicked: { backgroundColor: c.violet, borderColor: c.violet },
   pillMuted: { opacity: 0.4 },
-  pillLabel: { color: colors.text, fontSize: 14, fontFamily: fonts.sansMedium },
-  pillLabelPicked: { color: colors.white },
+  pillLabel: { color: c.text, fontSize: 14, fontFamily: fonts.sansMedium },
+  pillLabelPicked: { color: c.white },
 });

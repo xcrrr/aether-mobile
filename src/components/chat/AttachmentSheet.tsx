@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, View, Text, Pressable, StyleSheet } from 'react-native';
 import { Camera, Image as ImageIcon, FileText, ClipboardPaste, X } from 'lucide-react-native';
 import { clipboardHasImage } from '@/files/picker';
-import { colors, radius, spacing, fonts } from '@/theme';
+import { radius, spacing, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 interface Row {
   key: string;
@@ -20,6 +21,8 @@ export function AttachmentSheet({ visible, onClose, onCamera, onLibrary, onFiles
   onFiles: () => void;
   onPaste: () => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [hasImage, setHasImage] = useState(false);
 
   useEffect(() => {
@@ -32,12 +35,12 @@ export function AttachmentSheet({ visible, onClose, onCamera, onLibrary, onFiles
   const pick = (fn: () => void) => () => { onClose(); fn(); };
 
   const rows: Row[] = [
-    { key: 'camera', icon: <Camera size={20} color={colors.violet} />, label: 'Camera', sub: 'Take a photo to ask about', onPress: pick(onCamera) },
-    { key: 'library', icon: <ImageIcon size={20} color={colors.violet} />, label: 'Photo Library', sub: 'Choose an existing image', onPress: pick(onLibrary) },
-    { key: 'files', icon: <FileText size={20} color={colors.violet} />, label: 'Files', sub: 'PDF, Word, text, and more', onPress: pick(onFiles) },
+    { key: 'camera', icon: <Camera size={20} color={c.violet} />, label: 'Camera', sub: 'Take a photo to ask about', onPress: pick(onCamera) },
+    { key: 'library', icon: <ImageIcon size={20} color={c.violet} />, label: 'Photo Library', sub: 'Choose an existing image', onPress: pick(onLibrary) },
+    { key: 'files', icon: <FileText size={20} color={c.violet} />, label: 'Files', sub: 'PDF, Word, text, and more', onPress: pick(onFiles) },
   ];
   if (hasImage) {
-    rows.push({ key: 'paste', icon: <ClipboardPaste size={20} color={colors.violet} />, label: 'Paste image', sub: 'Use the image on your clipboard', onPress: pick(onPaste) });
+    rows.push({ key: 'paste', icon: <ClipboardPaste size={20} color={c.violet} />, label: 'Paste image', sub: 'Use the image on your clipboard', onPress: pick(onPaste) });
   }
 
   return (
@@ -48,7 +51,7 @@ export function AttachmentSheet({ visible, onClose, onCamera, onLibrary, onFiles
           <View style={styles.headerRow}>
             <Text style={styles.title}>Attach</Text>
             <Pressable onPress={onClose} hitSlop={10}>
-              <X size={20} color={colors.textMuted} />
+              <X size={20} color={c.textMuted} />
             </Pressable>
           </View>
           {rows.map((r) => (
@@ -66,18 +69,18 @@ export function AttachmentSheet({ visible, onClose, onCamera, onLibrary, onFiles
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: colors.scrim, justifyContent: 'flex-end' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: c.scrim, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: colors.bgCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
+    backgroundColor: c.bgCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl,
-    borderTopWidth: 1, borderColor: colors.border,
+    borderTopWidth: 1, borderColor: c.border,
   },
-  handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.md },
+  handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: c.border, marginBottom: spacing.md },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  title: { fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.text },
+  title: { fontFamily: fonts.sansSemibold, fontSize: 16, color: c.text },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
-  iconWrap: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.assistantBubble, alignItems: 'center', justifyContent: 'center' },
-  rowLabel: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.text },
-  rowSub: { fontFamily: fonts.sans, fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  iconWrap: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.assistantBubble, alignItems: 'center', justifyContent: 'center' },
+  rowLabel: { fontFamily: fonts.sansMedium, fontSize: 15, color: c.text },
+  rowSub: { fontFamily: fonts.sans, fontSize: 12, color: c.textMuted, marginTop: 1 },
 });

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Image, Animated, StyleSheet, Easing } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { ProgressBar } from './ProgressBar';
 import { LOGO_PURPLE } from '@/components/ds/Logo';
-import { colors, radius, spacing, fonts } from '@/theme';
+import { radius, spacing, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 const MESSAGES = [
   'Initializing neural engine…', 'Loading model weights…',
@@ -17,6 +18,8 @@ const CIRC = 2 * Math.PI * R;
 export function ModelLoadingOverlay({ modelName, sizeLabel, sizeGb }: {
   modelName: string; sizeLabel: string; sizeGb: number;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [pct, setPct] = useState(0);
   const [msg, setMsg] = useState(0);
   const ref = useRef(0);
@@ -44,10 +47,10 @@ export function ModelLoadingOverlay({ modelName, sizeLabel, sizeGb }: {
           <View style={styles.glow} />
           <Animated.View style={{ transform: [{ rotate }] }}>
             <Svg width={RING} height={RING}>
-              <Circle cx={RING / 2} cy={RING / 2} r={R} stroke={colors.assistantBubble} strokeWidth={3} fill="none" />
+              <Circle cx={RING / 2} cy={RING / 2} r={R} stroke={c.assistantBubble} strokeWidth={3} fill="none" />
               <Circle
                 cx={RING / 2} cy={RING / 2} r={R}
-                stroke={colors.violet} strokeWidth={3} fill="none"
+                stroke={c.violet} strokeWidth={3} fill="none"
                 strokeDasharray={`${CIRC * 0.7} ${CIRC}`} strokeLinecap="round"
               />
             </Svg>
@@ -69,14 +72,14 @@ export function ModelLoadingOverlay({ modelName, sizeLabel, sizeGb }: {
     </View>
   );
 }
-const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.scrim, justifyContent: 'center', alignItems: 'center', zIndex: 50 },
-  card: { width: '82%', maxWidth: 300, backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.xl, paddingHorizontal: 28, paddingTop: 34, paddingBottom: 26, alignItems: 'center', gap: 20 },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: c.scrim, justifyContent: 'center', alignItems: 'center', zIndex: 50 },
+  card: { width: '82%', maxWidth: 300, backgroundColor: c.bgCard, borderColor: c.border, borderWidth: 1, borderRadius: radius.xl, paddingHorizontal: 28, paddingTop: 34, paddingBottom: 26, alignItems: 'center', gap: 20 },
   ringBox: { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
-  glow: { position: 'absolute', width: 78, height: 78, borderRadius: 39, backgroundColor: 'rgba(124,58,237,0.35)' },
+  glow: { position: 'absolute', width: 78, height: 78, borderRadius: 39, backgroundColor: c.violetDim },
   logo: { position: 'absolute', width: 38, height: 38 },
-  model: { color: colors.text, fontSize: 15, fontFamily: fonts.sansBold },
-  pct: { color: colors.violet, fontSize: 26, fontFamily: fonts.sansHeavy, letterSpacing: -0.3 },
-  msg: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sans, minHeight: 18, textAlign: 'center' },
-  size: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sans, marginTop: -spacing.md },
+  model: { color: c.text, fontSize: 15, fontFamily: fonts.sansBold },
+  pct: { color: c.violet, fontSize: 26, fontFamily: fonts.sansHeavy, letterSpacing: -0.3 },
+  msg: { color: c.textMuted, fontSize: 13, fontFamily: fonts.sans, minHeight: 18, textAlign: 'center' },
+  size: { color: c.textMuted, fontSize: 12, fontFamily: fonts.sans, marginTop: -spacing.md },
 });
