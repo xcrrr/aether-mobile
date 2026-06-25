@@ -11,6 +11,17 @@ export async function saveProfile(profile: UserProfile): Promise<void> {
   await AsyncStorage.setItem(KEYS.profile, JSON.stringify(profile));
 }
 
+export type ThemePref = 'light' | 'dark' | 'system';
+
+export async function loadThemePref(): Promise<ThemePref> {
+  const v = await AsyncStorage.getItem(KEYS.themePref);
+  return v === 'light' || v === 'dark' || v === 'system' ? v : 'dark';
+}
+
+export async function saveThemePref(pref: ThemePref): Promise<void> {
+  await AsyncStorage.setItem(KEYS.themePref, pref);
+}
+
 export async function isOnboardingComplete(): Promise<boolean> {
   return (await AsyncStorage.getItem(KEYS.onboardingComplete)) === 'true';
 }

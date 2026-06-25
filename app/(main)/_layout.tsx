@@ -1,17 +1,19 @@
 import { Drawer } from 'expo-router/drawer';
 import { SidebarContent } from '@/components/sidebar/SidebarContent';
-import { colors, fonts } from '@/theme';
+import { fonts } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 export default function MainLayout() {
+  const c = useColors();
   return (
     <Drawer
       drawerContent={(props) => <SidebarContent {...props} />}
       screenOptions={{
-        headerStyle: { backgroundColor: colors.bg, shadowColor: 'transparent', elevation: 0 },
-        headerTintColor: colors.text,
+        headerStyle: { backgroundColor: c.bg, shadowColor: 'transparent', elevation: 0 },
+        headerTintColor: c.text,
         headerTitleStyle: { fontFamily: fonts.sansHeavy, fontSize: 19, letterSpacing: -0.3 },
-        drawerStyle: { backgroundColor: colors.bgSidebar, width: 300 },
-        sceneStyle: { backgroundColor: colors.bg },
+        drawerStyle: { backgroundColor: c.bgSidebar, width: 300 },
+        sceneStyle: { backgroundColor: c.bg },
       }}
     >
       <Drawer.Screen name="index" options={{ title: 'Aether', headerTitle: () => null }} />
