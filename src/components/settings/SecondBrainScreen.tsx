@@ -181,49 +181,15 @@ export default function SecondBrainScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.xl }}>
-        <Text style={styles.subtitle}>
-          Aether's memory of you — learned automatically after every message, fully private, stored only on this device.
-        </Text>
-
-        {/* ── Enable card ── */}
-        <View style={styles.card}>
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.toggleLabel}>Enable Core</Text>
-              <Text style={styles.toggleHint}>
-                On: every message is analysed automatically and memories are used in all chats. Off: nothing is learned or used.
-              </Text>
-            </View>
-            <Switch
-              value={enabled}
-              onValueChange={setEnabled}
-              trackColor={{ false: c.border, true: c.violet }}
-              thumbColor={c.white}
-            />
-          </View>
-        </View>
-
         {/* ── New-memory banner (after a chat just taught Aether something) ── */}
         {recentKeys.length > 0 && (
           <View style={styles.recentBanner}>
             <Sparkles size={16} color={c.violet} strokeWidth={2.4} />
             <Text style={styles.recentText}>
-              {recentKeys.length} new {recentKeys.length === 1 ? 'memory' : 'memories'} from your last chat — glowing in the graph below.
+              {recentKeys.length} new {recentKeys.length === 1 ? 'memory' : 'memories'} from your last chat — glowing in the graph.
             </Text>
           </View>
         )}
-
-        {/* ── Status card ── */}
-        <View style={styles.card}>
-          <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>Last extraction</Text>
-            <Text style={styles.statusValue}>{formatTime(lastExtractionAt)}</Text>
-          </View>
-          <View style={[styles.statusRow, { marginBottom: 0 }]}>
-            <Text style={styles.statusLabel}>Conversations analyzed</Text>
-            <Text style={styles.statusValue}>{totalAnalyzed}</Text>
-          </View>
-        </View>
 
         {/* ── Empty state ── */}
         {!hasEntries ? (
@@ -232,6 +198,26 @@ export default function SecondBrainScreen() {
           </Text>
         ) : (
           <>
+            {/* ── Globe first — the graph is the point of this screen ── */}
+            {view === 'graph' && (
+              <View style={styles.graphContainer}>
+                <GraphErrorBoundary>
+                  <Graph3D
+                    data={graphData}
+                    onNodeTap={onNodeTap}
+                    focusKey={selected?.key ?? null}
+                  />
+                </GraphErrorBoundary>
+                <Pressable
+                  style={styles.expandBtn}
+                  onPress={() => setFullscreen(true)}
+                  hitSlop={4}
+                >
+                  <Maximize2 size={16} color={c.text} strokeWidth={2} />
+                </Pressable>
+              </View>
+            )}
+
             {/* ── Search + Add row ── */}
             <View style={styles.searchRow}>
               <TextInput
@@ -273,25 +259,8 @@ export default function SecondBrainScreen() {
               })}
             </View>
 
-            {/* ── Graph or List ── */}
-            {view === 'graph' ? (
-              <View style={styles.graphContainer}>
-                <GraphErrorBoundary>
-                  <Graph3D
-                    data={graphData}
-                    onNodeTap={onNodeTap}
-                    focusKey={selected?.key ?? null}
-                  />
-                </GraphErrorBoundary>
-                <Pressable
-                  style={styles.expandBtn}
-                  onPress={() => setFullscreen(true)}
-                  hitSlop={4}
-                >
-                  <Maximize2 size={16} color={c.text} strokeWidth={2} />
-                </Pressable>
-              </View>
-            ) : (
+            {/* ── List view ── */}
+            {view === 'list' && (
               grouped.length === 0 ? (
                 <Text style={styles.empty}>No entries match your search.</Text>
               ) : (
@@ -334,6 +303,39 @@ export default function SecondBrainScreen() {
             </View>
           </>
         )}
+
+        {/* ── Details (secondary — kept out of the way, below the graph) ── */}
+        <Text style={styles.subtitle}>
+          Aether's memory of you — learned automatically, fully private, stored only on this device.
+        </Text>
+
+        <View style={styles.card}>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleLabel}>Enable Core</Text>
+              <Text style={styles.toggleHint}>
+                On: important things you say are remembered and used in all chats. Off: nothing is learned or used.
+              </Text>
+            </View>
+            <Switch
+              value={enabled}
+              onValueChange={setEnabled}
+              trackColor={{ false: c.border, true: c.violet }}
+              thumbColor={c.white}
+            />
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>Last extraction</Text>
+            <Text style={styles.statusValue}>{formatTime(lastExtractionAt)}</Text>
+          </View>
+          <View style={[styles.statusRow, { marginBottom: 0 }]}>
+            <Text style={styles.statusLabel}>Conversations analyzed</Text>
+            <Text style={styles.statusValue}>{totalAnalyzed}</Text>
+          </View>
+        </View>
 
         <Text style={styles.footer}>
           Memory is extracted on-device by your local model.{'\n'}Nothing is ever sent to a server.

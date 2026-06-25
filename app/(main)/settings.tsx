@@ -48,7 +48,7 @@ export default function Settings() {
     <SafeAreaView style={styles.c} edges={['top']}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10}><Text style={styles.back}>‹</Text></Pressable>
-        <Text style={styles.title}>Settings & Storage</Text>
+        <Text style={styles.title}>Settings</Text>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.xl }}>

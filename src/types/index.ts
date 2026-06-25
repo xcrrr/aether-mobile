@@ -46,6 +46,9 @@ export interface ConversationMeta {
   createdAt: number;
   updatedAt: number;
   preview: string;
+  /** Set once a real title is locked in (AI-generated). Stops the provisional
+   *  first-message title from clobbering it on later saves. */
+  titled?: boolean;
 }
 
 export interface UserProfile {

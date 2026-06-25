@@ -14,6 +14,28 @@ const MIN_USER_MESSAGES = 1;
 const MAX_EXTRACT_TOKENS = 320;
 const EXTRACT_TEMPERATURE = 0.1;
 
+// Don't even run inference on trivial exchanges (greetings, one-word replies).
+// This is what stops the brain "fetching on every message" — a plain "hi" never
+// reaches the model, so nothing churns and nothing junk gets saved.
+const MIN_SUBSTANCE_CHARS = 12;
+const GREETING_ONLY = /^(hi+|hey+|hello+|yo+|sup|hiya|howdy|heya|good\s?(morning|evening|afternoon|night)|thanks?|thank\s?you|thx|ty|ok(ay)?|k|cool|nice|great|lol|lmao|test+|yes|yeah|yep|sure|no+|nope|y|n|hmm+|wassup|what'?s\s?up)[\s!.,?]*$/i;
+
+// Only persist genuinely confident facts. Low-confidence guesses are the "random
+// bullshit" — drop them so memory stays high-signal.
+const MIN_SAVE_CONFIDENCE = 0.7;
+
+/** True only when the user has said something worth analysing. Drops
+ *  greeting-only messages first, then requires real content in what's left — so
+ *  "hi" / "hey there" never trigger inference, but "i love climbing" does. */
+function hasSubstance(userMessages: Message[]): boolean {
+  const text = userMessages
+    .map((m) => m.content.trim())
+    .filter((t) => t && !GREETING_ONLY.test(t))
+    .join(' ')
+    .trim();
+  return text.length >= MIN_SUBSTANCE_CHARS;
+}
+
 // Keep the transcript well inside the model context so the extraction completion
 // never silently overflows (which would return no result → nothing saved).
 const MAX_TRANSCRIPT_CHARS = 4000;
@@ -26,6 +48,9 @@ const PROMPT_TEMPLATE =
   'projects, skills, preferences, goals, important people, and ongoing ' +
   'situations. Ignore one-off questions, general knowledge, and anything about ' +
   'the assistant.\n\n' +
+  'Be strict and minimal: extract ONLY high-value, durable facts. Skip ' +
+  'greetings, small talk, pleasantries, and anything trivial or low-confidence. ' +
+  'If the conversation contains nothing important about the user, output empty arrays.\n\n' +
   'Output ONLY raw JSON (no prose, no markdown fences) as an object with two keys: ' +
   '"facts" (array; each item has exactly "category", "key", "value", "confidence") and ' +
   '"links" (array; each item has "from_key", "to_key", "relation" — a short relationship ' +
@@ -203,6 +228,9 @@ export async function extractFromConversation(
   if (!MemoryStore.isEnabled()) return 0;
   const userMessages = messages.filter((m) => m.role === 'user');
   if (userMessages.length < MIN_USER_MESSAGES) return 0;
+  // Skip trivial exchanges entirely (no inference, no churn). A manual "Analyze
+  // now" (force) always runs.
+  if (!opts.force && !hasSubstance(userMessages)) return 0;
 
   let response: string | null;
   try {
@@ -225,6 +253,8 @@ export async function extractFromConversation(
   for (const raw of rawEntries) {
     const entry = validateEntry(raw);
     if (!entry) continue;
+    // Drop low-confidence guesses — keep memory high-signal.
+    if (entry.confidence < MIN_SAVE_CONFIDENCE) continue;
     MemoryStore.addOrUpdateEntry({ ...entry, sourceConversationId: conversationId });
     appliedKeys.push(entry.key);
     applied += 1;

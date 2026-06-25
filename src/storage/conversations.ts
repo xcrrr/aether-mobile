@@ -76,11 +76,21 @@ export async function saveConversation(convo: Conversation): Promise<void> {
       ...index[i],
       modelId: convo.modelId,
       updatedAt: Date.now(),
-      title: firstUser ? firstUser.content.slice(0, 40) : index[i].title,
+      // Provisional title from the first message — only until a real AI title is locked in.
+      title: index[i].titled ? index[i].title : (firstUser ? firstUser.content.slice(0, 40) : index[i].title),
       preview: last ? last.content.slice(0, 60) : '',
     };
     await saveIndex(index);
   }
+}
+
+/** Lock in a final (AI-generated) title for a conversation. */
+export async function setConversationTitle(id: string, title: string): Promise<void> {
+  const index = await loadIndex();
+  const i = index.findIndex((m) => m.id === id);
+  if (i < 0) return;
+  index[i] = { ...index[i], title, titled: true };
+  await saveIndex(index);
 }
 
 export async function deleteConversation(id: string): Promise<void> {

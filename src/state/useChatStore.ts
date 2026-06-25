@@ -2,9 +2,11 @@ import { create } from 'zustand';
 import { Conversation, ConversationMeta, Message, FileAttachment } from '@/types';
 import {
   loadIndex, loadConversation, saveConversation, createConversation, deleteConversation,
+  setConversationTitle,
 } from '@/storage/conversations';
 import * as Llama from '@/llm/engine';
 import { stripSpecialTokens } from '@/llm/prompt';
+import { generateTitle } from '@/llm/title';
 
 interface ChatState {
   index: ConversationMeta[];
@@ -21,6 +23,8 @@ interface ChatState {
   /** Replace the in-progress assistant message's content outright (research mode). */
   setAssistantContent: (content: string) => void;
   finishAssistant: () => Promise<void>;
+  /** Auto-name the current conversation (once) from its first exchange. */
+  ensureTitle: () => Promise<void>;
   setGenerating: (g: boolean) => void;
   /** Abort the in-flight reply, keep the partial text, mark it "(stopped)". */
   stopGeneration: () => void;
@@ -105,6 +109,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const updated = { ...c, messages };
     set({ current: updated });
     await saveConversation(updated);
+    await get().refreshIndex();
+  },
+  ensureTitle: async () => {
+    const c = get().current;
+    if (!c) return;
+    const meta = get().index.find((m) => m.id === c.id);
+    if (meta?.titled) return;
+    if (!c.messages.some((m) => m.role === 'assistant' && m.content.trim())) return;
+    const title = await generateTitle(c.messages);
+    if (!title) return;
+    await setConversationTitle(c.id, title);
     await get().refreshIndex();
   },
   setGenerating: (g) => set({ isGenerating: g }),

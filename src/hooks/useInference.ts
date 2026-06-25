@@ -110,7 +110,12 @@ export function useInference(modelId: string | undefined) {
       messages,
       (token) => useChatStore.getState().appendToken(token),
       () => {
-        void useChatStore.getState().finishAssistant().then(queueMemoryExtraction);
+        // Auto-name the chat first (context is free right after the reply), then
+        // queue best-effort memory extraction.
+        void useChatStore.getState().finishAssistant().then(async () => {
+          await useChatStore.getState().ensureTitle();
+          queueMemoryExtraction();
+        });
       },
       (e) => {
         useChatStore.getState().appendToken(`\n\n_Error: ${e}_`);
