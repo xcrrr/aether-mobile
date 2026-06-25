@@ -1,17 +1,30 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View, ScrollView, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import { MODELS } from '@/models/registry';
 import * as MM from '@/models/ModelManager';
 import { useModelStore } from '@/state/useModelStore';
+import { useProfileStore } from '@/state/useProfileStore';
 import * as Llama from '@/llm/engine';
 import { StorageBar, StorageSegment } from '@/components/settings/StorageBar';
 import { ModelManagerRow } from '@/components/settings/ModelManagerRow';
-import { colors, spacing, fonts } from '@/theme';
+import { ThemePref } from '@/storage/profile';
+import { spacing, fonts, radius, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
+
+const THEME_OPTIONS: { id: ThemePref; label: string }[] = [
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+  { id: 'system', label: 'System' },
+];
 
 export default function Settings() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const { installed, downloads, download, cancel, remove } = useModelStore();
+  const themePref = useProfileStore((s) => s.themePref);
+  const setThemePref = useProfileStore((s) => s.setThemePref);
   const [disk, setDisk] = useState({ total: 0, free: 0, used: 0 });
 
   const refresh = useCallback(() => {
@@ -29,7 +42,7 @@ export default function Settings() {
     .map((m) => ({ label: m.name, gb: m.sizeBytes / 1e9, color: m.color }));
   const modelsGb = modelSegments.reduce((a, s) => a + s.gb, 0);
   const otherGb = Math.max(0, usedGb - modelsGb);
-  const segments: StorageSegment[] = [...modelSegments, { label: 'Other apps', gb: otherGb, color: colors.textMuted }];
+  const segments: StorageSegment[] = [...modelSegments, { label: 'Other apps', gb: otherGb, color: c.textMuted }];
 
   return (
     <SafeAreaView style={styles.c} edges={['top']}>
@@ -39,6 +52,25 @@ export default function Settings() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.xl }}>
+        <View>
+          <Text style={styles.label}>Appearance</Text>
+          <View style={styles.segment}>
+            {THEME_OPTIONS.map((opt) => {
+              const active = themePref === opt.id;
+              return (
+                <Pressable
+                  key={opt.id}
+                  style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                  onPress={() => { void setThemePref(opt.id); }}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.navHint}>System follows your device's light/dark setting.</Text>
+        </View>
+
         <View>
           <Text style={styles.label}>Device storage</Text>
           <View style={styles.storageCard}>
@@ -83,28 +115,24 @@ export default function Settings() {
     </SafeAreaView>
   );
 }
-const styles = StyleSheet.create({
-  c: { flex: 1, backgroundColor: colors.bg },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  c: { flex: 1, backgroundColor: c.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: spacing.lg, paddingVertical: 14 },
-  back: { fontSize: 28, color: colors.text, lineHeight: 30 },
-  title: { color: colors.text, fontSize: 20, fontFamily: fonts.displayBold },
-  label: { color: colors.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md, fontFamily: fonts.sansSemibold },
+  back: { fontSize: 28, color: c.text, lineHeight: 30 },
+  title: { color: c.text, fontSize: 20, fontFamily: fonts.displayBold },
+  label: { color: c.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md, fontFamily: fonts.sansSemibold },
+  segment: { flexDirection: 'row', backgroundColor: c.bgInput, borderRadius: radius.md, overflow: 'hidden', padding: 3, gap: 3 },
+  segmentBtn: { flex: 1, paddingVertical: 9, borderRadius: radius.sm, alignItems: 'center' },
+  segmentBtnActive: { backgroundColor: c.violet },
+  segmentText: { color: c.textMuted, fontSize: 13, fontFamily: fonts.sansSemibold },
+  segmentTextActive: { color: c.white },
   navRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm },
-  navTitle: { color: colors.text, fontSize: 15, fontFamily: fonts.display },
-  navHint: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sans, marginTop: 3 },
-  navChevron: { color: colors.textMuted, fontSize: 24, lineHeight: 26 },
-  visionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: spacing.md, marginBottom: spacing.sm },
-  visionIcon: { width: 38, height: 38, borderRadius: 10, backgroundColor: colors.assistantBubble, alignItems: 'center', justifyContent: 'center' },
-  visionTitle: { color: colors.text, fontSize: 14, fontFamily: fonts.sansSemibold },
-  visionMeta: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sans, marginTop: 2 },
-  visionBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: colors.border },
-  visionBtnPrimary: { backgroundColor: colors.violet, borderColor: colors.violet },
-  visionBtnText: { fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.text },
-  visionIconBtn: { padding: 8 },
-  visionHint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, fontFamily: fonts.sans, marginTop: 4 },
+  navTitle: { color: c.text, fontSize: 15, fontFamily: fonts.display },
+  navHint: { color: c.textMuted, fontSize: 12, fontFamily: fonts.sans, marginTop: spacing.sm },
+  navChevron: { color: c.textMuted, fontSize: 24, lineHeight: 26 },
   storageCard: { paddingVertical: spacing.xs },
   storageHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
-  used: { color: colors.text, fontSize: 14, fontFamily: fonts.sansBold },
-  total: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sans },
-  footer: { textAlign: 'center', color: colors.textMuted, fontSize: 12, lineHeight: 19, fontFamily: fonts.sans },
+  used: { color: c.text, fontSize: 14, fontFamily: fonts.sansBold },
+  total: { color: c.textMuted, fontSize: 13, fontFamily: fonts.sans },
+  footer: { textAlign: 'center', color: c.textMuted, fontSize: 12, lineHeight: 19, fontFamily: fonts.sans },
 });

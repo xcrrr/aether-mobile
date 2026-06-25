@@ -11,7 +11,8 @@ import { router } from 'expo-router';
 import { Trash2, Plus, Maximize2, X, Sparkles } from 'lucide-react-native';
 import { useMemoryStore } from '@/secondbrain/MemoryStore';
 import { MemoryCategory, MemoryEntry, MEMORY_CATEGORIES } from '@/secondbrain/types';
-import { colors, spacing, fonts, radius } from '@/theme';
+import { spacing, fonts, radius, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 function formatTime(ms: number): string {
   if (!ms) return 'Never';
@@ -28,6 +29,8 @@ function groupByCategory(entries: MemoryEntry[]): [MemoryCategory, MemoryEntry[]
 }
 
 export default function SecondBrainScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   // ─── Store selectors ───────────────────────────────────────────────────────
   const enabled = useMemoryStore((s) => s.enabled);
   const setEnabled = useMemoryStore((s) => s.setEnabled);
@@ -194,8 +197,8 @@ export default function SecondBrainScreen() {
             <Switch
               value={enabled}
               onValueChange={setEnabled}
-              trackColor={{ false: colors.border, true: colors.violet }}
-              thumbColor={colors.white}
+              trackColor={{ false: c.border, true: c.violet }}
+              thumbColor={c.white}
             />
           </View>
         </View>
@@ -203,7 +206,7 @@ export default function SecondBrainScreen() {
         {/* ── New-memory banner (after a chat just taught Aether something) ── */}
         {recentKeys.length > 0 && (
           <View style={styles.recentBanner}>
-            <Sparkles size={16} color={colors.violet} strokeWidth={2.4} />
+            <Sparkles size={16} color={c.violet} strokeWidth={2.4} />
             <Text style={styles.recentText}>
               {recentKeys.length} new {recentKeys.length === 1 ? 'memory' : 'memories'} from your last chat — glowing in the graph below.
             </Text>
@@ -234,7 +237,7 @@ export default function SecondBrainScreen() {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search memories…"
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor={c.textMuted}
                 value={query}
                 onChangeText={setQuery}
                 clearButtonMode="while-editing"
@@ -243,7 +246,7 @@ export default function SecondBrainScreen() {
                 autoCorrect={false}
               />
               <Pressable style={styles.addFactBtn} onPress={() => setAddOpen(true)} hitSlop={4}>
-                <Plus size={15} color={colors.violet} strokeWidth={2.5} />
+                <Plus size={15} color={c.violet} strokeWidth={2.5} />
                 <Text style={styles.addFactLabel}>Add fact</Text>
               </Pressable>
             </View>
@@ -285,7 +288,7 @@ export default function SecondBrainScreen() {
                   onPress={() => setFullscreen(true)}
                   hitSlop={4}
                 >
-                  <Maximize2 size={16} color={colors.text} strokeWidth={2} />
+                  <Maximize2 size={16} color={c.text} strokeWidth={2} />
                 </Pressable>
               </View>
             ) : (
@@ -309,7 +312,7 @@ export default function SecondBrainScreen() {
                           hitSlop={8}
                           style={styles.trash}
                         >
-                          <Trash2 size={18} color={colors.textMuted} />
+                          <Trash2 size={18} color={c.textMuted} />
                         </Pressable>
                       </Pressable>
                     ))}
@@ -354,7 +357,7 @@ export default function SecondBrainScreen() {
                   onChangeText={setDraft}
                   multiline
                   placeholder="Value…"
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={c.textMuted}
                   autoFocus
                 />
                 <Text style={[styles.confidenceText, { marginTop: 8 }]}>
@@ -365,7 +368,7 @@ export default function SecondBrainScreen() {
                     <Text style={styles.modalBtnCancelText}>Cancel</Text>
                   </Pressable>
                   <Pressable style={styles.modalBtnDelete} onPress={deleteSelected}>
-                    <Trash2 size={14} color={colors.danger} strokeWidth={2} />
+                    <Trash2 size={14} color={c.danger} strokeWidth={2} />
                     <Text style={styles.modalBtnDeleteText}>Delete</Text>
                   </Pressable>
                   <Pressable
@@ -389,7 +392,7 @@ export default function SecondBrainScreen() {
             <View style={styles.modalHeaderRow}>
               <Text style={styles.modalTitle}>Add a fact</Text>
               <Pressable onPress={closeAdd} hitSlop={8}>
-                <X size={18} color={colors.textMuted} />
+                <X size={18} color={c.textMuted} />
               </Pressable>
             </View>
 
@@ -416,7 +419,7 @@ export default function SecondBrainScreen() {
             <TextInput
               style={styles.searchInput}
               placeholder="e.g. favorite_color"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={c.textMuted}
               value={addKey}
               onChangeText={setAddKey}
               autoCapitalize="none"
@@ -428,7 +431,7 @@ export default function SecondBrainScreen() {
             <TextInput
               style={[styles.editInput, { marginBottom: 0 }]}
               placeholder="The fact to remember…"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={c.textMuted}
               value={addVal}
               onChangeText={setAddVal}
               multiline
@@ -456,7 +459,7 @@ export default function SecondBrainScreen() {
           <View style={styles.fullscreenHeader}>
             <Text style={styles.title}>Second Brain</Text>
             <Pressable onPress={() => setFullscreen(false)} hitSlop={8} style={styles.closeBtn}>
-              <X size={20} color={colors.text} strokeWidth={2} />
+              <X size={20} color={c.text} strokeWidth={2} />
             </Pressable>
           </View>
           <View style={{ flex: 1 }}>
@@ -470,101 +473,101 @@ export default function SecondBrainScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  c: { flex: 1, backgroundColor: colors.bg },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  c: { flex: 1, backgroundColor: c.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: spacing.lg, paddingVertical: 14 },
-  back: { fontSize: 28, color: colors.text, lineHeight: 30 },
-  title: { color: colors.text, fontSize: 20, fontFamily: fonts.displayBold, flex: 1 },
-  subtitle: { color: colors.textMuted, fontSize: 13, lineHeight: 19, fontFamily: fonts.sans },
+  back: { fontSize: 28, color: c.text, lineHeight: 30 },
+  title: { color: c.text, fontSize: 20, fontFamily: fonts.displayBold, flex: 1 },
+  subtitle: { color: c.textMuted, fontSize: 13, lineHeight: 19, fontFamily: fonts.sans },
 
   // Flat sections — no card, no border (Claude-style on black).
   card: { paddingVertical: spacing.xs },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  toggleLabel: { color: colors.text, fontSize: 15, fontFamily: fonts.display },
-  toggleHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17, fontFamily: fonts.sans, marginTop: 3 },
+  toggleLabel: { color: c.text, fontSize: 15, fontFamily: fonts.display },
+  toggleHint: { color: c.textMuted, fontSize: 12, lineHeight: 17, fontFamily: fonts.sans, marginTop: 3 },
 
   // New-memory banner — subtle violet wash, no border.
-  recentBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.violetDim, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: spacing.md },
-  recentText: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 18, fontFamily: fonts.sansMedium },
+  recentBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: c.violetDim, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: spacing.md },
+  recentText: { flex: 1, color: c.text, fontSize: 13, lineHeight: 18, fontFamily: fonts.sansMedium },
 
   // Status card
   statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  statusLabel: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sans },
-  statusValue: { color: colors.text, fontSize: 13, fontFamily: fonts.sansMedium },
+  statusLabel: { color: c.textMuted, fontSize: 13, fontFamily: fonts.sans },
+  statusValue: { color: c.text, fontSize: 13, fontFamily: fonts.sansMedium },
 
   // Segment control
-  segment: { flexDirection: 'row', marginLeft: 'auto', backgroundColor: colors.bgInput, borderRadius: radius.md, overflow: 'hidden' },
+  segment: { flexDirection: 'row', marginLeft: 'auto', backgroundColor: c.bgInput, borderRadius: radius.md, overflow: 'hidden' },
   segmentBtn: { paddingHorizontal: spacing.md, paddingVertical: 6 },
-  segmentBtnActive: { backgroundColor: colors.violet },
-  segmentText: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sansSemibold },
-  segmentTextActive: { color: colors.white },
+  segmentBtnActive: { backgroundColor: c.violet },
+  segmentText: { color: c.textMuted, fontSize: 12, fontFamily: fonts.sansSemibold },
+  segmentTextActive: { color: c.white },
 
   // Search + add row
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchInput: {
     flex: 1,
-    backgroundColor: colors.bgInput,
+    backgroundColor: c.bgInput,
     borderRadius: radius.full,
     paddingHorizontal: spacing.md,
     paddingVertical: 9,
-    color: colors.text,
+    color: c.text,
     fontSize: 14,
     fontFamily: fonts.sans,
   },
-  addFactBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: colors.violet, backgroundColor: colors.bgCard },
-  addFactLabel: { color: colors.violet, fontSize: 13, fontFamily: fonts.sansSemibold },
+  addFactBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: c.violet, backgroundColor: c.bgCard },
+  addFactLabel: { color: c.violet, fontSize: 13, fontFamily: fonts.sansSemibold },
 
   // Category chips
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full, backgroundColor: colors.bgInput },
-  chipActive: { backgroundColor: colors.violetDim },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full, backgroundColor: c.bgInput },
+  chipActive: { backgroundColor: c.violetDim },
   chipDot: { width: 8, height: 8, borderRadius: 4 },
-  chipText: { color: colors.textMuted, fontSize: 11, fontFamily: fonts.sansSemibold },
-  chipTextActive: { color: colors.violet },
-  chipCount: { color: colors.textMuted, fontSize: 10, fontFamily: fonts.sans },
-  chipCountActive: { color: colors.violet },
+  chipText: { color: c.textMuted, fontSize: 11, fontFamily: fonts.sansSemibold },
+  chipTextActive: { color: c.violet },
+  chipCount: { color: c.textMuted, fontSize: 10, fontFamily: fonts.sans },
+  chipCountActive: { color: c.violet },
 
   // Graph container
   graphContainer: { height: 420, borderRadius: radius.lg, overflow: 'hidden' },
-  graphFallback: { flex: 1, backgroundColor: colors.bg },
+  graphFallback: { flex: 1, backgroundColor: c.bg },
   expandBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.sm, padding: 7 },
 
   // List rows — flat, separated by a hairline.
-  label: { color: colors.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md, fontFamily: fonts.sansSemibold },
-  entryRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.separator },
-  entryKey: { color: colors.text, fontSize: 15, fontFamily: fonts.display },
-  entryValue: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sans, marginTop: 2 },
+  label: { color: c.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md, fontFamily: fonts.sansSemibold },
+  entryRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: c.separator },
+  entryKey: { color: c.text, fontSize: 15, fontFamily: fonts.display },
+  entryValue: { color: c.textMuted, fontSize: 13, fontFamily: fonts.sans, marginTop: 2 },
   confidence: { paddingHorizontal: spacing.xs, paddingVertical: 3 },
-  confidenceText: { color: colors.violet, fontSize: 11, fontFamily: fonts.sansBold },
+  confidenceText: { color: c.violet, fontSize: 11, fontFamily: fonts.sansBold },
   trash: { padding: 4 },
 
   // Empty state
-  empty: { color: colors.textMuted, fontSize: 13, lineHeight: 19, fontFamily: fonts.sans, textAlign: 'center', paddingVertical: spacing.lg },
+  empty: { color: c.textMuted, fontSize: 13, lineHeight: 19, fontFamily: fonts.sans, textAlign: 'center', paddingVertical: spacing.lg },
 
   // Danger row (clear + purge)
   dangerRow: { gap: spacing.sm },
-  clearBtn: { borderColor: colors.danger, borderWidth: 1, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center', backgroundColor: colors.dangerBg },
-  clearLabel: { color: colors.danger, fontSize: 14, fontFamily: fonts.sansBold },
-  purgeBtn: { borderRadius: radius.md, paddingVertical: 12, alignItems: 'center', backgroundColor: colors.bgInput },
-  purgeLabel: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sansSemibold },
+  clearBtn: { borderColor: c.danger, borderWidth: 1, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center', backgroundColor: c.dangerBg },
+  clearLabel: { color: c.danger, fontSize: 14, fontFamily: fonts.sansBold },
+  purgeBtn: { borderRadius: radius.md, paddingVertical: 12, alignItems: 'center', backgroundColor: c.bgInput },
+  purgeLabel: { color: c.textMuted, fontSize: 13, fontFamily: fonts.sansSemibold },
 
   // Footer
-  footer: { textAlign: 'center', color: colors.textMuted, fontSize: 12, lineHeight: 19, fontFamily: fonts.sans },
+  footer: { textAlign: 'center', color: c.textMuted, fontSize: 12, lineHeight: 19, fontFamily: fonts.sans },
 
   // Edit modal
   modalBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: spacing.xl },
-  modalCard: { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, width: '90%' },
+  modalCard: { backgroundColor: c.bgCard, borderColor: c.border, borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, width: '90%' },
   addModalCard: { width: '95%', maxHeight: '85%' },
   modalHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
-  modalTitle: { color: colors.text, fontSize: 18, fontFamily: fonts.displayBold },
+  modalTitle: { color: c.text, fontSize: 18, fontFamily: fonts.displayBold },
   modalCatRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm },
   editInput: {
-    backgroundColor: colors.bg,
-    borderColor: colors.border,
+    backgroundColor: c.bg,
+    borderColor: c.border,
     borderWidth: 1,
     borderRadius: radius.md,
     padding: spacing.md,
-    color: colors.text,
+    color: c.text,
     fontSize: 14,
     fontFamily: fonts.sans,
     minHeight: 72,
@@ -573,16 +576,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, justifyContent: 'flex-end' },
-  modalBtnCancel: { paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
-  modalBtnCancelText: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sansSemibold },
-  modalBtnDelete: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.md, borderWidth: 1, borderColor: colors.danger, backgroundColor: colors.dangerBg },
-  modalBtnDeleteText: { color: colors.danger, fontSize: 13, fontFamily: fonts.sansSemibold },
-  modalBtnSave: { paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.md, backgroundColor: colors.violet },
-  modalBtnSaveText: { color: colors.white, fontSize: 13, fontFamily: fonts.sansBold },
+  modalBtnCancel: { paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.md, borderWidth: 1, borderColor: c.border },
+  modalBtnCancelText: { color: c.textMuted, fontSize: 13, fontFamily: fonts.sansSemibold },
+  modalBtnDelete: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.md, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerBg },
+  modalBtnDeleteText: { color: c.danger, fontSize: 13, fontFamily: fonts.sansSemibold },
+  modalBtnSave: { paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.md, backgroundColor: c.violet },
+  modalBtnSaveText: { color: c.white, fontSize: 13, fontFamily: fonts.sansBold },
   modalBtnDisabled: { opacity: 0.4 },
 
   // Fullscreen graph modal
-  fullscreenModal: { flex: 1, backgroundColor: colors.bg },
+  fullscreenModal: { flex: 1, backgroundColor: c.bg },
   fullscreenHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: 14 },
   closeBtn: { marginLeft: 'auto' },
 });
