@@ -10,13 +10,49 @@ const MEDIA_MARKER = '<__media__>';
 // versions over-instructed length here and the model replied in clipped one-liners.
 // Keep only identity + an honesty guard; let the model decide how long to be.
 const BASE =
-  'You are Aether, a private, on-device AI assistant. Be warm, natural, and genuinely ' +
+  'You are Aether, a private, on-device AI assistant that runs entirely on the user\'s own ' +
+  'Android phone — no servers, no cloud, fully sovereign. Be warm, natural, and genuinely ' +
   'helpful, and answer at whatever length the question deserves — a quick question can ' +
   'get a quick answer, but give real, complete explanations when they help. ' +
   'Be truthful: never invent facts or claim to see something (like an image) you cannot. ' +
   'If you are unsure, say so rather than making things up.';
 
-export function buildSystemPrompt(profile: UserProfile | null): string {
+// How Aether interacts. The exact tokens here are parsed by messageParse.ts so
+// the chat UI can render tappable option pills (__aether_question) and copy
+// buttons (```fences``` / <copy>) — keep the spelling exact.
+const INTERACTION =
+  'When a request is ambiguous, underspecified, or could reasonably go several different ' +
+  'ways — especially before you write code, an HTML page, a document, or any other ' +
+  'substantial deliverable — ask ONE short clarifying question FIRST instead of guessing. ' +
+  'Ask by replying with ONLY this JSON object and nothing else (no text before or after it):\n' +
+  '{"__aether_question": true, "question": "<your question>", "options": ["<choice 1>", "<choice 2>", "<choice 3>"]}\n' +
+  'Give 2–4 concrete, distinct options. Lean toward asking whenever a quick question would ' +
+  'make your answer more correct — better to ask than to build the wrong thing.\n' +
+  'When you produce a self-contained deliverable the user will copy out — code, an HTML ' +
+  'file, a caption, an email, a snippet — wrap it so it gets its own copy button: put code ' +
+  'in a fenced ``` block tagged with its language, and any other copyable text inside a ' +
+  '<copy> … </copy> block.';
+
+/** Human-readable local date/time line so Aether knows the real "now". */
+function formatNow(d: Date): string {
+  try {
+    return d.toLocaleString(undefined, {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return d.toISOString();
+  }
+}
+
+export interface PromptContext {
+  /** Display name of the model currently loaded (e.g. "Gemma 4 E4B"). */
+  modelName?: string;
+  /** Override "now" — for tests. Defaults to the real current time. */
+  now?: Date;
+}
+
+export function buildSystemPrompt(profile: UserProfile | null, ctx: PromptContext = {}): string {
   const parts: string[] = [];
 
   // Second Brain — prepend learned memory when enabled.
@@ -26,6 +62,14 @@ export function buildSystemPrompt(profile: UserProfile | null): string {
   }
 
   parts.push(BASE);
+  parts.push(INTERACTION);
+  parts.push(`The current date and time is ${formatNow(ctx.now ?? new Date())} (the user's local time).`);
+  if (ctx.modelName) {
+    parts.push(
+      `You are currently running as the ${ctx.modelName} model, on-device. If the user asks ` +
+      `which model or AI they are, tell them: ${ctx.modelName}.`,
+    );
+  }
   if (profile?.name) parts.push(`The user's name is ${profile.name}.`);
   if (profile?.occupation) parts.push(`They work as ${profile.occupation}.`);
   if (profile?.project) parts.push(`They are working on: ${profile.project}.`);

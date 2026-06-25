@@ -13,6 +13,29 @@ describe('prompt assembly', () => {
     expect(s).toContain('Aether');
     expect(s).toContain('English');
   });
+  it('teaches the clarifying-question JSON format and a bias toward asking', () => {
+    const s = buildSystemPrompt(null);
+    expect(s).toContain('"__aether_question": true');
+    expect(s).toMatch(/clarifying question/i);
+  });
+  it('teaches the copyable-deliverable markup', () => {
+    const s = buildSystemPrompt(null);
+    expect(s).toContain('<copy>');
+    expect(s).toMatch(/fenced ``` block/);
+  });
+  it('states the current date/time from the provided clock', () => {
+    const s = buildSystemPrompt(null, { now: new Date('2026-06-25T14:30:00Z') });
+    expect(s).toMatch(/current date and time is .*2026/);
+  });
+  it('tells Aether which model it is running as, when known', () => {
+    const s = buildSystemPrompt(null, { modelName: 'Gemma 4 E4B' });
+    expect(s).toContain('Gemma 4 E4B');
+    expect(s).toMatch(/running as the Gemma 4 E4B model/);
+  });
+  it('omits the model line when the model name is unknown', () => {
+    const s = buildSystemPrompt(null, {});
+    expect(s).not.toMatch(/running as the/);
+  });
   it('prepends system content to the first user turn (Gemma format)', () => {
     const msgs: Message[] = [{ id: '1', role: 'user', content: 'Hi', createdAt: 0 }];
     const p = buildGemmaPrompt('SYS', msgs);

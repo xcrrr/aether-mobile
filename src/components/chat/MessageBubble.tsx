@@ -99,16 +99,23 @@ export function MessageBubble({ message, isLast = false, onOptionSelect }: {
       ) : !stripped || pendingQuestion ? (
         <TypingIndicator />
       ) : (
-        <Pressable onLongPress={copy} delayLongPress={300}>
+        // Prose is wrapped in its own long-press-to-copy Pressable; copy blocks
+        // render as bare siblings, never nested under a Pressable, so their own
+        // copy button receives the tap. A parent Pressable's long-press
+        // responder swallows a child Pressable's onPress under the New
+        // Architecture — that is why the block copy button did nothing before.
+        <View>
           {segmentMessage(stripped).map((seg, i) =>
             seg.type === 'text' ? (
-              <MarkdownView key={i} content={seg.content} />
+              <Pressable key={i} onLongPress={copy} delayLongPress={300}>
+                <MarkdownView content={seg.content} />
+              </Pressable>
             ) : (
               <CopyBlock key={i} content={seg.content} mono={seg.type === 'code'} lang={seg.type === 'code' ? seg.lang : undefined} />
             ),
           )}
           {message.stopped && <Text style={styles.stopped}>(stopped)</Text>}
-        </Pressable>
+        </View>
       )}
     </View>
   );

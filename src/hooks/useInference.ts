@@ -102,7 +102,7 @@ export function useInference(modelId: string | undefined) {
 
   const send = useCallback(async (text: string, attachment?: FileAttachment) => {
     await chat.appendUser(text, attachment ? [attachment] : undefined);
-    const system = buildSystemPrompt(profile);
+    const system = buildSystemPrompt(profile, { modelName: modelId ? getModelById(modelId)?.name : undefined });
     const messages = useChatStore.getState().current?.messages ?? [];
     chat.startAssistant();
     await Llama.generate(
