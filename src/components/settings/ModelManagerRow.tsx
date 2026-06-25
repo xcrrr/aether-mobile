@@ -1,9 +1,11 @@
+import { useMemo } from 'react';
 import { View, Text, StyleSheet, Alert } from 'react-native';
 import { ModelDef } from '@/types';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { Badge } from '@/components/ds/Badge';
 import { Button } from '@/components/ds/Button';
-import { colors, spacing, fonts } from '@/theme';
+import { spacing, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 export function ModelManagerRow({ model, installed, download, onDownload, onCancel, onDelete }: {
   model: ModelDef;
@@ -11,6 +13,8 @@ export function ModelManagerRow({ model, installed, download, onDownload, onCanc
   download?: { pct: number; mbps: number; downloading: boolean };
   onDownload: () => void; onCancel: () => void; onDelete: () => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const confirmDelete = () => Alert.alert(`Delete ${model.name}?`, "You'll need to download it again.",
     [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onDelete }]);
 
@@ -43,11 +47,11 @@ export function ModelManagerRow({ model, installed, download, onDownload, onCanc
     </View>
   );
 }
-const styles = StyleSheet.create({
-  card: { paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.separator },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  card: { paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: c.separator },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.xs },
-  name: { color: colors.text, fontFamily: fonts.sansBold, fontSize: 15 },
-  desc: { color: colors.textMuted, fontSize: 13.5, lineHeight: 21, marginBottom: spacing.md, fontFamily: fonts.display },
+  name: { color: c.text, fontFamily: fonts.sansBold, fontSize: 15 },
+  desc: { color: c.textMuted, fontSize: 13.5, lineHeight: 21, marginBottom: spacing.md, fontFamily: fonts.display },
   footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  meta: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sans },
+  meta: { color: c.textMuted, fontSize: 12, fontFamily: fonts.sans },
 });

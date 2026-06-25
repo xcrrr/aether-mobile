@@ -17,16 +17,20 @@ import {
   PlayfairDisplay_800ExtraBold,
 } from '@expo-google-fonts/playfair-display';
 import * as SystemUI from 'expo-system-ui';
+import { StatusBar } from 'expo-status-bar';
 import { useProfileStore } from '@/state/useProfileStore';
 import { useModelStore } from '@/state/useModelStore';
 import { useChatStore } from '@/state/useChatStore';
 import { colors } from '@/theme';
+import { useColors, useIsDark } from '@/theme/useColors';
 
-// Paint the native root view dark so resizing for the keyboard never flashes
-// the default white window background.
+// Paint the native root view (dark default) so resizing for the keyboard never
+// flashes the default white window background. Re-painted per theme below.
 SystemUI.setBackgroundColorAsync(colors.bg).catch(() => {});
 
 export default function RootLayout() {
+  const c = useColors();
+  const isDark = useIsDark();
   const [ready, setReady] = useState(false);
   const [fontsLoaded] = useFonts({
     'Inter': Inter_400Regular,
@@ -50,10 +54,15 @@ export default function RootLayout() {
     })();
   }, []);
 
-  if (!ready || !fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(c.bg).catch(() => {});
+  }, [c]);
+
+  if (!ready || !fontsLoaded) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardProvider>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <Slot />
       </KeyboardProvider>
     </GestureHandlerRootView>

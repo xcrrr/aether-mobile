@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Animated, StyleSheet, Text, Easing } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { useToast } from '@/state/useToast';
-import { colors, radius, fonts } from '@/theme';
+import { radius, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 const DURATION = 1500;
 
@@ -16,6 +17,8 @@ export function Toast() {
   const message = useToast((s) => s.message);
   const hide = useToast((s) => s.hide);
 
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const anim = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,13 +57,13 @@ export function Toast() {
         },
       ]}
     >
-      <Check size={15} color={colors.violet} strokeWidth={2.6} />
+      <Check size={15} color={c.violet} strokeWidth={2.6} />
       <Text style={styles.text}>{message}</Text>
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   pill: {
     position: 'absolute',
     bottom: 96,
@@ -73,9 +76,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: radius.lg,
-    backgroundColor: colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
-  text: { color: colors.text, fontSize: 14, fontFamily: fonts.sansSemibold },
+  text: { color: c.text, fontSize: 14, fontFamily: fonts.sansSemibold },
 });

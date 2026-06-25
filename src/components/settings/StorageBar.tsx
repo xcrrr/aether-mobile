@@ -1,9 +1,13 @@
+import { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, radius, spacing, fonts } from '@/theme';
+import { radius, spacing, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 export interface StorageSegment { label: string; gb: number; color: string; }
 
 export function StorageBar({ totalGb, segments }: { totalGb: number; segments: StorageSegment[] }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const safeTotal = totalGb > 0 ? totalGb : 1;
   return (
     <View>
@@ -30,12 +34,12 @@ export function StorageBar({ totalGb, segments }: { totalGb: number; segments: S
     </View>
   );
 }
-const styles = StyleSheet.create({
-  track: { flexDirection: 'row', height: 12, width: '100%', backgroundColor: colors.assistantBubble, borderRadius: radius.full, overflow: 'hidden', gap: 2 },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  track: { flexDirection: 'row', height: 12, width: '100%', backgroundColor: c.assistantBubble, borderRadius: radius.full, overflow: 'hidden', gap: 2 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  freeDot: { backgroundColor: colors.assistantBubble, borderWidth: 1, borderColor: colors.border },
-  legendLabel: { fontSize: 12, color: colors.text, fontFamily: fonts.sans },
-  legendGb: { fontSize: 12, color: colors.textMuted, fontFamily: fonts.sans },
+  freeDot: { backgroundColor: c.assistantBubble, borderWidth: 1, borderColor: c.border },
+  legendLabel: { fontSize: 12, color: c.text, fontFamily: fonts.sans },
+  legendGb: { fontSize: 12, color: c.textMuted, fontFamily: fonts.sans },
 });

@@ -1,17 +1,20 @@
+import { useMemo } from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { colors, radius, fonts } from '@/theme';
+import { radius, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 type Tone = 'neutral' | 'accent' | 'blue' | 'danger';
 
-const tones: Record<Tone, { bg: string; color: string; border: string }> = {
-  neutral: { bg: colors.assistantBubble, color: colors.textMuted, border: colors.border },
-  accent: { bg: 'rgba(124,58,237,0.16)', color: colors.violet, border: 'rgba(124,58,237,0.35)' },
-  blue: { bg: 'rgba(66,133,244,0.16)', color: colors.blue, border: 'rgba(66,133,244,0.35)' },
-  danger: { bg: colors.dangerBg, color: colors.danger, border: 'transparent' },
-};
+const makeTones = (c: Palette): Record<Tone, { bg: string; color: string; border: string }> => ({
+  neutral: { bg: c.assistantBubble, color: c.textMuted, border: c.border },
+  accent: { bg: c.violetDim, color: c.violet, border: c.violetDim },
+  blue: { bg: 'rgba(66,133,244,0.16)', color: c.blue, border: 'rgba(66,133,244,0.35)' },
+  danger: { bg: c.dangerBg, color: c.danger, border: 'transparent' },
+});
 
 export function Badge({ label, tone = 'neutral', style }: { label: string; tone?: Tone; style?: ViewStyle }) {
-  const t = tones[tone];
+  const c = useColors();
+  const t = useMemo(() => makeTones(c), [c])[tone];
   return (
     <View style={[styles.pill, { backgroundColor: t.bg, borderColor: t.border }, style]}>
       <Text style={[styles.label, { color: t.color }]}>{label}</Text>

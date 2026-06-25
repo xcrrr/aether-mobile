@@ -1,14 +1,16 @@
+import { useMemo } from 'react';
 import { Pressable, Text, StyleSheet, ActivityIndicator, ViewStyle } from 'react-native';
-import { colors, radius, fonts } from '@/theme';
+import { radius, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 type Variant = 'primary' | 'secondary' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
-const variants: Record<Variant, { bg: string; color: string; border: string }> = {
-  primary: { bg: colors.violet, color: colors.white, border: 'transparent' },
-  secondary: { bg: 'transparent', color: colors.text, border: colors.border },
-  danger: { bg: colors.dangerBg, color: colors.danger, border: 'transparent' },
-};
+const makeVariants = (c: Palette): Record<Variant, { bg: string; color: string; border: string }> => ({
+  primary: { bg: c.violet, color: c.white, border: 'transparent' },
+  secondary: { bg: 'transparent', color: c.text, border: c.border },
+  danger: { bg: c.dangerBg, color: c.danger, border: 'transparent' },
+});
 
 const pads: Record<Size, { v: number; h: number; fs: number }> = {
   sm: { v: 8, h: 12, fs: 13 },
@@ -26,7 +28,8 @@ export function Button({ label, onPress, variant = 'primary', size = 'md', block
   loading?: boolean;
   style?: ViewStyle;
 }) {
-  const v = variants[variant];
+  const c = useColors();
+  const v = useMemo(() => makeVariants(c), [c])[variant];
   const p = pads[size];
   return (
     <Pressable

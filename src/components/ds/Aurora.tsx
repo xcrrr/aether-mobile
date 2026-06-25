@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Easing, View } from 'react-native';
 import Svg, { Defs, RadialGradient, Stop, Rect, Circle } from 'react-native-svg';
-import { colors } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 /**
  * Living gradient backdrop — large soft violet blobs that drift and scale over
@@ -53,6 +53,7 @@ function Blob({ size, color, from, to, duration, delay = 0, opacity = 0.6, activ
 }
 
 export function Aurora({ active = true, intensity = 1 }: { active?: boolean; intensity?: number }) {
+  const colors = useColors();
   // Whole-layer fade — smooth appear while thinking, smooth dissolve at rest.
   const fade = useRef(new Animated.Value(active ? 1 : 0)).current;
   useEffect(() => {

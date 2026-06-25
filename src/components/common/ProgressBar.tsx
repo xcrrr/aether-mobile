@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { View, Text, StyleSheet, DimensionValue } from 'react-native';
-import { colors, radius, fonts, spacing } from '@/theme';
+import { radius, fonts, spacing, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 export function ProgressBar({ percent, height = 6, label, meta }: {
   percent: number;
@@ -7,6 +9,8 @@ export function ProgressBar({ percent, height = 6, label, meta }: {
   label?: string;
   meta?: string;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const width = `${Math.min(100, Math.max(0, percent))}%` as DimensionValue;
   return (
     <View>
@@ -22,10 +26,10 @@ export function ProgressBar({ percent, height = 6, label, meta }: {
     </View>
   );
 }
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   head: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs },
-  label: { color: colors.text, fontSize: 12, fontFamily: fonts.sans },
-  meta: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.sans },
-  track: { backgroundColor: colors.assistantBubble, overflow: 'hidden', width: '100%' },
-  fill: { height: '100%', backgroundColor: colors.violet, borderRadius: radius.sm },
+  label: { color: c.text, fontSize: 12, fontFamily: fonts.sans },
+  meta: { color: c.textMuted, fontSize: 12, fontFamily: fonts.sans },
+  track: { backgroundColor: c.assistantBubble, overflow: 'hidden', width: '100%' },
+  fill: { height: '100%', backgroundColor: c.violet, borderRadius: radius.sm },
 });

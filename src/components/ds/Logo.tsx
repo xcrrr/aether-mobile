@@ -1,5 +1,6 @@
 import { View, Text, Image, StyleSheet, ImageStyle, ViewStyle } from 'react-native';
-import { colors, fonts } from '@/theme';
+import { fonts } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 export const LOGO_PURPLE = require('../../../assets/logo-purple.png');
 export const LOGO_WHITE = require('../../../assets/logo-white.png');
@@ -10,6 +11,7 @@ export function Logo({ size = 32, tone = 'violet', withWordmark = false, style }
   withWordmark?: boolean;
   style?: ViewStyle;
 }) {
+  const c = useColors();
   const img: ImageStyle = { width: size, height: size };
   const src = tone === 'white' ? LOGO_WHITE : LOGO_PURPLE;
   if (!withWordmark) {
@@ -27,7 +29,7 @@ export function Logo({ size = 32, tone = 'violet', withWordmark = false, style }
           fontFamily: fonts.sansHeavy,
           fontSize: Math.round(size * 0.82),
           letterSpacing: -0.02 * Math.round(size * 0.82),
-          color: tone === 'white' ? colors.white : colors.text,
+          color: tone === 'white' ? c.white : c.text,
         }}
       >
         Aether

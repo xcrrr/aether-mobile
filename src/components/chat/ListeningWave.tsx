@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import { colors } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 /**
  * A thin violet gradient that sweeps left→right while the mic is listening — a
@@ -12,6 +12,7 @@ import { colors } from '@/theme';
  * `w`). Driven on the native thread (translateX).
  */
 export function ListeningWave() {
+  const c = useColors();
   const [w, setW] = useState(0);
   const x = useRef(new Animated.Value(0)).current;
 
@@ -34,11 +35,11 @@ export function ListeningWave() {
           <Svg width={w * 2} height={HEIGHT}>
             <Defs>
               <LinearGradient id="listeningWave" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0" stopColor={colors.violet} stopOpacity="0.08" />
-                <Stop offset="0.25" stopColor={colors.violet} stopOpacity="1" />
-                <Stop offset="0.5" stopColor={colors.violet} stopOpacity="0.08" />
-                <Stop offset="0.75" stopColor={colors.violet} stopOpacity="1" />
-                <Stop offset="1" stopColor={colors.violet} stopOpacity="0.08" />
+                <Stop offset="0" stopColor={c.violet} stopOpacity="0.08" />
+                <Stop offset="0.25" stopColor={c.violet} stopOpacity="1" />
+                <Stop offset="0.5" stopColor={c.violet} stopOpacity="0.08" />
+                <Stop offset="0.75" stopColor={c.violet} stopOpacity="1" />
+                <Stop offset="1" stopColor={c.violet} stopOpacity="0.08" />
               </LinearGradient>
             </Defs>
             <Rect width={w * 2} height={HEIGHT} fill="url(#listeningWave)" />

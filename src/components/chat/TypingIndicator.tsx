@@ -1,8 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { View, Animated, StyleSheet, Easing } from 'react-native';
-import { colors, radius } from '@/theme';
+import { radius, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 function Dot({ delay }: { delay: number }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const v = useRef(new Animated.Value(0.25)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -19,6 +22,8 @@ function Dot({ delay }: { delay: number }) {
 }
 
 export function TypingIndicator() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.pill}>
       <Dot delay={0} />
@@ -27,7 +32,7 @@ export function TypingIndicator() {
     </View>
   );
 }
-const styles = StyleSheet.create({
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.assistantBubble, borderRadius: radius.lg, alignSelf: 'flex-start' },
-  dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.textMuted },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: c.assistantBubble, borderRadius: radius.lg, alignSelf: 'flex-start' },
+  dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.textMuted },
 });
