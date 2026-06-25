@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Animated, Image, Easing } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,8 @@ import { router } from 'expo-router';
 import { useProfileStore } from '@/state/useProfileStore';
 import { Aurora } from '@/components/ds/Aurora';
 import { LOGO_PURPLE, LOGO_WHITE } from '@/components/ds/Logo';
-import { colors, spacing, radius, fonts } from '@/theme';
+import { spacing, radius, fonts, Palette } from '@/theme';
+import { useColors, useIsDark } from '@/theme/useColors';
 
 const INTRO = [
   { kicker: 'Welcome to', brand: true, title: 'Your private second brain.', body: 'A complete AI assistant that thinks, remembers, and researches — running entirely on your phone.' },
@@ -26,44 +27,53 @@ function Chevron({ dir, color }: { dir: 'left' | 'right'; color: string }) {
 function NavRow({ canBack, onBack, dots, active, onNext, nextDisabled }: {
   canBack: boolean; onBack: () => void; dots: number; active: number; onNext: () => void; nextDisabled?: boolean;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c, true), [c]);
   return (
     <View style={styles.nav}>
       <Pressable
         onPress={onBack}
         disabled={!canBack}
-        style={[styles.navCircle, { borderWidth: 1, borderColor: colors.border, opacity: canBack ? 1 : 0 }]}
+        style={[styles.navCircle, { borderWidth: 1, borderColor: c.border, opacity: canBack ? 1 : 0 }]}
       >
-        <Chevron dir="left" color={colors.text} />
+        <Chevron dir="left" color={c.text} />
       </Pressable>
 
       <View style={styles.dots}>
         {Array.from({ length: dots }).map((_, i) => (
-          <View key={i} style={{ width: i === active ? 22 : 6, height: 6, borderRadius: 999, backgroundColor: i === active ? colors.violet : colors.border }} />
+          <View key={i} style={{ width: i === active ? 22 : 6, height: 6, borderRadius: 999, backgroundColor: i === active ? c.violet : c.border }} />
         ))}
       </View>
 
       <Pressable
         onPress={onNext}
         disabled={nextDisabled}
-        style={[styles.navCircle, { backgroundColor: nextDisabled ? colors.bgCard : colors.violet }]}
+        style={[styles.navCircle, { backgroundColor: nextDisabled ? c.bgCard : c.violet }]}
       >
-        <Chevron dir="right" color={colors.white} />
+        <Chevron dir="right" color={c.white} />
       </Pressable>
     </View>
   );
 }
 
-function IntroVisual() {
+function IntroVisual({ isDark, halo }: { isDark: boolean; halo: object }) {
   return (
     <View style={styles.visual}>
-      <View style={styles.halo} />
-      <Image source={LOGO_WHITE} style={{ width: 76, height: 76 }} resizeMode="contain" />
+      <View style={halo} />
+      <Image source={isDark ? LOGO_WHITE : LOGO_PURPLE} style={{ width: 76, height: 76 }} resizeMode="contain" />
     </View>
   );
 }
 
+const styles = StyleSheet.create({
+  visual: { width: 150, height: 150, alignItems: 'center', justifyContent: 'center' },
+});
+
 export default function Onboarding() {
-  const complete = useProfileStore((s) => s.completeOnboarding);
+  const c = useColors();
+  const isDark = useIsDark();
+  const s = useMemo(() => makeStyles(c, isDark), [c, isDark]);
+  const complete = useProfileStore((st) => st.completeOnboarding);
   const [phase, setPhase] = useState(0); // 0..2 intro, 3 name, 4 goal
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
@@ -84,26 +94,25 @@ export default function Onboarding() {
       .then(() => router.replace('/(main)'));
 
   if (phase <= 2) {
-    const s = INTRO[phase];
-    const last = phase === 2;
+    const intro = INTRO[phase];
     return (
-      <View style={styles.root}>
+      <View style={s.root}>
         <Aurora />
-        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-          <View style={styles.topbar}>
+        <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
+          <View style={s.topbar}>
             <View />
-            <Pressable onPress={() => setPhase(3)}><Text style={styles.skip}>Skip</Text></Pressable>
+            <Pressable onPress={() => setPhase(3)}><Text style={s.skip}>Skip</Text></Pressable>
           </View>
 
-          <Animated.View style={[styles.center, animStyle]}>
-            <IntroVisual />
-            <Text style={styles.kicker}>{s.kicker}</Text>
-            {s.brand && <Text style={styles.brand}>Aether</Text>}
-            <Text style={styles.introTitle}>{s.title}</Text>
-            <Text style={styles.introBody}>{s.body}</Text>
+          <Animated.View style={[s.center, animStyle]}>
+            <IntroVisual isDark={isDark} halo={s.halo} />
+            <Text style={s.kicker}>{intro.kicker}</Text>
+            {intro.brand && <Text style={s.brand}>Aether</Text>}
+            <Text style={s.introTitle}>{intro.title}</Text>
+            <Text style={s.introBody}>{intro.body}</Text>
           </Animated.View>
 
-          <View style={styles.navWrap}>
+          <View style={s.navWrap}>
             <NavRow canBack={phase > 0} onBack={back} dots={3} active={phase} onNext={() => setPhase(phase + 1)} />
           </View>
         </SafeAreaView>
@@ -121,32 +130,32 @@ export default function Onboarding() {
   const go = () => (isName ? setPhase(4) : finish(goal));
 
   return (
-    <View style={styles.root}>
+    <View style={s.root}>
       <Aurora />
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView style={styles.flex} behavior="padding">
-        <View style={styles.brandRow}>
+      <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
+        <KeyboardAvoidingView style={s.flex} behavior="padding">
+        <View style={s.brandRow}>
           <Image source={LOGO_PURPLE} style={{ width: 30, height: 30 }} resizeMode="contain" />
-          <Text style={styles.brandSm}>Aether</Text>
+          <Text style={s.brandSm}>Aether</Text>
         </View>
 
-        <Animated.View style={[styles.profile, animStyle]}>
-          <Text style={styles.stepTitle}>{step.title}</Text>
-          <Text style={styles.stepSub}>{step.sub}</Text>
+        <Animated.View style={[s.profile, animStyle]}>
+          <Text style={s.stepTitle}>{step.title}</Text>
+          <Text style={s.stepSub}>{step.sub}</Text>
           <TextInput
-            style={styles.input}
+            style={s.input}
             placeholder={step.placeholder}
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={c.textMuted}
             value={value}
             onChangeText={setValue}
             autoFocus
           />
           {!isName && (
-            <Pressable onPress={() => finish('')}><Text style={styles.skipInline}>Skip for now</Text></Pressable>
+            <Pressable onPress={() => finish('')}><Text style={s.skipInline}>Skip for now</Text></Pressable>
           )}
         </Animated.View>
 
-        <View style={styles.navWrap}>
+        <View style={s.navWrap}>
           <NavRow canBack onBack={back} dots={2} active={phase - 3} onNext={go} nextDisabled={nextDisabled} />
         </View>
         </KeyboardAvoidingView>
@@ -155,28 +164,27 @@ export default function Onboarding() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+const makeStyles = (c: Palette, isDark: boolean) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg },
   flex: { flex: 1 },
   safe: { flex: 1, paddingHorizontal: spacing.xl },
   topbar: { height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  skip: { fontFamily: fonts.sans, fontSize: 14, color: colors.textMuted },
+  skip: { fontFamily: fonts.sans, fontSize: 14, color: c.textMuted },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  visual: { width: 150, height: 150, alignItems: 'center', justifyContent: 'center' },
-  halo: { position: 'absolute', width: 150, height: 150, borderRadius: 75, backgroundColor: 'rgba(255,255,255,0.06)' },
-  kicker: { fontFamily: fonts.sansSemibold, fontSize: 12, letterSpacing: 1.4, color: '#C9A9FF', marginTop: 14, textTransform: 'uppercase' },
-  brand: { fontFamily: fonts.sansHeavy, fontSize: 44, color: colors.text, letterSpacing: -0.9, marginTop: 4 },
-  introTitle: { fontFamily: fonts.displayBold, fontSize: 25, lineHeight: 30, color: colors.text, textAlign: 'center', maxWidth: 300, marginTop: 12 },
-  introBody: { fontFamily: fonts.sans, fontSize: 15, lineHeight: 23, color: colors.textMuted, textAlign: 'center', maxWidth: 300, marginTop: 8 },
+  halo: { position: 'absolute', width: 150, height: 150, borderRadius: 75, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(109,40,217,0.07)' },
+  kicker: { fontFamily: fonts.sansSemibold, fontSize: 12, letterSpacing: 1.4, color: isDark ? '#C9A9FF' : c.violet, marginTop: 14, textTransform: 'uppercase' },
+  brand: { fontFamily: fonts.sansHeavy, fontSize: 44, color: c.text, letterSpacing: -0.9, marginTop: 4 },
+  introTitle: { fontFamily: fonts.displayBold, fontSize: 25, lineHeight: 30, color: c.text, textAlign: 'center', maxWidth: 300, marginTop: 12 },
+  introBody: { fontFamily: fonts.sans, fontSize: 15, lineHeight: 23, color: c.textMuted, textAlign: 'center', maxWidth: 300, marginTop: 8 },
   navWrap: { paddingBottom: spacing.lg },
   nav: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 10 },
   navCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   dots: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 6 },
   brandRow: { height: 52, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  brandSm: { fontFamily: fonts.sansHeavy, fontSize: 24, color: colors.text, letterSpacing: -0.5 },
+  brandSm: { fontFamily: fonts.sansHeavy, fontSize: 24, color: c.text, letterSpacing: -0.5 },
   profile: { flex: 1, justifyContent: 'center', gap: 14 },
-  stepTitle: { fontFamily: fonts.displayBold, fontSize: 30, lineHeight: 36, color: colors.text },
-  stepSub: { fontFamily: fonts.sans, fontSize: 14, lineHeight: 21, color: colors.textMuted, maxWidth: 320 },
-  input: { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, color: colors.text, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, fontFamily: fonts.sans, marginTop: 8 },
-  skipInline: { fontFamily: fonts.sans, fontSize: 14, color: colors.textMuted, alignSelf: 'flex-start' },
+  stepTitle: { fontFamily: fonts.displayBold, fontSize: 30, lineHeight: 36, color: c.text },
+  stepSub: { fontFamily: fonts.sans, fontSize: 14, lineHeight: 21, color: c.textMuted, maxWidth: 320 },
+  input: { backgroundColor: c.bgCard, borderColor: c.border, borderWidth: 1, borderRadius: radius.md, color: c.text, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, fontFamily: fonts.sans, marginTop: 8 },
+  skipInline: { fontFamily: fonts.sans, fontSize: 14, color: c.textMuted, alignSelf: 'flex-start' },
 });

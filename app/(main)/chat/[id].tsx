@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +19,8 @@ import { ModelLoadingOverlay } from '@/components/common/ModelLoadingOverlay';
 import { Toast } from '@/components/common/Toast';
 import { RAMWarningModal } from '@/components/settings/RAMWarningModal';
 import { LOGO_PURPLE } from '@/components/ds/Logo';
-import { colors, spacing, fonts } from '@/theme';
+import { spacing, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 function ChatHeader({ mode, installed, onMode, onMenu, onSettings }: {
   mode: 'fast' | 'thinking';
@@ -28,6 +29,8 @@ function ChatHeader({ mode, installed, onMode, onMenu, onSettings }: {
   onMenu: () => void;
   onSettings: () => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.header}>
       <Pressable onPress={onMenu} hitSlop={10} style={styles.headerSide}>
@@ -45,6 +48,8 @@ function ChatHeader({ mode, installed, onMode, onMenu, onSettings }: {
 }
 
 function EmptyState({ name }: { name: string }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.empty}>
       <Image source={LOGO_PURPLE} style={{ width: 48, height: 48 }} resizeMode="contain" />
@@ -55,6 +60,8 @@ function EmptyState({ name }: { name: string }) {
 }
 
 export default function ChatScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
   const { current, open, setCurrentModel } = useChatStore();
@@ -130,19 +137,19 @@ export default function ChatScreen() {
     </View>
   );
 }
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  c: { flex: 1, backgroundColor: colors.bg },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg },
+  c: { flex: 1, backgroundColor: c.bg },
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
   headerSide: { width: 28, justifyContent: 'center' },
   headerSideRight: { width: 28, alignItems: 'flex-end', justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
-  menuGlyph: { fontSize: 22, color: colors.text },
-  gearGlyph: { fontSize: 20, color: colors.text },
-  wordmark: { fontFamily: fonts.sansHeavy, fontSize: 18, color: colors.text, letterSpacing: -0.3, lineHeight: 22 },
+  menuGlyph: { fontSize: 22, color: c.text },
+  gearGlyph: { fontSize: 20, color: c.text },
+  wordmark: { fontFamily: fonts.sansHeavy, fontSize: 18, color: c.text, letterSpacing: -0.3, lineHeight: 22 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 20 },
-  greeting: { fontFamily: fonts.displayBold, fontSize: 24, color: colors.text },
-  emptyBody: { fontFamily: fonts.sans, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 21, maxWidth: 260 },
-  err: { color: colors.danger, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, fontSize: 13, fontFamily: fonts.sans },
+  greeting: { fontFamily: fonts.displayBold, fontSize: 24, color: c.text },
+  emptyBody: { fontFamily: fonts.sans, fontSize: 14, color: c.textMuted, textAlign: 'center', lineHeight: 21, maxWidth: 260 },
+  err: { color: c.danger, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, fontSize: 13, fontFamily: fonts.sans },
 });

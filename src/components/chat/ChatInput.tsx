@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, TextInput, Pressable, Text, Animated, Alert, StyleSheet } from 'react-native';
 import { ArrowUp, Square, Mic, Paperclip, Globe, Plus, X } from 'lucide-react-native';
 import { useChatStore } from '@/state/useChatStore';
@@ -8,7 +8,8 @@ import { AttachmentSheet } from './AttachmentSheet';
 import { AttachmentChip } from './AttachmentChip';
 import { ListeningWave } from './ListeningWave';
 import { FileAttachment } from '@/types';
-import { colors, radius, spacing, fonts } from '@/theme';
+import { radius, spacing, fonts, Palette } from '@/theme';
+import { useColors } from '@/theme/useColors';
 
 /** Active model's vision state. Vision is built into the model — no separate pack,
  *  no download. `ready` is true once the engine has the vision graph loaded. */
@@ -29,6 +30,8 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
   att: AttachmentState;
   vision?: VisionState;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [text, setText] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [barOpen, setBarOpen] = useState(false);
@@ -131,9 +134,9 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
       {/* Collapsible actions bar (Claude-style "+") */}
       {showBar && (
         <View style={styles.actionsBar}>
-          <ActionPill icon={<Paperclip size={17} color={researchMode ? colors.border : colors.textMuted} strokeWidth={1.8} />} label="Attach" onPress={openAttach} disabled={researchMode} />
-          <ActionPill icon={<Globe size={17} color={researchMode ? colors.violet : colors.textMuted} strokeWidth={1.8} />} label="Research" active={researchMode} onPress={toggleResearch} />
-          <ActionPill icon={<Mic size={17} color={voice.listening ? colors.danger : colors.textMuted} strokeWidth={1.8} />} label={voice.listening ? 'Listening' : 'Voice'} active={voice.listening} onPress={toggleVoice} />
+          <ActionPill icon={<Paperclip size={17} color={researchMode ? c.border : c.textMuted} strokeWidth={1.8} />} label="Attach" onPress={openAttach} disabled={researchMode} />
+          <ActionPill icon={<Globe size={17} color={researchMode ? c.violet : c.textMuted} strokeWidth={1.8} />} label="Research" active={researchMode} onPress={toggleResearch} />
+          <ActionPill icon={<Mic size={17} color={voice.listening ? c.danger : c.textMuted} strokeWidth={1.8} />} label={voice.listening ? 'Listening' : 'Voice'} active={voice.listening} onPress={toggleVoice} />
         </View>
       )}
 
@@ -145,8 +148,8 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
           hitSlop={6}
         >
           {showBar
-            ? <X size={20} color={colors.textMuted} strokeWidth={1.8} />
-            : <Plus size={21} color={disabled ? colors.border : colors.textMuted} strokeWidth={1.8} />}
+            ? <X size={20} color={c.textMuted} strokeWidth={1.8} />
+            : <Plus size={21} color={disabled ? c.border : c.textMuted} strokeWidth={1.8} />}
         </Pressable>
 
         <TextInput
@@ -154,7 +157,7 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
           value={text}
           onChangeText={setText}
           placeholder={placeholder}
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={c.textMuted}
           editable={!disabled}
           multiline
         />
@@ -162,14 +165,14 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
         <Pressable
           style={[
             styles.send,
-            { backgroundColor: isGenerating ? colors.danger : sendDisabled ? colors.bgInput : colors.violet },
+            { backgroundColor: isGenerating ? c.danger : sendDisabled ? c.bgInput : c.violet },
           ]}
           onPress={isGenerating ? stopGeneration : send}
           disabled={sendDisabled}
         >
           {isGenerating
-            ? <Square size={13} color={colors.white} fill={colors.white} />
-            : <ArrowUp size={19} color={sendDisabled ? colors.textMuted : colors.white} strokeWidth={2.2} />}
+            ? <Square size={13} color={c.white} fill={c.white} />
+            : <ArrowUp size={19} color={sendDisabled ? c.textMuted : c.white} strokeWidth={2.2} />}
         </Pressable>
       </View>
 
@@ -190,6 +193,8 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
 function ActionPill({ icon, label, onPress, active, disabled }: {
   icon: React.ReactNode; label: string; onPress: () => void; active?: boolean; disabled?: boolean;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
@@ -198,28 +203,28 @@ function ActionPill({ icon, label, onPress, active, disabled }: {
       hitSlop={4}
     >
       {icon}
-      <Text style={[styles.pillLabel, active && { color: colors.violet }, disabled && { color: colors.border }]}>{label}</Text>
+      <Text style={[styles.pillLabel, active && { color: c.violet }, disabled && { color: c.border }]}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xs },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  wrap: { backgroundColor: c.bg, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xs },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  input: { flex: 1, maxHeight: 120, backgroundColor: colors.bgInput, borderRadius: radius.xl, color: colors.text, paddingHorizontal: 16, paddingVertical: 11, fontSize: 15, fontFamily: fonts.sans, lineHeight: 21 },
+  input: { flex: 1, maxHeight: 120, backgroundColor: c.bgInput, borderRadius: radius.xl, color: c.text, paddingHorizontal: 16, paddingVertical: 11, fontSize: 15, fontFamily: fonts.sans, lineHeight: 21 },
   plusBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   actionsBar: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm, flexWrap: 'wrap' },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 8, paddingHorizontal: 13, borderRadius: 999, backgroundColor: colors.bgInput },
-  pillActive: { backgroundColor: colors.violetDim },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 8, paddingHorizontal: 13, borderRadius: 999, backgroundColor: c.bgInput },
+  pillActive: { backgroundColor: c.violetDim },
   pillDisabled: { opacity: 0.5 },
-  pillLabel: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.text },
-  footer: { textAlign: 'center', fontSize: 11, color: colors.textMuted, paddingVertical: spacing.sm, fontFamily: fonts.sans },
-  transcript: { alignSelf: 'stretch', backgroundColor: colors.bgInput, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
-  transcriptText: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.sans, lineHeight: 18 },
+  pillLabel: { fontFamily: fonts.sansMedium, fontSize: 13, color: c.text },
+  footer: { textAlign: 'center', fontSize: 11, color: c.textMuted, paddingVertical: spacing.sm, fontFamily: fonts.sans },
+  transcript: { alignSelf: 'stretch', backgroundColor: c.bgInput, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  transcriptText: { color: c.textMuted, fontSize: 13, fontFamily: fonts.sans, lineHeight: 18 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm, paddingHorizontal: 2 },
-  greenDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22C55E' },
-  visionActive: { fontFamily: fonts.sans, fontSize: 12, color: colors.textMuted },
-  visionWarn: { fontFamily: fonts.sans, fontSize: 12, color: '#EAB308', marginBottom: spacing.sm, paddingHorizontal: 2 },
-  voiceErr: { fontFamily: fonts.sans, fontSize: 12, color: colors.danger, marginBottom: spacing.sm, paddingHorizontal: 2 },
+  greenDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.success },
+  visionActive: { fontFamily: fonts.sans, fontSize: 12, color: c.textMuted },
+  visionWarn: { fontFamily: fonts.sans, fontSize: 12, color: c.warning, marginBottom: spacing.sm, paddingHorizontal: 2 },
+  voiceErr: { fontFamily: fonts.sans, fontSize: 12, color: c.danger, marginBottom: spacing.sm, paddingHorizontal: 2 },
 });
