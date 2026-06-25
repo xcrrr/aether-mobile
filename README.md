@@ -20,7 +20,7 @@ Turn on Research and Aether searches the web, reads the sources, and writes you 
 ### 🎙️ Talk to it
 Tap the mic and speak. Aether transcribes your voice on-device, no internet needed.
 
-### 🧠 Second Brain
+### 🧩 Core
 Aether quietly remembers what matters about you — your goals, your projects, the people and details you mention — and uses that context in every chat. After each message it learns automatically and shows you what it saved. Explore everything it knows as a living **3D thought graph**, where new memories light up. Fully private, stored only on your device, and yours to edit or clear anytime.
 
 ### ❓ Asks before it assumes

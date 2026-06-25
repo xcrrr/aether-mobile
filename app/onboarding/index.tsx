@@ -11,8 +11,8 @@ import { spacing, radius, fonts, Palette } from '@/theme';
 import { useColors, useIsDark } from '@/theme/useColors';
 
 const INTRO = [
-  { kicker: 'Welcome to', brand: true, title: 'Your private second brain.', body: 'A complete AI assistant that thinks, remembers, and researches — running entirely on your phone.' },
-  { kicker: 'Second brain', title: 'Remembers what matters to you.', body: 'Aether keeps a private memory of your notes, ideas, and conversations — stored only on this device.' },
+  { kicker: 'Welcome to', brand: true, title: 'Your private Core.', body: 'A complete AI assistant that thinks, remembers, and researches — running entirely on your phone.' },
+  { kicker: 'Core', title: 'Remembers what matters to you.', body: 'Aether keeps a private memory of your notes, ideas, and conversations — stored only on this device.' },
   { kicker: 'Private AI research', title: 'Research without giving yourself away.', body: 'Explore topics, dig through the web, and reason over what you find. No cloud, no accounts, no telemetry — ever.' },
 ];
 

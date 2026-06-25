@@ -57,7 +57,7 @@ export function BrainNoticePill() {
       <Pressable style={styles.pill} onPress={open} hitSlop={6}>
         <Brain size={16} color={c.violet} strokeWidth={2.2} />
         <Text style={styles.text}>
-          {count} {count === 1 ? 'memory' : 'memories'} saved to your Second Brain
+          {count} {count === 1 ? 'memory' : 'memories'} saved to Core
         </Text>
         <ChevronRight size={16} color={c.violet} strokeWidth={2.4} />
       </Pressable>

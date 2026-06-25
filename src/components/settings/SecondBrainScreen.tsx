@@ -163,7 +163,7 @@ export default function SecondBrainScreen() {
       {/* ── Header ── */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10}><Text style={styles.back}>‹</Text></Pressable>
-        <Text style={styles.title}>Second Brain</Text>
+        <Text style={styles.title}>Core</Text>
         <View style={styles.segment}>
           <Pressable
             style={[styles.segmentBtn, view === 'graph' && styles.segmentBtnActive]}
@@ -189,7 +189,7 @@ export default function SecondBrainScreen() {
         <View style={styles.card}>
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.toggleLabel}>Enable Second Brain</Text>
+              <Text style={styles.toggleLabel}>Enable Core</Text>
               <Text style={styles.toggleHint}>
                 On: every message is analysed automatically and memories are used in all chats. Off: nothing is learned or used.
               </Text>
@@ -457,7 +457,7 @@ export default function SecondBrainScreen() {
       <Modal visible={fullscreen} transparent={false} animationType="slide" onRequestClose={() => setFullscreen(false)}>
         <SafeAreaView style={styles.fullscreenModal} edges={['top', 'bottom']}>
           <View style={styles.fullscreenHeader}>
-            <Text style={styles.title}>Second Brain</Text>
+            <Text style={styles.title}>Core</Text>
             <Pressable onPress={() => setFullscreen(false)} hitSlop={8} style={styles.closeBtn}>
               <X size={20} color={c.text} strokeWidth={2} />
             </Pressable>

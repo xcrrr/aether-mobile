@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/literata": "^0.4.3",
     "@expo-google-fonts/playfair-display": "^0.4.2",
     "@kesha-antonov/react-native-background-downloader": "^4.5.5",
     "@react-native-async-storage/async-storage": "1.23.1",

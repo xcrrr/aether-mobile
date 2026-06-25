@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Settings, ChevronRight } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useChatStore } from '@/state/useChatStore';
 import { useModelStore } from '@/state/useModelStore';
@@ -12,6 +14,7 @@ import { useColors } from '@/theme/useColors';
 
 export function SidebarContent(props: DrawerContentComponentProps) {
   const c = useColors();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(c), [c]);
   const { index, current, newChat, remove } = useChatStore();
   const { installed, activeModelId, setActive } = useModelStore();
@@ -27,8 +30,8 @@ export function SidebarContent(props: DrawerContentComponentProps) {
 
   return (
     <DrawerContentScrollView {...props} style={{ backgroundColor: c.bgSidebar }} contentContainerStyle={{ paddingTop: 0 }}>
-      {/* header */}
-      <View style={styles.header}>
+      {/* header — clear the status bar / notification area without sitting too low */}
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <Logo size={26} withWordmark />
       </View>
 
@@ -63,15 +66,14 @@ export function SidebarContent(props: DrawerContentComponentProps) {
         </Pressable>
       </View>
 
-      {/* second brain */}
+      {/* core */}
       <View style={styles.sectionTight}>
         <Pressable style={styles.brainBtn} onPress={() => { close(); router.push('/(main)/second-brain'); }}>
-          <Text style={styles.brainIcon}>🧠</Text>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.brainLabel}>Second Brain</Text>
+            <Text style={styles.brainLabel}>Core</Text>
             <Text style={styles.brainMeta}>Memory · thought graph</Text>
           </View>
-          <Text style={styles.brainChevron}>›</Text>
+          <ChevronRight size={18} color={c.textMuted} strokeWidth={2} />
         </Pressable>
       </View>
 
@@ -92,7 +94,8 @@ export function SidebarContent(props: DrawerContentComponentProps) {
 
       {/* settings footer */}
       <Pressable style={styles.settingsBtn} onPress={() => { close(); router.push('/(main)/settings'); }}>
-        <Text style={styles.settingsLabel}>⚙  Settings & Storage</Text>
+        <Settings size={17} color={c.textMuted} strokeWidth={1.8} />
+        <Text style={styles.settingsLabel}>Settings & Storage</Text>
       </Pressable>
     </DrawerContentScrollView>
   );
@@ -112,11 +115,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   plus: { fontSize: 20, color: c.violet, fontFamily: fonts.sans, lineHeight: 22 },
   newLabel: { color: c.text, fontSize: 15, fontFamily: fonts.display },
   brainBtn: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 10 },
-  brainIcon: { fontSize: 16 },
   brainLabel: { color: c.text, fontSize: 15, fontFamily: fonts.display },
   brainMeta: { color: c.textMuted, fontSize: 11, marginTop: 1, fontFamily: fonts.sans },
-  brainChevron: { color: c.textMuted, fontSize: 20, fontFamily: fonts.sans },
   empty: { color: c.textMuted, fontSize: 13, fontStyle: 'italic', paddingVertical: 8, fontFamily: fonts.sans },
-  settingsBtn: { borderTopWidth: 1, borderTopColor: c.separator, paddingHorizontal: 18, paddingVertical: 16, marginTop: spacing.sm },
+  settingsBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: c.separator, paddingHorizontal: 18, paddingVertical: 16, marginTop: spacing.sm },
   settingsLabel: { color: c.textMuted, fontSize: 14, fontFamily: fonts.sans },
 });

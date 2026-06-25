@@ -83,17 +83,6 @@ export default function Settings() {
         </View>
 
         <View>
-          <Text style={styles.label}>Second Brain</Text>
-          <Pressable style={styles.navRow} onPress={() => router.push('/(main)/second-brain')}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.navTitle}>Aether's memory of you</Text>
-              <Text style={styles.navHint}>Private, on-device personal context</Text>
-            </View>
-            <Text style={styles.navChevron}>›</Text>
-          </Pressable>
-        </View>
-
-        <View>
           <Text style={styles.label}>Models</Text>
           {MODELS.map((m) => (
             <ModelManagerRow
@@ -126,10 +115,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   segmentBtnActive: { backgroundColor: c.violet },
   segmentText: { color: c.textMuted, fontSize: 13, fontFamily: fonts.sansSemibold },
   segmentTextActive: { color: c.white },
-  navRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm },
-  navTitle: { color: c.text, fontSize: 15, fontFamily: fonts.display },
   navHint: { color: c.textMuted, fontSize: 12, fontFamily: fonts.sans, marginTop: spacing.sm },
-  navChevron: { color: c.textMuted, fontSize: 24, lineHeight: 26 },
   storageCard: { paddingVertical: spacing.xs },
   storageHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
   used: { color: c.text, fontSize: 14, fontFamily: fonts.sansBold },

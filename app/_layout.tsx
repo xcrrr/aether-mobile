@@ -12,10 +12,11 @@ import {
   Inter_800ExtraBold,
 } from '@expo-google-fonts/inter';
 import {
-  PlayfairDisplay_600SemiBold,
-  PlayfairDisplay_700Bold,
-  PlayfairDisplay_800ExtraBold,
-} from '@expo-google-fonts/playfair-display';
+  Literata_400Regular,
+  Literata_600SemiBold,
+  Literata_700Bold,
+  Literata_800ExtraBold,
+} from '@expo-google-fonts/literata';
 import * as SystemUI from 'expo-system-ui';
 import { StatusBar } from 'expo-status-bar';
 import { useProfileStore } from '@/state/useProfileStore';
@@ -38,9 +39,10 @@ export default function RootLayout() {
     'Inter-SemiBold': Inter_600SemiBold,
     'Inter-Bold': Inter_700Bold,
     'Inter-Heavy': Inter_800ExtraBold,
-    'PlayfairDisplay': PlayfairDisplay_600SemiBold,
-    'PlayfairDisplay-Bold': PlayfairDisplay_700Bold,
-    'PlayfairDisplay-Heavy': PlayfairDisplay_800ExtraBold,
+    'Literata': Literata_400Regular,
+    'Literata-SemiBold': Literata_600SemiBold,
+    'Literata-Bold': Literata_700Bold,
+    'Literata-Heavy': Literata_800ExtraBold,
   });
 
   useEffect(() => {

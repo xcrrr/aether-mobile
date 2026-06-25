@@ -101,9 +101,12 @@ export const fonts = {
   sansSemibold: 'Inter-SemiBold',
   sansBold: 'Inter-Bold',
   sansHeavy: 'Inter-Heavy',
-  display: 'PlayfairDisplay',
-  displayBold: 'PlayfairDisplay-Bold',
-  displayHeavy: 'PlayfairDisplay-Heavy',
+  // Literata — the editorial serif used for headings, titles, and the assistant's
+  // own replies. `serif` is the regular reading weight (assistant body text).
+  serif: 'Literata',
+  display: 'Literata-SemiBold',
+  displayBold: 'Literata-Bold',
+  displayHeavy: 'Literata-Heavy',
   mono: 'monospace',
 };
 

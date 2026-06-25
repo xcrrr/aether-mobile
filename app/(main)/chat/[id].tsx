@@ -4,6 +4,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation, router } from 'expo-router';
 import { DrawerActions } from '@react-navigation/native';
+import { PanelLeft, Settings } from 'lucide-react-native';
 import { useChatStore } from '@/state/useChatStore';
 import { useModelStore } from '@/state/useModelStore';
 import { useProfileStore } from '@/state/useProfileStore';
@@ -34,14 +35,14 @@ function ChatHeader({ mode, installed, onMode, onMenu, onSettings }: {
   return (
     <View style={styles.header}>
       <Pressable onPress={onMenu} hitSlop={10} style={styles.headerSide}>
-        <Text style={styles.menuGlyph}>☰</Text>
+        <PanelLeft size={22} color={c.text} strokeWidth={1.8} />
       </Pressable>
       <View style={styles.headerCenter}>
         <Text style={styles.wordmark}>Aether</Text>
         <ModeSelector mode={mode} installed={installed} onSelect={onMode} />
       </View>
       <Pressable onPress={onSettings} hitSlop={10} style={styles.headerSideRight}>
-        <Text style={styles.gearGlyph}>⚙</Text>
+        <Settings size={20} color={c.text} strokeWidth={1.8} />
       </Pressable>
     </View>
   );
@@ -145,8 +146,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   headerSide: { width: 28, justifyContent: 'center' },
   headerSideRight: { width: 28, alignItems: 'flex-end', justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
-  menuGlyph: { fontSize: 22, color: c.text },
-  gearGlyph: { fontSize: 20, color: c.text },
   wordmark: { fontFamily: fonts.sansHeavy, fontSize: 18, color: c.text, letterSpacing: -0.3, lineHeight: 22 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 20 },
   greeting: { fontFamily: fonts.displayBold, fontSize: 24, color: c.text },
