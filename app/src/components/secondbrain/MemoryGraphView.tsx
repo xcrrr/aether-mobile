@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { Asset } from 'expo-asset';
@@ -36,7 +36,15 @@ interface Props {
   overlayBottom?: number;
 }
 
-export function MemoryGraphView({ data, onNodeTap, onClearFocus, focusKey, overlayTop = 0, overlayBottom = 0 }: Props) {
+export interface MemoryGraphViewHandle {
+  /** Clear focus and return the camera to the default whole-globe framing. */
+  resetView(): void;
+}
+
+export const MemoryGraphView = forwardRef<MemoryGraphViewHandle, Props>(function MemoryGraphView(
+  { data, onNodeTap, onClearFocus, focusKey, overlayTop = 0, overlayBottom = 0 }: Props,
+  ref,
+) {
   const webRef = useRef<WebView>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -100,6 +108,12 @@ export function MemoryGraphView({ data, onNodeTap, onClearFocus, focusKey, overl
     }, []),
   );
 
+  useImperativeHandle(ref, () => ({
+    resetView() {
+      webRef.current?.injectJavaScript('window.__resetView && window.__resetView(); true;');
+    },
+  }), []);
+
   const onMessage = useCallback((e: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
@@ -160,7 +174,7 @@ export function MemoryGraphView({ data, onNodeTap, onClearFocus, focusKey, overl
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: GRAPH_BG },

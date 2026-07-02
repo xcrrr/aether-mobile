@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  BackHandler,
   Modal,
   ScrollView,
   StyleSheet,
@@ -11,9 +12,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ChevronLeft, ExternalLink, List, Pencil, Search, Trash2, X } from 'lucide-react-native';
+import { ChevronLeft, ExternalLink, List, Locate, Pencil, Search, Trash2, X } from 'lucide-react-native';
 import { PressableScale } from '@/components/ds/PressableScale';
-import { MemoryGraphView } from '@/components/secondbrain/MemoryGraphView';
+import { MemoryGraphView, MemoryGraphViewHandle } from '@/components/secondbrain/MemoryGraphView';
 import { MemoryListPanel } from '@/components/secondbrain/MemoryListPanel';
 import { GraphErrorBoundary } from '@/components/secondbrain/GraphErrorBoundary';
 import {
@@ -118,6 +119,7 @@ function DetailSheet({
   onOpenSource,
   onEdit,
   onDelete,
+  onHeight,
 }: {
   node: GraphNode;
   entry: MemoryEntry;
@@ -129,6 +131,7 @@ function DetailSheet({
   onOpenSource: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onHeight: (h: number) => void;
 }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -153,7 +156,10 @@ function DetailSheet({
   ].filter(Boolean).join(' - ');
 
   return (
-    <View style={[styles.detailSheet, { paddingBottom: insets.bottom + spacing.md }]}>
+    <View
+      style={[styles.detailSheet, { paddingBottom: insets.bottom + spacing.md }]}
+      onLayout={(e) => onHeight(e.nativeEvent.layout.height)}
+    >
       <View style={styles.sheetGrip} />
       <View style={styles.detailHeader}>
         <View style={styles.detailTitleWrap}>
@@ -268,6 +274,8 @@ export default function SecondBrainScreen() {
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<MemoryEntry | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [sheetHeight, setSheetHeight] = useState(340);
+  const graphRef = useRef<MemoryGraphViewHandle>(null);
 
   useEffect(() => () => clearRecentKeys(), [clearRecentKeys]);
   const recentSet = useMemo(() => new Set(recentKeys), [recentKeys]);
@@ -292,6 +300,18 @@ export default function SecondBrainScreen() {
 
   useEffect(() => {
     setDetailVisible(!!selectedKey);
+  }, [selectedKey]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (selectedKey) {
+        setSelectedKey(null);
+        setDetailVisible(false);
+        return true;
+      }
+      return false;
+    });
+    return () => subscription.remove();
   }, [selectedKey]);
 
   const searchResults = useMemo(() => {
@@ -369,9 +389,10 @@ export default function SecondBrainScreen() {
     <View style={styles.root}>
       <GraphErrorBoundary>
         <MemoryGraphView
+          ref={graphRef}
           data={graphData}
           overlayTop={insets.top + 64}
-          overlayBottom={insets.bottom + 56}
+          overlayBottom={insets.bottom + (selectedNode && detailVisible ? Math.max(sheetHeight, 280) : 56)}
           onNodeTap={(key) => {
             setSelectedKey(key);
             setDetailVisible(true);
@@ -399,6 +420,16 @@ export default function SecondBrainScreen() {
           <List size={21} color={OVER_TEXT} strokeWidth={2} />
         </PressableScale>
       </View>
+
+      {graphData.nodes.length > 0 && !selectedNode && (
+        <PressableScale
+          onPress={() => graphRef.current?.resetView()}
+          hitSlop={10}
+          style={[styles.iconBtn, styles.recenterBtn, { right: spacing.lg, bottom: insets.bottom + spacing.md + 48 }]}
+        >
+          <Locate size={20} color={OVER_TEXT} strokeWidth={2} />
+        </PressableScale>
+      )}
 
       {!selectedNode && graphData.nodes.length > 0 && (
         <View style={[styles.summaryBar, { bottom: insets.bottom + spacing.md }]} pointerEvents="none">
@@ -432,11 +463,12 @@ export default function SecondBrainScreen() {
           links={selectedLinks}
           nodeById={nodeById}
           sourceTitle={sourceTitle}
-          onClose={() => setDetailVisible(false)}
+          onClose={() => { setDetailVisible(false); setSelectedKey(null); }}
           onCategory={handleCategory}
           onOpenSource={openSource}
           onEdit={() => openEdit(selectedEntry)}
           onDelete={() => confirmDelete(selectedEntry)}
+          onHeight={setSheetHeight}
         />
       )}
 
@@ -509,6 +541,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
+  recenterBtn: { position: 'absolute' },
   titleWrap: { flex: 1, alignItems: 'center' },
   title: { color: OVER_TEXT, ...typography.sectionTitle },
   subtitle: { color: OVER_MUTED, fontSize: fontSize.xs, fontFamily: fonts.sans, marginTop: 1 },

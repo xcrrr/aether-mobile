@@ -99,11 +99,13 @@ export interface GraphData {
 
 const STOPWORDS = new Set([
   'about', 'after', 'also', 'and', 'because', 'been', 'being', 'could', 'current',
-  'currently', 'doing', 'enjoys', 'every', 'from', 'going', 'have', 'into',
-  'likes', 'loves', 'main', 'might', 'more', 'needs', 'often', 'other', 'plans',
-  'prefers', 'really', 'should', 'since', 'still', 'that', 'their', 'them',
-  'then', 'there', 'these', 'this', 'those', 'usually', 'user', 'wants', 'where',
-  'which', 'while', 'with', 'working', 'would', 'your',
+  'currently', 'doing', 'each', 'enjoys', 'every', 'from', 'goes', 'going',
+  'have', 'into', 'just', 'like', 'likes', 'loves', 'main', 'many', 'might',
+  'more', 'most', 'much', 'need', 'needs', 'often', 'only', 'other', 'over',
+  'plans', 'prefers', 'really', 'should', 'since', 'some', 'still', 'than',
+  'that', 'their', 'them', 'then', 'there', 'these', 'they', 'this', 'those',
+  'used', 'user', 'uses', 'using', 'usually', 'very', 'want', 'wants', 'when',
+  'where', 'which', 'while', 'will', 'with', 'work', 'working', 'would', 'your',
 ]);
 
 function clamp(n: number, min: number, max: number): number {
@@ -149,8 +151,8 @@ function keywordsFor(entry: MemoryEntry): string[] {
     .replace(/[^a-z0-9_ ]+/g, ' ')
     .split(/\s+/)
     .map((w) => w.replace(/^_+|_+$/g, ''))
-    .filter((w) => w.length >= 5 && !STOPWORDS.has(w));
-  return [...new Set(words)].slice(0, 8);
+    .filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+  return [...new Set(words)].slice(0, 10);
 }
 
 function importanceFor(entry: MemoryEntry, recent: boolean): number {
@@ -326,10 +328,8 @@ export function toGraphData(
     );
   }
 
-  // Same-conversation grouping is the only derived relationship: it is real
-  // ("these were saved from the same chat") and explainable. One star per
-  // conversation from its most important memory — no chains, no bridges, no
-  // keyword or category links invented to make the graph look denser.
+  // Same-conversation grouping: real ("these were saved from the same chat")
+  // and explainable. One star per conversation from its most important memory.
   const byConversation = new Map<string, GraphNode[]>();
   for (const n of nodes) {
     if (!n.sourceConversationId || n.sourceConversationId === 'manual') continue;
@@ -357,6 +357,7 @@ export function toGraphData(
   }
 
   addSharedTopicLinks(nodes, links, seen);
+  addClusterConnectivityLinks(nodes, links, seen);
 
   const counts = new Map<string, number>();
   for (const l of links) {
@@ -445,5 +446,102 @@ function addSharedTopicLinks(nodes: GraphNode[], links: GraphLink[], seen: Set<s
     );
     degree.set(cand.a.id, (degree.get(cand.a.id) ?? 0) + 1);
     degree.set(cand.b.id, (degree.get(cand.b.id) ?? 0) + 1);
+  }
+}
+
+class UnionFind {
+  private parent = new Map<string, string>();
+
+  find(id: string): string {
+    let root = this.parent.get(id) ?? id;
+    while (root !== (this.parent.get(root) ?? root)) root = this.parent.get(root) ?? root;
+    let cur = id;
+    while (cur !== root) {
+      const next = this.parent.get(cur) ?? cur;
+      this.parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  }
+
+  union(a: string, b: string): boolean {
+    const ra = this.find(a);
+    const rb = this.find(b);
+    if (ra === rb) return false;
+    this.parent.set(ra, rb);
+    return true;
+  }
+}
+
+const CLUSTER_TIME_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+function sharedKeywords(a: GraphNode, b: GraphNode): string[] {
+  const set = new Set(a.semanticKeywords);
+  return b.semanticKeywords.filter((w) => set.has(w));
+}
+
+/** A category cluster must read as one visible group, so it must be one
+ *  connected component. This adds the minimal set of spanning links per
+ *  category — Kruskal over pairs ranked by keyword overlap, then time
+ *  proximity — on top of whatever explicit/conversation/topic links already
+ *  connect it. Grounded and explainable: same category, and the strongest
+ *  shared signal names itself in the explanation. */
+function addClusterConnectivityLinks(nodes: GraphNode[], links: GraphLink[], seen: Set<string>): void {
+  const byCategory = new Map<MemoryVisualCategory, GraphNode[]>();
+  for (const n of nodes) {
+    const group = byCategory.get(n.category) ?? [];
+    group.push(n);
+    byCategory.set(n.category, group);
+  }
+
+  const nodeCategory = new Map(nodes.map((n) => [n.id, n.category]));
+  for (const [category, group] of byCategory) {
+    if (group.length < 2) continue;
+    const uf = new UnionFind();
+    for (const l of links) {
+      if (nodeCategory.get(l.source) === category && nodeCategory.get(l.target) === category) {
+        uf.union(l.source, l.target);
+      }
+    }
+
+    interface Candidate { a: GraphNode; b: GraphNode; shared: string[]; gap: number; key: string }
+    const candidates: Candidate[] = [];
+    for (let i = 0; i < group.length; i += 1) {
+      for (let j = i + 1; j < group.length; j += 1) {
+        const a = group[i];
+        const b = group[j];
+        candidates.push({
+          a,
+          b,
+          shared: sharedKeywords(a, b),
+          gap: Math.abs((a.createdAt || 0) - (b.createdAt || 0)),
+          key: pairKey(a.id, b.id),
+        });
+      }
+    }
+    candidates.sort((x, y) => y.shared.length - x.shared.length || x.gap - y.gap || (x.key < y.key ? -1 : 1));
+
+    for (const cand of candidates) {
+      if (!uf.union(cand.a.id, cand.b.id)) continue;
+      const word = cand.shared[0];
+      const closeInTime = cand.gap > 0 && cand.gap < CLUSTER_TIME_WINDOW_MS;
+      const label = VISUAL_CATEGORY_LABELS[category];
+      const explanation = word
+        ? `Connected because both are part of your ${label} cluster and mention "${word.replace(/_/g, ' ')}".`
+        : closeInTime
+          ? `Connected because both are part of your ${label} cluster and were saved around the same time.`
+          : `Connected because both are part of your ${label} cluster.`;
+      addLink(
+        links,
+        seen,
+        cand.a.id,
+        cand.b.id,
+        'same_cluster',
+        'same_cluster',
+        clamp(0.3 + cand.shared.length * 0.05, 0.3, 0.45),
+        explanation,
+        `Cluster: ${label}${word ? ` - shared: ${cand.shared.slice(0, 3).join(', ')}` : ''}`,
+      );
+    }
   }
 }

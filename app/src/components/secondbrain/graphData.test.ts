@@ -182,7 +182,7 @@ describe('toGraphData', () => {
     const { links } = toGraphData(entries, [{ id: 'e', fromKey: 'mesh_0', toKey: 'mesh_1', relation: 'related_to' }]);
     expect(links.length).toBeGreaterThan(0);
     const types = new Set(links.map((l) => l.relationshipType));
-    for (const t of types) expect(['explicit', 'discussed_together', 'shared_topic']).toContain(t);
+    for (const t of types) expect(['explicit', 'discussed_together', 'shared_topic', 'same_cluster']).toContain(t);
     expect(links.every((link) => link.explanation.length > 0)).toBe(true);
   });
 
@@ -249,13 +249,38 @@ describe('toGraphData', () => {
     expect(links.every((l) => l.relationshipType === 'discussed_together')).toBe(true);
   });
 
-  it('manual memories get no derived conversation links', () => {
+  it('manual memories get no derived conversation links, only cluster spanning', () => {
     const entries = [
       entry({ key: 'm1', sourceConversationId: 'manual' }),
       entry({ key: 'm2', id: 'i2', sourceConversationId: 'manual' }),
     ];
     const { links } = toGraphData(entries, []);
-    expect(links).toHaveLength(0);
+    expect(links.some((l) => l.relationshipType === 'discussed_together')).toBe(false);
+    expect(links).toHaveLength(1);
+    expect(links[0].relationshipType).toBe('same_cluster');
+  });
+
+  it('spanning links make every category cluster one connected component', () => {
+    const entries = Array.from({ length: 10 }, (_, i) => entry({
+      id: `cc-${i}`, key: `island_${i}`, value: `unrelated fact number${i}`,
+      category: i % 2 === 0 ? 'goals' : 'relationships',
+      sourceConversationId: `chat-${i}`,
+    }));
+    const { nodes, links } = toGraphData(entries, []);
+    const parent = new Map<string, string>();
+    const find = (x: string): string => {
+      const p = parent.get(x) ?? x;
+      if (p === x) return x;
+      const r = find(p);
+      parent.set(x, r);
+      return r;
+    };
+    for (const l of links) parent.set(find(l.source), find(l.target));
+    for (const cat of ['projects', 'people'] as const) {
+      const group = nodes.filter((n) => n.category === cat);
+      const roots = new Set(group.map((n) => find(n.id)));
+      expect(roots.size).toBe(1);
+    }
   });
 
   it('a deleted memory leaves no links behind', () => {

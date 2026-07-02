@@ -1,7 +1,13 @@
-// Aether Second Brain knowledge map. Self-contained Three.js scene.
+// Aether Second Brain knowledge globe. Self-contained Three.js scene.
 // RN bridge: window.__setGraphData / __focusNode / __clearFocus /
-// __resetView / __setPaused / __setReducedMotion.
+// __resetView / __setPaused / __setReducedMotion / __setViewportPadding.
 // postMessage {type:'ready'} | {type:'nodeTap',key} | {type:'clearFocus'} | {type:'error',error}.
+//
+// Rendering strategy: node meshes are created once per data load and then only
+// mutated in place (material swap + scale) on selection changes. Edges are a
+// single LineSegments buffer with RGBA vertex colors. graph.refresh() is never
+// called — the old refresh path recreated every mesh at the origin with no
+// tick left to re-place them, which is what made tapped nodes "disappear".
 (function () {
   function post(o) {
     try {
@@ -25,11 +31,10 @@
   var BG = '#181818';
   var NODE_DIM = '#5d5b60';
   var NODE_FADE = '#343336';
-  var EDGE = '#8A8490';
-  var EDGE_DIRECT = '#B9ABC9';
-  var EDGE_DIM = '#2E2D31';
+  var EDGE_NEUTRAL = new THREE.Color('#8A8490');
+  var EDGE_DIRECT = new THREE.Color('#CBBFDD');
+  var EDGE_NEAR = new THREE.Color('#6D6674');
   var TEXT = '#ECE8F2';
-  var TEXT_MUTED = '#B8B0BE';
   var AETHER = '#9A87C6';
   var CATEGORY_COLORS = {
     projects: '#8B78B2',
@@ -43,12 +48,13 @@
   };
 
   var canvas = document.getElementById('c');
-  var renderer, scene, camera, graph, raycaster;
+  var renderer, scene, camera, graph;
   var W = 0, H = 0;
   var nodes = [];
   var links = [];
   var nodeById = {};
   var linksByNode = {};
+  var meshByNode = {};
   var selectedKey = '';
   var directNeighbors = {};
   var secondNeighbors = {};
@@ -72,6 +78,11 @@
   var padBottom = 0;
   var userAdjusted = false;
   var lastNodeCount = -1;
+  var fog;
+
+  var linkLines = null;
+  var linkPosAttr = null;
+  var linkColAttr = null;
 
   var cam = {
     theta: 0.76,
@@ -84,8 +95,10 @@
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function isObject(v) { return v && typeof v === 'object'; }
-  function linkSource(l) { return isObject(l.source) ? l.source.id : l.source; }
-  function linkTarget(l) { return isObject(l.target) ? l.target.id : l.target; }
+  function linkSourceId(l) { return isObject(l.source) ? l.source.id : l.source; }
+  function linkTargetId(l) { return isObject(l.target) ? l.target.id : l.target; }
+  function linkSourceNode(l) { return isObject(l.source) ? l.source : nodeById[l.source]; }
+  function linkTargetNode(l) { return isObject(l.target) ? l.target : nodeById[l.target]; }
   function relationStrength(l) { return clamp(l.relationshipStrength == null ? 0.4 : l.relationshipStrength, 0.1, 1); }
 
   function init() {
@@ -97,8 +110,9 @@
     renderer.setClearColor(new THREE.Color(BG), 1);
 
     scene = new THREE.Scene();
+    fog = new THREE.Fog(new THREE.Color(BG), 100, 500);
+    scene.fog = fog;
     camera = new THREE.PerspectiveCamera(48, W / H, 0.1, 6000);
-    raycaster = new THREE.Raycaster();
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.85));
     var key = new THREE.DirectionalLight(0xffffff, 1.05);
@@ -110,26 +124,31 @@
 
     graph = new ThreeForceGraph()
       .nodeId('id')
-      .nodeVal(nodeVal)
-      .nodeRelSize(1.45)
-      .nodeColor(nodeColor)
       .nodeThreeObject(nodeMesh)
       .linkSource('source')
       .linkTarget('target')
-      .linkColor(linkColor)
-      .linkOpacity(0.52)
-      .linkWidth(linkWidth)
+      .linkVisibility(false)
+      .linkWidth(0)
       .linkDirectionalParticles(0)
       .numDimensions(3)
       .warmupTicks(0)
-      .cooldownTicks(80)
-      .cooldownTime(900)
-      .d3AlphaDecay(0.06)
-      .d3VelocityDecay(0.66)
-      .onEngineTick(function () { settled = false; labelDirty = true; })
+      .cooldownTicks(160)
+      .cooldownTime(2200)
+      .d3AlphaDecay(0.045)
+      .d3VelocityDecay(0.62)
+      .onEngineTick(function () {
+        settled = false;
+        labelDirty = true;
+        updateLinkPositions();
+      })
       .onEngineStop(function () {
         settled = true;
-        if (!selectedKey && !userAdjusted) frameDefaultView();
+        updateLinkPositions();
+        frameDefaultView();
+        if (!selectedKey && !userAdjusted) {
+          cam.targetGoal.copy(globalCenter);
+          cam.targetRadius = defaultRadius;
+        }
         requestRender();
       });
 
@@ -143,8 +162,8 @@
     scene.add(labelLayer);
 
     selectedRing = new THREE.Mesh(
-      new THREE.TorusGeometry(1, 0.055, 8, 48),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(AETHER), transparent: true, opacity: 0.92, depthWrite: false }),
+      new THREE.TorusGeometry(1, 0.05, 8, 48),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(AETHER), transparent: true, opacity: 0.88, depthWrite: false, fog: false }),
     );
     selectedRing.visible = false;
     scene.add(selectedRing);
@@ -161,15 +180,15 @@
       var charge = graph.d3Force('charge');
       if (charge && charge.strength) {
         charge
-          .strength(function (n) { return -2.6 - nodeVal(n) * 1.2; })
-          .distanceMax(Math.max(30, graphRadius * 1.6))
+          .strength(function (n) { return -3.2 - (n.val || 1) * 1.4; })
+          .distanceMax(Math.max(30, graphRadius * 1.7))
           .distanceMin(1.5);
       }
       var link = graph.d3Force('link');
       if (link && link.distance) {
         link
-          .distance(function (l) { return 5 + (1 - relationStrength(l)) * 12; })
-          .strength(function (l) { return 0.28 + relationStrength(l) * 0.62; });
+          .distance(function (l) { return 4 + (1 - relationStrength(l)) * 10; })
+          .strength(function (l) { return 0.3 + relationStrength(l) * 0.6; });
       }
     } catch (e) {}
   }
@@ -183,6 +202,8 @@
     }
   }
 
+  // Pull every node toward its category's cluster center. Low-degree nodes get
+  // pulled harder — links aren't holding them anywhere, the cluster should.
   function categoryAnchorForce() {
     var forceNodes = [];
     function force(alpha) {
@@ -192,7 +213,7 @@
         var anchor = clusterCenters[n.category];
         if (!anchor) continue;
         var degree = (linksByNode[n.id] || []).length;
-        var strength = (degree < 2 ? 0.032 : 0.012) * alpha;
+        var strength = (degree < 2 ? 0.055 : 0.022) * alpha;
         n.vx += (anchor.x - n.x) * strength;
         n.vy += (anchor.y - n.y) * strength;
         n.vz += (anchor.z - n.z) * strength;
@@ -207,7 +228,7 @@
     function force(alpha) {
       for (var i = 0; i < forceNodes.length; i++) {
         var n = forceNodes[i];
-        var strength = 0.014 * alpha;
+        var strength = 0.016 * alpha;
         n.vx += -n.x * strength;
         n.vy += -n.y * strength;
         n.vz += -n.z * strength;
@@ -217,9 +238,8 @@
     return force;
   }
 
-  // Soft spherical bound at the globe radius: nodes drifting past it are pushed
-  // back in, so the graph can never scatter into empty space no matter how the
-  // repulsion/attraction balance plays out.
+  // Firm spherical bound at the globe radius: this is what gives the graph a
+  // globe silhouette instead of letting repulsion stretch it into scatter.
   function containmentForce() {
     var forceNodes = [];
     function force(alpha) {
@@ -227,9 +247,9 @@
         var n = forceNodes[i];
         sanitizeNode(n);
         var r = Math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
-        var limit = graphRadius * 1.05;
+        var limit = graphRadius;
         if (r > limit && r > 0) {
-          var inward = (r - limit) * 0.08 * alpha;
+          var inward = (r - limit) * 0.2 * alpha;
           n.vx -= (n.x / r) * inward;
           n.vy -= (n.y / r) * inward;
           n.vz -= (n.z / r) * inward;
@@ -240,18 +260,27 @@
     return force;
   }
 
-  // Smooth, softly lit spheres. Shared geometry + a material cache keep this
-  // cheap; refresh() rebuilds meshes so selection styling stays live.
   var sphereGeo = null;
   var nodeMatCache = {};
-  function nodeMesh(n) {
-    if (!sphereGeo) sphereGeo = new THREE.SphereGeometry(1, 24, 24);
-    var color = nodeColor(n);
+
+  function selectionState(n) {
+    if (!selectedKey) return 'base';
+    if (n.id === selectedKey) return 'selected';
+    if (directNeighbors[n.id]) return 'neighbor';
+    if (secondNeighbors[n.id]) return 'second';
+    return 'far';
+  }
+
+  function materialFor(n) {
+    var state = selectionState(n);
+    var color = n.color || NODE_DIM;
     var op = n.opacity == null ? 0.95 : n.opacity;
-    if (selectedKey && n.id !== selectedKey && !directNeighbors[n.id]) {
-      op *= secondNeighbors[n.id] ? 0.78 : 0.55;
-    }
-    var matKey = color + '|' + op.toFixed(2);
+    var emissive = 0.24;
+    if (state === 'selected') { op = 1; emissive = 0.5; }
+    else if (state === 'neighbor') { op = Math.min(1, op + 0.04); emissive = 0.34; }
+    else if (state === 'second') { color = mixHex(color, NODE_DIM, 0.34); op *= 0.8; emissive = 0.14; }
+    else if (state === 'far') { color = NODE_FADE; op *= 0.5; emissive = 0.05; }
+    var matKey = color + '|' + op.toFixed(2) + '|' + emissive;
     var mat = nodeMatCache[matKey];
     if (!mat) {
       mat = new THREE.MeshStandardMaterial({
@@ -261,56 +290,32 @@
         transparent: true,
         opacity: op,
         emissive: new THREE.Color(color),
-        emissiveIntensity: 0.24,
+        emissiveIntensity: emissive,
       });
       nodeMatCache[matKey] = mat;
     }
-    var mesh = new THREE.Mesh(sphereGeo, mat);
-    var r = 1.45 * Math.cbrt(nodeVal(n));
+    return mat;
+  }
+
+  function baseRadius(n) {
+    return 1.45 * Math.cbrt(n.val || 1);
+  }
+
+  function displayScale(n) {
+    var r = baseRadius(n);
+    var state = selectionState(n);
+    if (state === 'selected') return r * 1.28;
+    if (state === 'neighbor') return r * 1.1;
+    return r;
+  }
+
+  function nodeMesh(n) {
+    if (!sphereGeo) sphereGeo = new THREE.SphereGeometry(1, 24, 24);
+    var mesh = new THREE.Mesh(sphereGeo, materialFor(n));
+    var r = displayScale(n);
     mesh.scale.set(r, r, r);
+    meshByNode[n.id] = mesh;
     return mesh;
-  }
-
-  function nodeVal(n) {
-    var v = n.val || 1.0;
-    if (!selectedKey) return v;
-    if (n.id === selectedKey) return v * 1.34;
-    if (directNeighbors[n.id]) return v * 1.14;
-    if (secondNeighbors[n.id]) return v * 0.9;
-    return Math.max(0.42, v * 0.58);
-  }
-
-  function nodeColor(n) {
-    if (!selectedKey) return n.color || NODE_DIM;
-    if (n.id === selectedKey || directNeighbors[n.id]) return n.color || NODE_DIM;
-    if (secondNeighbors[n.id]) return mixHex(n.color || NODE_DIM, NODE_DIM, 0.34);
-    return NODE_FADE;
-  }
-
-  function linkColor(l) {
-    if (!selectedKey) {
-      var st = relationStrength(l);
-      if (st > 0.75) return '#A79DB4';
-      if (st < 0.45) return '#5F5966';
-      return EDGE;
-    }
-    var s = linkSource(l);
-    var t = linkTarget(l);
-    if (s === selectedKey || t === selectedKey) return EDGE_DIRECT;
-    if (directNeighbors[s] || directNeighbors[t]) return '#6D6674';
-    return EDGE_DIM;
-  }
-
-  function linkWidth(l) {
-    if (!selectedKey) {
-      var st = relationStrength(l);
-      return st > 0.75 ? 0.5 : st < 0.45 ? 0.24 : 0.34;
-    }
-    var s = linkSource(l);
-    var t = linkTarget(l);
-    if (s === selectedKey || t === selectedKey) return 0.82;
-    if (directNeighbors[s] || directNeighbors[t]) return 0.48;
-    return 0.22;
   }
 
   function mixHex(a, b, amount) {
@@ -327,18 +332,107 @@
     var firstLinks = linksByNode[selectedKey] || [];
     for (var i = 0; i < firstLinks.length; i++) {
       var l = firstLinks[i];
-      var other = linkSource(l) === selectedKey ? linkTarget(l) : linkSource(l);
+      var other = linkSourceId(l) === selectedKey ? linkTargetId(l) : linkSourceId(l);
       directNeighbors[other] = true;
     }
     Object.keys(directNeighbors).forEach(function (id) {
       var nodeLinks = linksByNode[id] || [];
       for (var i = 0; i < nodeLinks.length; i++) {
         var l = nodeLinks[i];
-        var other = linkSource(l) === id ? linkTarget(l) : linkSource(l);
+        var other = linkSourceId(l) === id ? linkTargetId(l) : linkSourceId(l);
         if (other !== selectedKey && !directNeighbors[other]) secondNeighbors[other] = true;
       }
     });
   }
+
+  // --- Edge layer: one LineSegments draw call, RGBA vertex colors -----------
+
+  function rebuildLinkBuffers() {
+    var count = links.length;
+    var geo = new THREE.BufferGeometry();
+    linkPosAttr = new THREE.BufferAttribute(new Float32Array(count * 6), 3);
+    linkPosAttr.setUsage(THREE.DynamicDrawUsage);
+    linkColAttr = new THREE.BufferAttribute(new Float32Array(count * 8), 4);
+    geo.setAttribute('position', linkPosAttr);
+    geo.setAttribute('color', linkColAttr);
+    if (!linkLines) {
+      var mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false });
+      linkLines = new THREE.LineSegments(geo, mat);
+      linkLines.renderOrder = -1;
+      linkLines.frustumCulled = false;
+      scene.add(linkLines);
+    } else {
+      linkLines.geometry.dispose();
+      linkLines.geometry = geo;
+    }
+    updateLinkPositions();
+    updateLinkColors();
+  }
+
+  function updateLinkPositions() {
+    if (!linkPosAttr) return;
+    var arr = linkPosAttr.array;
+    for (var i = 0; i < links.length; i++) {
+      var s = linkSourceNode(links[i]);
+      var t = linkTargetNode(links[i]);
+      var o = i * 6;
+      arr[o] = s && isFinite(s.x) ? s.x : 0;
+      arr[o + 1] = s && isFinite(s.y) ? s.y : 0;
+      arr[o + 2] = s && isFinite(s.z) ? s.z : 0;
+      arr[o + 3] = t && isFinite(t.x) ? t.x : 0;
+      arr[o + 4] = t && isFinite(t.y) ? t.y : 0;
+      arr[o + 5] = t && isFinite(t.z) ? t.z : 0;
+    }
+    linkPosAttr.needsUpdate = true;
+  }
+
+  var tmpColor = new THREE.Color();
+
+  function writeVertexColor(arr, offset, color, alpha) {
+    arr[offset] = color.r;
+    arr[offset + 1] = color.g;
+    arr[offset + 2] = color.b;
+    arr[offset + 3] = alpha;
+  }
+
+  // Unselected: each edge is a subtle gradient between its endpoint cluster
+  // colors pulled toward neutral, alpha scaled by relationship strength — the
+  // structure is visible, the strong ties read stronger. Selected: edges of
+  // the selected node light up, the rest recede without vanishing.
+  function updateLinkColors() {
+    if (!linkColAttr) return;
+    var arr = linkColAttr.array;
+    for (var i = 0; i < links.length; i++) {
+      var l = links[i];
+      var s = linkSourceNode(l);
+      var t = linkTargetNode(l);
+      var o = i * 8;
+      var st = relationStrength(l);
+      if (!selectedKey) {
+        var alpha = 0.15 + st * 0.33;
+        tmpColor.set((s && s.color) || '#8A8490').lerp(EDGE_NEUTRAL, 0.42);
+        writeVertexColor(arr, o, tmpColor, alpha);
+        tmpColor.set((t && t.color) || '#8A8490').lerp(EDGE_NEUTRAL, 0.42);
+        writeVertexColor(arr, o + 4, tmpColor, alpha);
+      } else {
+        var sid = linkSourceId(l);
+        var tid = linkTargetId(l);
+        if (sid === selectedKey || tid === selectedKey) {
+          writeVertexColor(arr, o, EDGE_DIRECT, 0.92);
+          writeVertexColor(arr, o + 4, EDGE_DIRECT, 0.92);
+        } else if (directNeighbors[sid] || directNeighbors[tid]) {
+          writeVertexColor(arr, o, EDGE_NEAR, 0.3);
+          writeVertexColor(arr, o + 4, EDGE_NEAR, 0.3);
+        } else {
+          writeVertexColor(arr, o, EDGE_NEAR, 0.05);
+          writeVertexColor(arr, o + 4, EDGE_NEAR, 0.05);
+        }
+      }
+    }
+    linkColAttr.needsUpdate = true;
+  }
+
+  // --------------------------------------------------------------------------
 
   function setData(payload) {
     try {
@@ -368,10 +462,11 @@
       }
       nodeById = {};
       linksByNode = {};
+      meshByNode = {};
       nodes.forEach(function (n) { nodeById[n.id] = n; });
       links.forEach(function (l) {
-        var s = linkSource(l);
-        var t = linkTarget(l);
+        var s = linkSourceId(l);
+        var t = linkTargetId(l);
         (linksByNode[s] || (linksByNode[s] = [])).push(l);
         (linksByNode[t] || (linksByNode[t] = [])).push(l);
       });
@@ -386,7 +481,12 @@
         for (var i = 0; i < 90; i++) graph.tickFrame();
         settled = true;
       }
+      rebuildLinkBuffers();
       frameDefaultView();
+      if (!selectedKey && !userAdjusted) {
+        cam.targetGoal.copy(globalCenter);
+        cam.targetRadius = defaultRadius;
+      }
       updateStyles();
       requestRender();
     } catch (e) {
@@ -429,7 +529,7 @@
       var dy = (isFinite(n.y) ? n.y : 0) - globalCenter.y;
       var dz = (isFinite(n.z) ? n.z : 0) - globalCenter.z;
       var r = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      maxR = Math.max(maxR, r + nodeVal(n) * 1.6);
+      maxR = Math.max(maxR, r + baseRadius(n) * 1.6);
     });
     var fovTan = Math.tan(camera.fov * Math.PI / 360);
     var usableH = Math.max(140, H - padTop - padBottom);
@@ -437,10 +537,6 @@
     var effH = fovTan * camera.aspect * 0.92;
     var dist = (maxR * 1.14) / Math.min(effV, effH);
     defaultRadius = clamp(dist, 24, 900);
-    if (!selectedKey && !userAdjusted) {
-      cam.targetGoal.copy(globalCenter);
-      cam.targetRadius = defaultRadius;
-    }
   }
 
   function focusNode(key, notify) {
@@ -449,10 +545,9 @@
     selectedKey = key;
     rebuildFocusSets();
     cam.targetGoal.set(n.x || 0, n.y || 0, n.z || 0);
-    cam.targetRadius = clamp(defaultRadius * 0.5, 22, 190);
+    cam.targetRadius = clamp(defaultRadius * 0.55, 20, 200);
     labelDirty = true;
     updateStyles();
-    requestRender();
     if (notify) post({ type: 'nodeTap', key: selectedKey });
   }
 
@@ -465,7 +560,6 @@
     selectedRing.visible = false;
     labelDirty = true;
     updateStyles();
-    requestRender();
     if (notify) post({ type: 'clearFocus' });
   }
 
@@ -481,13 +575,23 @@
     selectedRing.visible = false;
     labelDirty = true;
     updateStyles();
-    requestRender();
     post({ type: 'clearFocus' });
   }
 
+  // In-place restyle: swap cached materials and rescale existing meshes.
+  // Never rebuilds the scene graph, so positions are always preserved.
   function updateStyles() {
     if (!graphReady) return;
-    graph.nodeVal(nodeVal).nodeColor(nodeColor).linkColor(linkColor).linkWidth(linkWidth).refresh();
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      var mesh = meshByNode[n.id];
+      if (!mesh) continue;
+      mesh.material = materialFor(n);
+      var s = displayScale(n);
+      mesh.scale.set(s, s, s);
+    }
+    updateLinkColors();
+    requestRender();
   }
 
   var lookTarget = new THREE.Vector3();
@@ -506,6 +610,10 @@
       cam.target.z + r * Math.sin(ph) * Math.sin(th),
     );
     camera.lookAt(cam.target);
+    // Depth cue: fog thresholds track the camera distance so the far side of
+    // the globe always recedes slightly, at any zoom level.
+    fog.near = r * 0.85;
+    fog.far = r + Math.max(40, graphRadius * 3.2);
     // Center the globe within the band between the header and the status pill:
     // shift the look-at point along screen-up so the visible content lands in
     // the unobstructed part of the viewport.
@@ -556,7 +664,7 @@
     selectedRing.visible = true;
     selectedRing.position.set(n.x || 0, n.y || 0, n.z || 0);
     selectedRing.quaternion.copy(camera.quaternion);
-    var s = Math.max(2.4, nodeVal(n) * 1.72);
+    var s = Math.max(2.4, displayScale(n) * 1.5);
     selectedRing.scale.set(s, s, s);
   }
 
@@ -593,9 +701,9 @@
       labelCache[key] = { tex: tex, screenW: screenW, screenH: h / dpr };
     }
     var info = labelCache[key];
-    var mat = new THREE.SpriteMaterial({ map: info.tex, transparent: true, depthWrite: false, opacity: 0 });
+    var mat = new THREE.SpriteMaterial({ map: info.tex, transparent: true, depthWrite: false, opacity: 0, fog: false });
     var sp = new THREE.Sprite(mat);
-      sp.scale.set(info.screenW * 0.09, info.screenH * 0.09, 1);
+    sp.scale.set(info.screenW * 0.09, info.screenH * 0.09, 1);
     sp.userData = { nodeId: n.id, screenW: info.screenW, screenH: info.screenH };
     labelLayer.add(sp);
     labelSprites[n.id] = sp;
@@ -640,7 +748,7 @@
     for (var i = 0; i < candidates.length && Object.keys(visibleIds).length < maxLabels; i++) {
       var n = candidates[i];
       if (!selectedKey && zoomRatio > 0.82 && nodePriority(n) < 95) continue;
-      var nodeR = 1.45 * Math.cbrt(nodeVal(n));
+      var nodeR = displayScale(n);
       pos.set(n.x || 0, (n.y || 0) + nodeR + 21 * worldPerPx, n.z || 0);
       var screen = worldToScreen(pos);
       if (!screen || screen.x < -60 || screen.x > W + 60 || screen.y < -40 || screen.y > H + 40) continue;
@@ -696,7 +804,7 @@
       var s = worldToScreen(p);
       if (!s) continue;
       var d = (s.x - x) * (s.x - x) + (s.y - y) * (s.y - y);
-      var tolerance = Math.pow(18 + nodeVal(n) * 1.7, 2);
+      var tolerance = Math.pow(18 + baseRadius(n) * 1.7, 2);
       var limit = Math.max(bestD, tolerance);
       if (d < limit && d < bestD) {
         best = n;
@@ -786,6 +894,10 @@
     padBottom = isFinite(bottom) ? Math.max(0, bottom) : 0;
     if (graphReady) {
       frameDefaultView();
+      if (!selectedKey && !userAdjusted) {
+        cam.targetGoal.copy(globalCenter);
+        cam.targetRadius = defaultRadius;
+      }
       labelDirty = true;
       requestRender();
     }
@@ -799,7 +911,7 @@
   };
   window.__setReducedMotion = function (value) {
     reducedMotion = !!value;
-    graph.cooldownTicks(reducedMotion ? 0 : 65).cooldownTime(reducedMotion ? 0 : 950);
+    graph.cooldownTicks(reducedMotion ? 0 : 160).cooldownTime(reducedMotion ? 0 : 2200);
   };
 
   window.addEventListener('message', function (e) { setData(e.data); });
