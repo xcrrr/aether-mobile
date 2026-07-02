@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Aether",
+    "slug": "aether",
+    "scheme": "aether",
+    "version": "2.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#1C1C1C",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1C1C1C"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.aether.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#1C1C1C"
+      },
+      "permissions": [
+        "INTERNET",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_DATA_SYNC",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 29
+          }
+        }
+      ],
+      "./plugins/withAetherAndroid.js",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Aether needs photo access to attach images to a conversation.",
+          "cameraPermission": "Aether needs the camera to take a photo to ask about."
+        }
+      ],
+      "expo-document-picker"
+    ]
+  }
+}

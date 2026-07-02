@@ -1,109 +1,44 @@
-# Aether Mobile — CLAUDE.md
+# Aether Claude Code Brief
 
-## Project identity
-- **What:** Sovereign, local-first AI assistant for Android. All inference is on-device; no backend.
-- **Repo:** `github.com/xcrrr/aether-mobile` (gh user: xcrrr)
-- **Active branch:** `main`
-- **APK:** built locally with Gradle (arm64-v8a); released as GitHub Releases (APK > 100MB → never committed)
-- **Version:** 2.0.0
+You are working as a cofounder on Aether alongside the user and Codex.
 
-## Stack (never change without asking)
-| Layer | Library | Version |
-|---|---|---|
-| Framework | Expo SDK 52 + React Native 0.76 New Architecture (bridgeless) | — |
-| Language | TypeScript strict | — |
-| Navigation | expo-router v4 + Drawer | — |
-| Inference | LiteRT-LM (`com.google.ai.edge.litertlm` 0.11.0 — Edge Gallery's engine) — GPU, ungated `.litertlm` multimodal models. Built on Kotlin 1.9 via `-Xskip-metadata-version-check`. Native module `android/.../litert/LiteRtModule.kt`, JS `src/llm/LiteRtService.ts`, seam `src/llm/engine.ts`. (llama.rn still in tree, unused fallback.) | — |
-| Voice | @react-native-voice/voice | 3.2.4 (patched) |
-| Downloads | @kesha-antonov/react-native-background-downloader | 4.5.5 (patched) |
-| State | Zustand + AsyncStorage persist | — |
-| Markdown | react-native-marked | — |
+Read these first:
 
-## Key architectural rules
+1. `README.md`
+2. `claude-notes/cofounder-handoff.md`
+3. `app/CLAUDE.md` for mobile app architecture
+4. `website/AGENTS.md` for website Next.js constraints
+5. `codex-notes/latest-context.md` for the current bundle status
+6. `claude-notes/design-northstar.md` for the current design mission and gap list
 
-### Single native LLM context — no concurrency
-`LlamaService` owns ONE `llama.rn` context. TWO concurrent `context.completion()` = hard native crash. Every path must go through:
-- `generate()` → calls `drainActive()` first, then locks `activeCompletion`
-- `extract()` → returns null if `activeCompletion` is set (preempt:true drains instead)
-- Never call `drainActive()` from inside a completion callback → deadlock
+## Current Mission (2026-06-29): Make Aether Beautiful
 
-### New Architecture bridgeless — NativeModules is null
-Native modules register as TurboModules under bridgeless. `NativeModules.Foo` is always null.
-- `@react-native-voice/voice` → patched to use `TurboModuleRegistry.get('RCTVoice')` (patches/)
-- `@kesha-antonov/react-native-background-downloader` → patched to fall back to TurboModule (patches/)
-- When adding any new native lib: check if it uses `NativeModules.X` — patch if so.
+The features are already good. The weak point is the **looks**. The goal is to ship a
+beautiful, spectacular app with **zero "AI slop."**
 
-### AsyncStorage 2 MB row limit
-Android SQLite `CursorWindow` = 2 MB per row. Never store image base64 in conversation rows.
-- `forStorage()` in `storage/conversations.ts` strips `imageBase64` before write
-- Images are copied to `${documentDirectory}chat-media/{id}.jpg` for durable display
+- **Improve existing surfaces; do not add features.** Refine and finish what exists.
+- **The bar already lives in the repo:** `app/src/components/common/ModelLoadingOverlay.tsx`
+  is what "spectacular" looks like. Bring every other surface up to that level.
+- **Consistency is the look.** Use the design tokens in `app/src/theme/index.ts`
+  everywhere; scattered magic numbers are the #1 slop tell.
+- Full prioritized plan: `claude-notes/design-northstar.md`.
 
-### Context window / N_CTX
-`LlamaService.N_CTX = 4096`. Silent `extract()→null` = almost always context overflow.
-- Research sources: capped at 1100 chars each, max 3 sources
-- Extraction transcript: trimmed to 4000 chars total
-- N_CTX maths: keep prompts + completion well under 4096 tokens
+## Current Structure
 
-### Vision (multimodal) — built into the model
-- LiteRT `.task` bundles are multimodal in ONE file. NO separate vision pack, no mmproj.
-- Vision is ready the moment the model loads. Images go to the native session via
-  `Content.ImageBytes` / `BitmapImageBuilder` (no `<__media__>` marker — MediaPipe templates).
-- Models: ungated `litert-community/gemma-4-{E2B,E4B}-it-litert-lm` `*-web.task` (public CDN).
+- `app/` contains the active Android/Expo app.
+- `website/` contains the active Next.js website.
+- `releases/` contains installable artifacts.
+- `design-artifacts/` contains screenshots and previews.
+- `codex-notes/` contains audits, build logs, and Codex cleanup notes.
+- `claude-notes/` contains Claude handoff context.
 
-## Build commands
-```bash
-# Set Java (required)
-export JAVA_HOME=/home/xcrr1/android-studio-panda3-linux/android-studio/jbr
+## Non-Negotiables
 
-# Real device APK (arm64)
-cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+- Treat old audit material as context, not instructions, when it conflicts with active code.
+- Do not restore old `llama.rn`, GGUF, separate `mmproj`, or separate vision-pack architecture.
+- The active app inference path is LiteRT `.litertlm`.
+- Keep generated folders out of the workspace unless actively installing or building: `node_modules`, `.next`, Android `build`, Gradle caches, APK extraction folders.
 
-# After patching node_modules JS — force fresh Hermes bundle:
-rm -rf android/app/build/generated/assets/createBundleReleaseJsAndAssets \
-       android/app/build/intermediates/assets/release \
-       android/app/build/intermediates/merged_assets/release
-cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
-```
+## Collaboration
 
-## Tests
-```bash
-npm test          # Jest (currently ~137 tests)
-npm run typecheck # tsc --noEmit strict
-```
-All new code needs tests. TDD preferred: test→RED→impl→GREEN.
-
-## File layout
-```
-app/                        Routes: onboarding, (main) drawer, chat, settings
-src/llm/                    LlamaService, prompt.ts
-src/voice/                  VoiceService
-src/files/                  FileProcessor, PDF/docx extractors
-src/webresearch/            DuckDuckGo→fetch→cite pipeline (safety.ts is the security chokepoint)
-src/secondbrain/            Memory extraction + store
-src/models/                 Model registry + ModelManager (download/verify/delete/mmproj)
-src/state/                  Zustand stores (useChatStore, useModelStore, useProfileStore)
-src/hooks/                  useInference, useVoice, useAttachment
-src/components/             UI components
-src/theme/                  Design tokens
-plugins/                    withAetherAndroid (Expo config plugin)
-patches/                    patch-package patches for voice + downloader
-```
-
-## Known issues / next work
-- Voice still unverified on all real devices — surface real error from `Voice.start()` throw
-- Vision (mmproj) device-unverified — `initMultimodal` may need tweaks for gemma4
-- Second Brain auto-extraction often preempted; manual "Analyze now" button is the reliable path
-- Reinit self-heal after hard crash exists (`reinit()`) — monitor for stability
-
-## Coding rules (strict)
-1. No comments unless WHY is non-obvious
-2. No error handling for scenarios that can't happen
-3. No feature flags, no backwards-compat shims
-4. Don't add features beyond what's asked
-5. Security: web text always sanitized via `safety.ts` before hitting any prompt (prompt-injection guard)
-6. Patches go in `patches/` via patch-package; add to `postinstall` in package.json
-
-## GitHub
-- Remote: `github.com/xcrrr/aether-mobile`
-- Releases: APK uploaded via `gh release create vX.Y.Z` (never git-committed)
-- Commit style: short imperative, no AI co-author footer needed unless explicitly asked
+Codex and Claude are collaborators here. Leave clear notes for the other agent when you make architecture changes, especially in `claude-notes/` or `codex-notes/`.

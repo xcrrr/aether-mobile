@@ -1,53 +1,30 @@
-# Aether
+# Aether Workspace
 
-**Your private AI, running entirely on your phone.**
+This is the cleaned Aether workspace from the June 2026 audit/update pass.
 
-Aether is a local-first AI assistant for Android. Every reply is generated on your device — no accounts, no servers, no telemetry. After a one-time model download, it works fully offline. Nothing you say ever leaves your phone.
+## Folder Map
 
----
+- `app/` - Android/Expo mobile app source.
+- `website/` - Next.js website source.
+- `releases/` - installable release artifacts, including the latest APK.
+- `design-artifacts/` - screenshots, model-loading previews, and visual QA material.
+- `codex-notes/` - Codex audit notes, cleanup logs, implementation notes, and build logs.
+- `claude-notes/` - Claude Code handoff notes and cofounder context.
 
-## What it can do
+## Start Here
 
-### 💬 Chat
-Talk to a powerful on-device model that replies fast, streams as it types, and formats answers cleanly. It keeps replies short when a short answer is all you need, and goes deep when the question calls for it.
+- Mobile app work starts in `app/`.
+- Website work starts in `website/`.
+- The latest APK is `releases/Aether-2.1.0-latest.apk`.
+- Current workspace context is `codex-notes/latest-context.md`.
+- Initial cleanup details are in `codex-notes/cleanup/cleanup-log-2026-06-29.md`; the latest Desktop/workspace cleanup is in `codex-notes/cleanup/cleanup-log-2026-07-02.md`.
 
-### 🖼️ See your images
-Attach a photo and ask about it. Aether actually looks at the picture and answers — all on-device. No extra downloads, it just works.
+## Architecture Boundary
 
-### 🌐 Research the web
-Turn on Research and Aether searches the web, reads the sources, and writes you a clear, cited answer — showing its progress in real time.
+Active product code should live only in `app/` and `website/`. Notes, old audits, logs, screenshots, and planning docs should stay outside active source unless they are required by the build.
 
-### 🎙️ Talk to it
-Tap the mic and speak. Aether transcribes your voice on-device, no internet needed.
+The active mobile model engine is LiteRT `.litertlm`. Do not bring back old `llama.rn`, GGUF, separate `mmproj`, or separate vision-pack architecture.
 
-### 🧩 Core
-Aether quietly remembers what matters about you — your goals, your projects, the people and details you mention — and uses that context in every chat. After each message it learns automatically and shows you what it saved. Explore everything it knows as a living **3D thought graph**, where new memories light up. Fully private, stored only on your device, and yours to edit or clear anytime.
+## Cofounder Note
 
-### ❓ Asks before it assumes
-When a request could go several ways, Aether asks a short clarifying question with tappable options — pick one and it carries on. Less guessing, better answers.
-
-### 📋 Copy what matters
-When Aether writes something you'll actually use — a post, an email, a command, a caption, a snippet of code — it drops it into a clean copy block. One tap to copy, no clutter around it.
-
-### ⚡ Two models, your choice
-Pick **Fast** for snappy everyday chat, or **Thinking** for deeper, more capable answers — switch anytime from the chat header.
-
----
-
-## Private by design
-
-- **On-device** — the AI runs on your phone's own hardware, accelerated by its GPU.
-- **Offline** — works in airplane mode once a model is downloaded.
-- **No account, no tracking** — nothing is collected, nothing is sent anywhere.
-- **Your data stays yours** — conversations and memory live only on your device.
-
----
-
-## Requirements
-
-- Android phone (8 GB RAM or more recommended)
-- ~3 GB free space for a model
-
----
-
-*Private. Offline. Yours.*
+The user considers Codex and Claude Code cofounders on Aether. Keep handoffs explicit, practical, and respectful of both agents. If you discover important project context, write it into `codex-notes/` or `claude-notes/` instead of relying on chat memory.
