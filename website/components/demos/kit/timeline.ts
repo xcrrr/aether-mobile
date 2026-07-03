@@ -16,13 +16,12 @@ export function useDemoClock({ duration, hold = 3600, restAt }: {
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [t, setT] = useState(0);
-  const [staticMode, setStaticMode] = useState(false);
+  const [staticMode] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setStaticMode(true);
-      return;
-    }
+    if (staticMode) return;
     const el = ref.current;
     if (!el) return;
     let raf = 0;
@@ -51,7 +50,7 @@ export function useDemoClock({ duration, hold = 3600, restAt }: {
     }, { threshold: 0.25 });
     io.observe(el);
     return () => { io.disconnect(); cancelAnimationFrame(raf); };
-  }, [duration, hold]);
+  }, [duration, hold, staticMode]);
 
   return { ref, t: staticMode ? restAt : t, staticMode };
 }
@@ -83,6 +82,9 @@ export function streamSlice(text: string, t: number, a: number, b: number): stri
   }
   return text.slice(0, count);
 }
+
+/** Quantize a streamed char count into small bursts so text lands like tokens, not a typewriter. */
+export const burst = (chars: number, step = 7) => Math.floor(chars / step) * step;
 
 /** Fade the whole recording out at the end of the cycle so the loop reads as a cut, not a jump. */
 export function loopOpacity(t: number, duration: number, hold: number): number {
