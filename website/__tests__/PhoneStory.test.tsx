@@ -25,6 +25,6 @@ test('renders the sticky scroll story by default', () => {
 test('reduced motion gets the static conversation instead of a scroll scene', () => {
   mockMatchMedia(true);
   render(<PhoneStory />);
-  expect(screen.getByText(/A conversation, off the grid/i)).toBeInTheDocument();
+  expect(screen.getByText(/Your phone is enough/i)).toBeInTheDocument();
   expect(screen.queryByText(/Keep scrolling/i)).not.toBeInTheDocument();
 });

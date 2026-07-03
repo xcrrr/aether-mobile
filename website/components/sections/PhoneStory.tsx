@@ -2,72 +2,63 @@
 import { useRef, useState } from 'react';
 import { useScroll, useMotionValueEvent } from 'framer-motion';
 import { ChatReplayView } from '@/components/phone/ChatReplay';
-import { resolveTimeline, type Beat } from '@/components/phone/useTypewriter';
-import { conversation } from '@/content/script';
+import { conversation, missionScenes } from '@/content/script';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
-function activeBeatIndex(beats: Beat[], p: number): number {
-  const t = resolveTimeline(beats, p);
-  if (t.streamingIndex >= 0) return t.streamingIndex;
-  return Math.max(0, t.shown.length - 1);
-}
+type Scene = { headline: string; body: string };
 
-/** Captions stacked in place; only the active one is visible. Height is reserved
- *  by the longest caption so the layout never shifts. */
-function Captions({ beats, activeIndex, started }: { beats: Beat[]; activeIndex: number; started: boolean }) {
-  const captioned = beats
-    .map((b, i) => ({ text: b.caption, i }))
-    .filter((c): c is { text: string; i: number } => !!c.text);
-
-  // The active caption is the last captioned beat at or before the active beat.
-  let visible = captioned.length ? captioned[0].i : -1;
-  for (const c of captioned) {
-    if (c.i <= activeIndex) visible = c.i;
-  }
-
+/** Scenes stacked in place; only the active one is visible. Height is reserved
+ *  by the longest headline/body pair so the layout never shifts. */
+function MissionCopy({ scenes, activeIndex, started }: { scenes: Scene[]; activeIndex: number; started: boolean }) {
   return (
     <div style={{ position: 'relative' }} aria-live="polite">
-      {/* invisible sizer so the block reserves the tallest caption's height */}
-      <p className="display-3" style={{ visibility: 'hidden', margin: 0 }} aria-hidden>
-        {captioned.reduce((a, b) => (b.text.length > a.length ? b.text : a), '')}
-      </p>
-      {captioned.map((c) => {
-        const active = started && c.i === visible;
+      {/* invisible sizer so the block reserves the tallest scene's height */}
+      <div style={{ visibility: 'hidden' }} aria-hidden>
+        <p className="display-3" style={{ margin: 0 }}>
+          {scenes.reduce((a, b) => (b.headline.length > a.headline.length ? b : a)).headline}
+        </p>
+        <p className="body-copy" style={{ marginTop: 16 }}>
+          {scenes.reduce((a, b) => (b.body.length > a.body.length ? b : a)).body}
+        </p>
+      </div>
+      {scenes.map((s, i) => {
+        const active = started && i === activeIndex;
         return (
-          <p
-            key={c.i}
-            className="display-3"
+          <div
+            key={i}
             aria-hidden={!active}
             style={{
               position: 'absolute',
               inset: 0,
-              margin: 0,
               opacity: active ? 1 : 0,
               transform: active ? 'translateY(0)' : 'translateY(10px)',
               transition: 'opacity 0.45s var(--ease), transform 0.45s var(--ease)',
             }}
           >
-            {c.text}
-          </p>
+            <p className="display-3" style={{ margin: 0 }}>{s.headline}</p>
+            <p className="body-copy" style={{ marginTop: 16 }}>{s.body}</p>
+          </div>
         );
       })}
     </div>
   );
 }
 
-function StaticStory({ beats }: { beats: Beat[] }) {
+function StaticStory() {
   return (
     <section id="demo" className="shell hairline-top" style={{ padding: '96px 0 112px' }}>
-      <p className="eyebrow" style={{ marginBottom: 20 }}>See it work</p>
-      <h2 className="display-2" style={{ maxWidth: 560 }}>A conversation, off the grid.</h2>
+      <h2 className="display-2" style={{ maxWidth: 560 }}>Aether&rsquo;s mission</h2>
       <div style={{ display: 'flex', justifyContent: 'center', margin: '56px 0 40px' }}>
         <div style={{ transform: 'scale(0.9)', transformOrigin: 'top center' }}>
-          <ChatReplayView beats={beats} progress={1} />
+          <ChatReplayView beats={conversation} progress={1} />
         </div>
       </div>
-      <div style={{ maxWidth: 560, margin: '0 auto', display: 'grid', gap: 18 }}>
-        {beats.filter((b) => b.caption).map((b, i) => (
-          <p key={i} className="body-copy">{b.caption}</p>
+      <div style={{ maxWidth: 560, margin: '0 auto', display: 'grid', gap: 28 }}>
+        {missionScenes.map((s, i) => (
+          <div key={i}>
+            <p className="display-3" style={{ margin: 0 }}>{s.headline}</p>
+            <p className="body-copy" style={{ marginTop: 12 }}>{s.body}</p>
+          </div>
         ))}
       </div>
     </section>
@@ -90,25 +81,19 @@ export function PhoneStory() {
     }
   });
 
-  if (reduced) return <StaticStory beats={conversation} />;
+  if (reduced) return <StaticStory />;
 
   // Small dead zones so the phone settles before/after the conversation plays.
   const convo = Math.min(1, Math.max(0, (p - 0.05) / 0.87));
   const started = p > 0.02;
-  const idx = activeBeatIndex(conversation, convo);
+  const sceneIdx = Math.min(missionScenes.length - 1, Math.floor(convo * missionScenes.length));
 
   return (
-    <section id="demo" ref={ref} style={{ height: '340vh', position: 'relative' }} aria-label="Aether conversation demo">
+    <section id="demo" ref={ref} style={{ height: '340vh', position: 'relative' }} aria-label="Aether's mission: your phone is enough">
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', background: '#242424' }}>
         <div className="shell story-grid">
           <div className="story-copy">
-            <p
-              className="eyebrow"
-              style={{ marginBottom: 20, opacity: started ? 1 : 0, transition: 'opacity 0.4s var(--ease)' }}
-            >
-              See it work
-            </p>
-            <Captions beats={conversation} activeIndex={idx} started={started} />
+            <MissionCopy scenes={missionScenes} activeIndex={sceneIdx} started={started} />
             <p
               className="story-hint"
               aria-hidden={started}
@@ -120,7 +105,7 @@ export function PhoneStory() {
                 transition: 'opacity 0.4s var(--ease)',
               }}
             >
-              Keep scrolling — the conversation plays as you go.
+              Keep scrolling.
             </p>
           </div>
           <div className="story-phone">

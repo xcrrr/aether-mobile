@@ -1,63 +1,357 @@
+'use client';
+
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChatDemo, FilesDemo, ResearchDemo, SeeDemo, TaskDemo } from '@/components/demos';
 import { Reveal } from '@/components/ui/Reveal';
 
-const ROWS = [
+const FEATURES = [
   {
-    title: 'Two speeds of thought',
-    body: 'Fast for quick answers, Thinking for deeper reasoning — two on-device models you can switch between mid-conversation.',
+    title: 'Chat',
+    hint: 'Fast answers or deeper reasoning, in the same conversation.',
+    body: 'Talk to Aether naturally and choose the pace that fits the moment: Fast for everyday questions, Thinking when a request needs more care.',
+    points: ['Fast and Thinking modes', 'Streaming replies', 'Conversation-first interface'],
+    Demo: ChatDemo,
   },
   {
-    title: 'It can look',
-    body: 'Attach a photo or a screenshot and ask about it. Image understanding is part of the same on-device model, not an upload.',
+    title: 'See',
+    hint: 'Ask about a photo, screenshot, or visual note.',
+    body: 'Add an image and Aether can read what is visible, then turn it into a useful answer inside the same chat surface.',
+    points: ['Image context in chat', 'Practical visual summaries', 'Useful follow-up prompts'],
+    Demo: SeeDemo,
   },
   {
-    title: 'It can listen',
-    body: 'Dictate instead of typing, using your phone’s Android speech recognition.',
+    title: 'Files',
+    hint: 'Bring selected documents into the answer.',
+    body: 'Choose a file when the question depends on source material. Aether uses the document as context instead of making you paste around it.',
+    points: ['PDF and document context', 'Grounded summaries', 'Copy-ready decisions and risks'],
+    Demo: FilesDemo,
   },
   {
-    title: 'It can read documents',
-    body: 'Hand it a PDF or Word file and ask about what’s inside. The text is extracted on the phone.',
+    title: 'Research',
+    hint: 'Use the web deliberately when freshness matters.',
+    body: 'When current information matters, Research goes online on purpose: it searches, reads, and returns an answer with sources.',
+    points: ['Explicit web mode', 'Readable progress states', 'Sources in the answer'],
+    Demo: ResearchDemo,
   },
   {
-    title: 'It can check the web — when you ask',
-    body: 'Research searches, reads, and answers with citations. It’s the one part of Aether that goes online, and it runs only when you turn it on.',
+    title: 'Task',
+    hint: 'Hand off a larger request and get a finished artifact.',
+    body: 'For bigger asks, Task mode keeps the work structured and brings back something concrete: a plan, draft, or next useful piece.',
+    points: ['Visible task progress', 'Artifact-style results', 'Designed for larger requests'],
+    Demo: TaskDemo,
   },
-  {
-    title: 'It can act, carefully',
-    body: 'Structured question cards, copy-ready blocks, and early Agent Actions that carry small tasks through step by step. The newest parts are still visibly beta — that’s honest, and it’s the point of one.',
-  },
-];
+] as const;
+
+type FeatureTitle = (typeof FEATURES)[number]['title'];
 
 export function Capabilities() {
-  return (
-    <section className="shell hairline-top" style={{ padding: '104px 0 120px' }}>
-      <Reveal>
-        <p className="eyebrow" style={{ marginBottom: 20 }}>What it can do</p>
-        <h2 className="display-2" style={{ maxWidth: 560 }}>
-          A small set of things, done properly.
-        </h2>
-      </Reveal>
+  const [activeTitle, setActiveTitle] = useState<FeatureTitle>('Chat');
+  const active = FEATURES.find((feature) => feature.title === activeTitle) ?? FEATURES[0];
+  const ActiveDemo = active.Demo;
 
-      <div style={{ marginTop: 56, borderTop: '1px solid var(--line)' }}>
-        {ROWS.map((r, i) => (
-          <Reveal key={r.title} as="article" delay={Math.min(i * 0.04, 0.16)}>
-            <div className="cap-row">
-              <h3 className="display-3">{r.title}</h3>
-              <p className="body-copy" style={{ fontSize: 16 }}>{r.body}</p>
-            </div>
+  return (
+    <section className="capabilities-overview ink hairline-top" aria-labelledby="capabilities-title">
+      <div className="shell capabilities-grid">
+        <div className="capabilities-copy">
+          <Reveal>
+            <p className="eyebrow" style={{ marginBottom: 20 }}>Overview</p>
+            <h2 id="capabilities-title" className="display-2">
+              What Aether can do
+            </h2>
+            <p className="body-copy capabilities-lede">
+              Aether keeps its core tools close to the conversation, so context turns into something you can use.
+            </p>
           </Reveal>
-        ))}
+
+          <div className="feature-stack" role="list" aria-label="Aether feature categories">
+            {FEATURES.map((feature, index) => {
+              const isActive = feature.title === active.title;
+              const panelId = `feature-panel-${feature.title.toLowerCase()}`;
+              const buttonId = `feature-button-${feature.title.toLowerCase()}`;
+
+              return (
+                <Reveal key={feature.title} delay={Math.min(index * 0.035, 0.14)}>
+                  <article className={`feature-item${isActive ? ' is-active' : ''}`} role="listitem">
+                    <button
+                      id={buttonId}
+                      type="button"
+                      className="feature-trigger"
+                      aria-expanded={isActive}
+                      aria-controls={panelId}
+                      onClick={() => setActiveTitle(feature.title)}
+                    >
+                      <span className="feature-index">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="feature-title-wrap">
+                        <span className="feature-title">{feature.title}</span>
+                        {!isActive && <span className="feature-hint">{feature.hint}</span>}
+                      </span>
+                    </button>
+
+                    <AnimatePresence initial={false}>
+                      {isActive && (
+                        <motion.div
+                          id={panelId}
+                          role="region"
+                          aria-labelledby={buttonId}
+                          className="feature-panel"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                          <div className="feature-panel-inner">
+                            <p>{feature.body}</p>
+                            <ul aria-label={`${feature.title} highlights`}>
+                              {feature.points.map((point) => (
+                                <li key={point}>{point}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </article>
+                </Reveal>
+              );
+            })}
+          </div>
+        </div>
+
+        <Reveal delay={0.08}>
+          <div className="overview-phone" aria-live="polite" aria-label={`${active.title} product demo`}>
+            <div className="overview-phone-stage">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={active.title}
+                  className="overview-demo"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <ActiveDemo />
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
+        </Reveal>
       </div>
 
       <style>{`
-        .cap-row {
-          display: grid;
-          grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
-          gap: 24px 64px;
-          padding: 30px 0;
-          border-bottom: 1px solid var(--line);
+        .capabilities-overview {
+          background: #242424;
+          padding: 112px 0 124px;
         }
-        @media (max-width: 720px) {
-          .cap-row { grid-template-columns: 1fr; gap: 8px; }
+
+        .capabilities-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 0.92fr) minmax(320px, 0.78fr);
+          align-items: center;
+          gap: clamp(56px, 8vw, 112px);
+        }
+
+        .capabilities-copy {
+          min-width: 0;
+        }
+
+        .capabilities-lede {
+          max-width: 540px;
+          margin-top: 18px;
+          font-size: 17px;
+        }
+
+        .feature-stack {
+          margin-top: 52px;
+          border-top: 1px solid rgba(241, 241, 239, 0.14);
+        }
+
+        .feature-item {
+          position: relative;
+          border-bottom: 1px solid rgba(241, 241, 239, 0.14);
+          transition: border-color 220ms var(--ease);
+        }
+
+        .feature-item::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 18px;
+          bottom: 18px;
+          width: 1px;
+          background: rgba(241, 241, 239, 0);
+          transition: background 220ms var(--ease);
+        }
+
+        .feature-item.is-active {
+          border-bottom-color: rgba(241, 241, 239, 0.24);
+        }
+
+        .feature-item.is-active::before {
+          background: rgba(241, 241, 239, 0.72);
+        }
+
+        .feature-trigger {
+          width: 100%;
+          border: 0;
+          background: transparent;
+          color: var(--text);
+          display: grid;
+          grid-template-columns: 44px 1fr;
+          gap: 14px;
+          padding: 24px 0 22px;
+          text-align: left;
+          cursor: pointer;
+          font: inherit;
+        }
+
+        .feature-trigger:hover .feature-title,
+        .feature-trigger:focus-visible .feature-title {
+          color: #ffffff;
+        }
+
+        .feature-index {
+          padding-top: 6px;
+          font-size: 12px;
+          line-height: 1;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          color: var(--muted);
+          transition: color 220ms var(--ease), opacity 220ms var(--ease);
+        }
+
+        .feature-item.is-active .feature-index {
+          color: var(--text);
+        }
+
+        .feature-title-wrap {
+          min-width: 0;
+          display: grid;
+          gap: 7px;
+        }
+
+        .feature-title {
+          font-family: var(--font-serif-stack);
+          font-weight: 500;
+          font-variation-settings: 'opsz' 32;
+          font-size: clamp(25px, 3.1vw, 34px);
+          line-height: 1.1;
+          color: rgba(241, 241, 239, 0.78);
+          transition: color 220ms var(--ease);
+        }
+
+        .feature-item.is-active .feature-title {
+          color: var(--text);
+        }
+
+        .feature-hint {
+          max-width: 420px;
+          font-size: 14px;
+          line-height: 1.45;
+          color: rgba(185, 185, 180, 0.72);
+        }
+
+        .feature-panel {
+          overflow: hidden;
+        }
+
+        .feature-panel-inner {
+          padding: 0 0 28px 58px;
+          max-width: 520px;
+          color: var(--muted);
+        }
+
+        .feature-panel-inner p {
+          margin: 0;
+          font-size: 16px;
+          line-height: 1.66;
+        }
+
+        .feature-panel-inner ul {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px 10px;
+          list-style: none;
+          margin: 18px 0 0;
+          padding: 0;
+        }
+
+        .feature-panel-inner li {
+          border-top: 1px solid rgba(241, 241, 239, 0.18);
+          padding-top: 8px;
+          min-width: min(156px, 100%);
+          font-size: 13px;
+          line-height: 1.35;
+          color: rgba(241, 241, 239, 0.78);
+        }
+
+        .overview-phone {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-width: 0;
+        }
+
+        .overview-phone-stage {
+          width: min(100%, 382px);
+          min-height: min(740px, calc((100vw - 48px) * 2.06));
+          position: relative;
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
+        }
+
+        .overview-demo {
+          width: 100%;
+        }
+
+        .overview-demo [data-demo-root] {
+          width: 100%;
+        }
+
+        @media (max-width: 920px) {
+          .capabilities-overview {
+            padding: 88px 0 104px;
+          }
+
+          .capabilities-grid {
+            grid-template-columns: 1fr;
+            gap: 44px;
+          }
+
+          .feature-stack {
+            margin-top: 40px;
+          }
+
+          .overview-phone-stage {
+            width: min(100%, 360px);
+            min-height: min(740px, calc((100vw - 40px) * 2.06));
+          }
+        }
+
+        @media (max-width: 640px) {
+          .capabilities-overview {
+            padding: 76px 0 92px;
+          }
+
+          .feature-trigger {
+            grid-template-columns: 34px 1fr;
+            gap: 10px;
+            padding: 22px 0 20px;
+          }
+
+          .feature-panel-inner {
+            padding-left: 44px;
+          }
+
+          .feature-panel-inner ul {
+            display: grid;
+            gap: 10px;
+          }
+
+          .feature-panel-inner li {
+            min-width: 0;
+          }
         }
       `}</style>
     </section>

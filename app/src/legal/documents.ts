@@ -56,7 +56,15 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
         heading: 'User responsibilities',
         body: [
           'Use the beta with care, especially around personal, sensitive, medical, legal, financial, or safety-critical information.',
-          'AI responses can be wrong. Review important outputs before relying on them.',
+          'AI responses can be wrong, incomplete, or out of date. Review important outputs before relying on them, and do not use this beta as your only source for medical, legal, financial, emergency, or other safety-critical decisions.',
+        ],
+      },
+      {
+        heading: 'Limitations & liability',
+        body: [
+          'Aether is provided as beta software, at this stage, without warranty of any kind. You use it at your own discretion and risk.',
+          'To the maximum extent permitted by law, the publisher is not responsible for device problems, data loss, or misuse of the app that may occur while testing this beta.',
+          'This section is a plain-language placeholder for a proper limitation-of-liability clause. It is not final legal text and still requires review by the publisher / legal representative before public release.',
         ],
       },
       {

@@ -108,6 +108,10 @@ export function useInference(modelId: string | undefined) {
     await chat.appendUser(text, attachment ? [attachment] : undefined);
     const messages = useChatStore.getState().current?.messages ?? [];
     const { MemoryStore } = require('@/secondbrain/MemoryStore') as typeof import('@/secondbrain/MemoryStore');
+    // The first send after a cold start is often what loads this module, so its
+    // AsyncStorage rehydration may still be in flight. Wait for it, or recall
+    // reads an empty store and Core answers "I have no saved notes".
+    await MemoryStore.ensureHydrated();
     const { selectRecall } = require('@/secondbrain/recall') as typeof import('@/secondbrain/recall');
     const recall = selectRecall(messages, {
       entries: MemoryStore.getAllEntries(),
@@ -118,6 +122,22 @@ export function useInference(modelId: string | undefined) {
       modelName: modelId ? getModelById(modelId)?.name : undefined,
       recall,
     });
+    // Dev-only proof that Core context actually reached the exact prompt string
+    // handed to the active LiteRT session. Stripped from release builds (__DEV__
+    // is false there) — never touches production UI. Check via `adb logcat` /
+    // the Metro console, filtering on "[CoreDebug]".
+    if (__DEV__) {
+      console.log('[CoreDebug]', {
+        modelId,
+        coreHydrated: MemoryStore.hasHydrated(),
+        coreEnabled: MemoryStore.isEnabled(),
+        storedEntryCount: MemoryStore.getAllEntries().length,
+        recallTopicalKeys: recall.topical.map((t) => t.entry.key),
+        recallStyleKeys: recall.style.map((e) => e.key),
+        profileQuery: recall.profileQuery ?? false,
+        systemPromptHasCoreSection: system.includes('Private notes about the user'),
+      });
+    }
     chat.startAssistant();
     if (recall.topical.length) {
       useChatStore.getState().setAssistantRecall(

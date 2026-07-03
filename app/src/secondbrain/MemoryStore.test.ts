@@ -16,6 +16,13 @@ function reset() {
 
 beforeEach(reset);
 
+describe('MemoryStore hydration gate', () => {
+  it('ensureHydrated resolves and reports hydration so recall never reads an empty store on cold start', async () => {
+    await expect(MemoryStore.ensureHydrated()).resolves.toBeUndefined();
+    expect(MemoryStore.hasHydrated()).toBe(true);
+  });
+});
+
 describe('MemoryStore', () => {
   it('inserts a new entry with id and timestamps', () => {
     MemoryStore.addOrUpdateEntry({

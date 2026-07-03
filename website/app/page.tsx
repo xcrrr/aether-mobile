@@ -1,7 +1,6 @@
 import { Nav } from '@/components/sections/Nav';
 import { Hero } from '@/components/sections/Hero';
 import { PhoneStory } from '@/components/sections/PhoneStory';
-import { Premise } from '@/components/sections/Premise';
 import { Memory } from '@/components/sections/Memory';
 import { Capabilities } from '@/components/sections/Capabilities';
 import { Boundaries } from '@/components/sections/Boundaries';
@@ -15,7 +14,6 @@ export default function Home() {
       <main id="main">
         <Hero />
         <PhoneStory />
-        <Premise />
         <Memory />
         <Capabilities />
         <Boundaries />

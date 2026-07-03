@@ -38,16 +38,19 @@ const CONTINUATION = /\b(continue|continuing|pick up|left off|last time|as we di
  * They get their own deterministic route: a bounded, high-confidence profile
  * selection instead of similarity matching.
  */
-const PROFILE_BROAD = /\b(who am i|what do you (know|remember) about me|what (have you|did you) (learned?|saved?|remembered?) about me|do you (know|remember) (anything |something )?about me|tell me about (me|myself)|describe me|what do you know about my life)\b/i;
+const PROFILE_BROAD = /\b(who am i|do you know who i am|do (you|you all) (know|remember) me|what can (you|core) tell me about (me|myself)|what do(?:es)? (you|core) (know|remember) about me|what (have you|did you|has core|does core) (learned?|saved?|remembered?) about me|do (you|core) (know|remember) (anything |something )?about me|tell me about (me|myself)|describe me|what do(?:es)? (you|core) know about my (life|self))\b/i;
 
 /** A facet noun alone ("my project plan…") is a work request, not a memory
- *  question — the message must also ASK what is known/remembered. */
-const PROFILE_ASK = /\b(what (are|is|were|am i)|what do you (know|remember)|do you (know|remember)|tell me|remind me|list)\b/i;
+ *  question — the message must also ASK what is known/remembered. Allow up to
+ *  3 filler words between "what" and the verb so real phrasing like "what
+ *  PROJECTS am I working on" still counts as asking (not just the bare "what
+ *  am I working on"). */
+const PROFILE_ASK = /\b(what\s+(?:\w+\s+){0,3}(?:are|is|were|am i)\b|what do you (know|remember)|do you (know|remember)|tell me|remind me|list)\b/i;
 
 const PROFILE_FACETS: Array<{ re: RegExp; categories: MemoryCategory[] }> = [
   { re: /\bmy (interests?|hobbies|hobby|passions?)\b/i, categories: ['preferences'] },
   { re: /\bmy (goals?|ambitions?)\b/i, categories: ['goals'] },
-  { re: /\b(what am i working on|my projects?)\b/i, categories: ['context', 'goals'] },
+  { re: /\b(working on|my projects?)\b/i, categories: ['context', 'goals'] },
 ];
 
 /** Category order for a broad profile summary. Emotional and patterns notes are

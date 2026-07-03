@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, TextInput, Text, Animated, Alert, StyleSheet } from 'react-native';
-import { ArrowUp, Square, Mic, Paperclip, Globe, Plus, X, Sparkles, ShieldCheck } from 'lucide-react-native';
+import { View, TextInput, Text, Animated, Alert, StyleSheet, Switch } from 'react-native';
+import { ArrowUp, Square, Mic, Paperclip, Globe, Sparkles, X, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { PressableScale } from '@/components/ds/PressableScale';
 import { useChatStore } from '@/state/useChatStore';
 import { useAgentStore } from '@/state/useAgentStore';
@@ -9,6 +9,7 @@ import { type AttachmentState } from '@/hooks/useAttachment';
 import { AttachmentSheet } from './AttachmentSheet';
 import { AttachmentChip } from './AttachmentChip';
 import { ListeningWave } from './ListeningWave';
+import { ModeMenu, type ChatMode } from './ModeMenu';
 import { FileAttachment } from '@/types';
 import { radius, spacing, Palette, typography } from '@/theme';
 import { useColors } from '@/theme/useColors';
@@ -39,9 +40,12 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
   const styles = useMemo(() => makeStyles(c), [c]);
   const [text, setText] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [barOpen, setBarOpen] = useState(false);
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [taskOptionsOpen, setTaskOptionsOpen] = useState(false);
   const isGenerating = useChatStore((s) => s.isGenerating);
   const stopGeneration = useChatStore((s) => s.stopGeneration);
+  const agentMode = useAgentStore((s) => s.mode);
+  const setAgentMode = useAgentStore((s) => s.setMode);
 
   const voice = useVoice((recognized) => {
     setText((prev) => (prev.trim() ? `${prev.trim()} ${recognized}` : recognized));
@@ -61,6 +65,9 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
     return () => loop.stop();
   }, [voice.listening, pulse]);
   const micScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
+
+  // Task's inline preferences only make sense while Task is active.
+  useEffect(() => { if (!actMode) setTaskOptionsOpen(false); }, [actMode]);
 
   const imageAttached = att.attachment?.type === 'image';
   const visionActive = imageAttached && supportsVision && !!vision?.ready;
@@ -85,8 +92,9 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
     doSend(t, attachment);
   };
 
-  const canSend = !!text.trim() || (!!att.attachment && !att.processing);
-  const sendDisabled = !isGenerating && (disabled || !canSend);
+  const hasContent = !!text.trim() || (!!att.attachment && !att.processing);
+  const sendDisabled = !isGenerating && (disabled || !hasContent);
+  const showMic = !isGenerating && !hasContent;
   const placeholder = disabled
     ? 'Loading model...'
     : actMode ? 'Give Aether a task...'
@@ -94,14 +102,33 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
     : voice.listening ? 'Listening...'
     : 'Message Aether';
 
-  const openAttach = () => { setBarOpen(false); setSheetOpen(true); };
-  // Keep the actions bar open while research is on so the active toggle stays
-  // visible, otherwise the user can't tell research is engaged.
-  const toggleResearch = () => onToggleResearch?.();
-  const toggleVoice = () => { setBarOpen(false); void voice.toggle(); };
+  const openAttach = () => setSheetOpen(true);
+  const toggleVoice = () => void voice.toggle();
 
-  // Force the bar open whenever research or actions is active, regardless of manual collapse.
-  const showBar = (barOpen || researchMode || actMode) && !disabled;
+  const activeMode: ChatMode = actMode ? 'task' : researchMode ? 'research' : 'chat';
+
+  const selectMode = (m: ChatMode) => {
+    setModeMenuOpen(false);
+    if (m === 'chat') {
+      if (researchMode) onToggleResearch?.();
+      else if (actMode) onToggleAct?.();
+    } else if (m === 'research') {
+      if (!researchMode) onToggleResearch?.();
+    } else if (m === 'task') {
+      if (!actMode) onToggleAct?.();
+    }
+  };
+
+  const exitToChat = () => {
+    if (researchMode) onToggleResearch?.();
+    else if (actMode) onToggleAct?.();
+  };
+
+  const askFirst = agentMode === 'strict';
+  const showModeRow = !disabled;
+  const footer = researchMode || actMode
+    ? 'Aether is an AI and can make mistakes.'
+    : 'Aether is an AI and can make mistakes. Replies run on-device.';
 
   return (
     <View style={styles.wrap}>
@@ -138,29 +165,69 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
       {/* Voice / permission error */}
       {voice.error && <Text style={styles.voiceErr}>{voice.error}</Text>}
 
-      {/* Collapsible actions bar (Claude-style "+") */}
-      {showBar && (
-        <View style={styles.actionsBar}>
-          <ActionPill icon={<Paperclip size={17} color={researchMode ? c.border : c.textMuted} strokeWidth={1.8} />} label="Attach" onPress={openAttach} disabled={researchMode} />
-          <ActionPill icon={<Globe size={17} color={researchMode ? c.violet : c.textMuted} strokeWidth={1.8} />} label="Research" active={researchMode} onPress={toggleResearch} />
-          {!!onToggleAct && (
-            <ActionPill icon={<Sparkles size={17} color={actMode ? c.violet : c.textMuted} strokeWidth={1.8} />} label="Task" active={actMode} onPress={onToggleAct} />
-          )}
-          {actMode && <AskFirstPill />}
-          <ActionPill icon={<Mic size={17} color={voice.listening ? c.danger : c.textMuted} strokeWidth={1.8} />} label={voice.listening ? 'Listening' : 'Voice'} active={voice.listening} onPress={toggleVoice} />
+      {/* Mode: a quiet "Chat" trigger by default, or a compact active-mode line */}
+      {showModeRow && activeMode === 'chat' && (
+        <PressableScale style={styles.modeTrigger} onPress={() => setModeMenuOpen(true)} hitSlop={6}>
+          <Text style={styles.modeTriggerText}>Chat</Text>
+          <ChevronDown size={14} color={c.textMuted} strokeWidth={2} />
+        </PressableScale>
+      )}
+
+      {showModeRow && activeMode === 'research' && (
+        <View style={styles.activeModeBar}>
+          <PressableScale style={styles.activeModeLeft} onPress={() => setModeMenuOpen(true)} hitSlop={4}>
+            <Globe size={14} color={c.violet} strokeWidth={1.8} />
+            <Text style={styles.activeModeLabel}>Research</Text>
+            <Text style={styles.activeModeSub}>· Uses the web</Text>
+          </PressableScale>
+          <PressableScale onPress={exitToChat} hitSlop={8}>
+            <X size={16} color={c.textMuted} strokeWidth={1.8} />
+          </PressableScale>
+        </View>
+      )}
+
+      {showModeRow && activeMode === 'task' && (
+        <View style={styles.activeModeBar}>
+          <PressableScale style={styles.activeModeLeft} onPress={() => setModeMenuOpen(true)} hitSlop={4}>
+            <Sparkles size={14} color={c.violet} strokeWidth={1.8} />
+            <Text style={styles.activeModeLabel}>Task</Text>
+            <View style={styles.betaTag}>
+              <Text style={styles.betaTagText}>Beta</Text>
+            </View>
+          </PressableScale>
+          <View style={styles.activeModeRight}>
+            <PressableScale onPress={() => setTaskOptionsOpen((v) => !v)} hitSlop={8}>
+              {taskOptionsOpen
+                ? <ChevronUp size={16} color={c.textMuted} strokeWidth={1.8} />
+                : <ChevronDown size={16} color={c.textMuted} strokeWidth={1.8} />}
+            </PressableScale>
+            <PressableScale onPress={exitToChat} hitSlop={8}>
+              <X size={16} color={c.textMuted} strokeWidth={1.8} />
+            </PressableScale>
+          </View>
+        </View>
+      )}
+
+      {showModeRow && activeMode === 'task' && taskOptionsOpen && (
+        <View style={styles.taskOptionsRow}>
+          <Text style={styles.taskOptionsLabel}>Ask before actions</Text>
+          <Switch
+            value={askFirst}
+            onValueChange={(v) => setAgentMode(v ? 'strict' : 'balanced')}
+            trackColor={{ false: c.border, true: c.violet }}
+            thumbColor={c.white}
+          />
         </View>
       )}
 
       <View style={styles.row}>
         <PressableScale
-          style={styles.plusBtn}
-          onPress={() => setBarOpen((v) => !v)}
-          disabled={disabled}
+          style={styles.attachBtn}
+          onPress={openAttach}
+          disabled={disabled || researchMode}
           hitSlop={6}
         >
-          {showBar
-            ? <X size={20} color={c.textMuted} strokeWidth={1.8} />
-            : <Plus size={21} color={disabled ? c.border : c.textMuted} strokeWidth={1.8} />}
+          <Paperclip size={19} color={disabled || researchMode ? c.border : c.textMuted} strokeWidth={1.8} />
         </PressableScale>
 
         <TextInput
@@ -173,22 +240,34 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
           multiline
         />
 
-        <PressableScale
-          style={[
-            styles.send,
-            { backgroundColor: isGenerating ? c.danger : sendDisabled ? c.bgInput : c.violet },
-          ]}
-          onPress={isGenerating ? stopGeneration : send}
-          disabled={sendDisabled}
-          haptic
-        >
-          {isGenerating
-            ? <Square size={13} color={c.white} fill={c.white} />
-            : <ArrowUp size={19} color={sendDisabled ? c.textMuted : c.white} strokeWidth={2.2} />}
-        </PressableScale>
+        {isGenerating ? (
+          <PressableScale style={[styles.send, { backgroundColor: c.danger }]} onPress={stopGeneration} haptic>
+            <Square size={13} color={c.white} fill={c.white} />
+          </PressableScale>
+        ) : showMic ? (
+          <PressableScale
+            style={[styles.send, styles.micBtn, voice.listening && styles.micBtnActive]}
+            onPress={toggleVoice}
+            disabled={disabled}
+            haptic
+          >
+            <Animated.View style={{ transform: [{ scale: voice.listening ? micScale : 1 }] }}>
+              <Mic size={18} color={voice.listening ? c.danger : c.textMuted} strokeWidth={1.8} />
+            </Animated.View>
+          </PressableScale>
+        ) : (
+          <PressableScale
+            style={[styles.send, { backgroundColor: sendDisabled ? c.bgInput : c.violet }]}
+            onPress={send}
+            disabled={sendDisabled}
+            haptic
+          >
+            <ArrowUp size={19} color={sendDisabled ? c.textMuted : c.white} strokeWidth={2.2} />
+          </PressableScale>
+        )}
       </View>
 
-      <Text style={styles.footer}>Aether is an AI and can make mistakes. Replies run on-device.</Text>
+      <Text style={styles.footer}>{footer}</Text>
 
       <AttachmentSheet
         visible={sheetOpen}
@@ -198,45 +277,15 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
         onFiles={att.pickFiles}
         onPaste={att.paste}
       />
+
+      <ModeMenu
+        visible={modeMenuOpen}
+        onClose={() => setModeMenuOpen(false)}
+        active={activeMode}
+        taskAvailable={!!onToggleAct}
+        onSelect={selectMode}
+      />
     </View>
-  );
-}
-
-/**
- * The only visible control on task autonomy: off (default) lets Aether handle
- * steps itself with drafts needing an explicit Keep; on maps to the strict
- * policy row — every data/write step shows an approval card first.
- */
-function AskFirstPill() {
-  const c = useColors();
-  const mode = useAgentStore((s) => s.mode);
-  const setMode = useAgentStore((s) => s.setMode);
-  const on = mode === 'strict';
-  return (
-    <ActionPill
-      icon={<ShieldCheck size={17} color={on ? c.violet : c.textMuted} strokeWidth={1.8} />}
-      label="Ask first"
-      active={on}
-      onPress={() => setMode(on ? 'balanced' : 'strict')}
-    />
-  );
-}
-
-function ActionPill({ icon, label, onPress, active, disabled }: {
-  icon: React.ReactNode; label: string; onPress: () => void; active?: boolean; disabled?: boolean;
-}) {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  return (
-    <PressableScale
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.pill, active && styles.pillActive, disabled && styles.pillDisabled]}
-      hitSlop={4}
-    >
-      {icon}
-      <Text style={[styles.pillLabel, active && { color: c.violet }, disabled && { color: c.border }]}>{label}</Text>
-    </PressableScale>
   );
 }
 
@@ -255,23 +304,36 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingVertical: 10,
     ...typography.input,
   },
-  plusBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  attachBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   send: { width: 40, height: 40, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  actionsBar: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm, flexWrap: 'wrap' },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingVertical: 7,
-    paddingHorizontal: 11,
-    borderRadius: radius.md,
-    backgroundColor: c.bg,
-    borderWidth: 1,
-    borderColor: c.border,
+  micBtn: { backgroundColor: c.bgInput, borderWidth: 1, borderColor: c.border },
+  micBtnActive: { borderColor: c.danger },
+
+  modeTrigger: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
+    gap: 3, paddingVertical: 4, paddingHorizontal: 2, marginBottom: spacing.xs,
   },
-  pillActive: { backgroundColor: c.violetDim, borderColor: c.violetDim },
-  pillDisabled: { opacity: 0.5 },
-  pillLabel: { color: c.text, ...typography.label },
+  modeTriggerText: { color: c.textMuted, ...typography.label },
+
+  activeModeBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: c.violetDim, borderRadius: radius.md,
+    paddingVertical: 6, paddingHorizontal: 10, marginBottom: spacing.xs,
+  },
+  activeModeLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  activeModeRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  activeModeLabel: { color: c.violet, ...typography.label },
+  activeModeSub: { color: c.textMuted, ...typography.caption },
+  betaTag: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.sm, backgroundColor: c.bg },
+  betaTagText: { color: c.violet, ...typography.metadata, textTransform: 'uppercase', letterSpacing: 0.4 },
+
+  taskOptionsRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 8, paddingHorizontal: 10, marginBottom: spacing.xs,
+    borderRadius: radius.md, borderWidth: 1, borderColor: c.border,
+  },
+  taskOptionsLabel: { color: c.text, ...typography.bodySmall },
+
   footer: { textAlign: 'center', color: c.textMuted, paddingVertical: spacing.sm, ...typography.metadata },
   transcript: { alignSelf: 'stretch', backgroundColor: c.bgInput, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
   transcriptText: { color: c.textMuted, ...typography.bodySmall },

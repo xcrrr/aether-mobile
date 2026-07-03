@@ -240,6 +240,30 @@ describe('selectRecall — profile route (self-context questions)', () => {
     expect(r.topical.map((t) => t.entry.key)).toContain('home_city');
   });
 
+  it('"Do you know who I am?" routes to profile (word order differs from "who am I")', () => {
+    const r = selectRecall([user('Do you know who I am?')], input([identity(), blackHoles()]));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key)).toContain('home_city');
+  });
+
+  it('"Do you know me?" routes to profile', () => {
+    const r = selectRecall([user('Do you know me?')], input([identity(), blackHoles()]));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key)).toContain('home_city');
+  });
+
+  it('"What can you tell me about me?" routes to profile', () => {
+    const r = selectRecall([user('What can you tell me about me?')], input([identity(), aether()]));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key).sort()).toEqual(['aether_project', 'home_city']);
+  });
+
+  it('"What does Core remember about me?" routes to profile (the acceptance phrase)', () => {
+    const r = selectRecall([user('What does Core remember about me?')], input([identity(), aether()]));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key).sort()).toEqual(['aether_project', 'home_city']);
+  });
+
   it('"What are my interests?" retrieves only preference notes', () => {
     const r = selectRecall([user('What are my interests?')], input([aether(), blackHoles(), marathon()]));
     expect(r.profileQuery).toBe(true);
@@ -247,6 +271,12 @@ describe('selectRecall — profile route (self-context questions)', () => {
   });
 
   it('"What projects am I working on?" hits context and goals', () => {
+    const r = selectRecall([user('What projects am I working on?')], input([aether(), blackHoles(), marathon()]));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key).sort()).toEqual(['aether_project', 'marathon_goal']);
+  });
+
+  it('"What am I working on right now?" also hits context and goals', () => {
     const r = selectRecall([user('What am I working on right now?')], input([aether(), blackHoles(), marathon()]));
     expect(r.topical.map((t) => t.entry.key).sort()).toEqual(['aether_project', 'marathon_goal']);
   });

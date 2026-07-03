@@ -289,10 +289,43 @@ export const useMemoryStore = create<SecondBrainState>()(
 );
 
 /**
+ * Resolve once the persisted state has loaded from AsyncStorage.
+ *
+ * The chat send path reads Core SYNCHRONOUSLY the first time it touches this
+ * module (`require(...)` → `getAllEntries()`), but zustand `persist` rehydrates
+ * ASYNCHRONOUSLY. On a cold start where chat is the first surface to load the
+ * store, that read lands before rehydration and returns zero entries — the exact
+ * "I have no saved Core notes" failure, even though notes exist on disk. Awaiting
+ * this before recall closes the race. Capped so a stuck read can never block a
+ * reply; recall already fails safe to empty.
+ */
+function ensureHydrated(): Promise<void> {
+  const p = useMemoryStore.persist;
+  if (p.hasHydrated()) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let done = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      unsub();
+      clearTimeout(timer);
+      resolve();
+    };
+    const unsub = p.onFinishHydration(finish);
+    // Rehydration finished between the check and the subscribe.
+    if (p.hasHydrated()) return finish();
+    timer = setTimeout(finish, 1500);
+  });
+}
+
+/**
  * Non-hook accessors for use outside React (prompt building /
  * extractor). They read/write the same store instance.
  */
 export const MemoryStore = {
+  ensureHydrated,
+  hasHydrated: () => useMemoryStore.persist.hasHydrated(),
   addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced' | 'lastSeenAt'>) =>
     useMemoryStore.getState().addOrUpdateEntry(entry),
   updateEntry: (id: string, patch: { value?: string; category?: MemoryCategory; visualCategory?: MemoryVisualCategory }) =>

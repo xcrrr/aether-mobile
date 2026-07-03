@@ -30,6 +30,7 @@ export function createExecutors(): Record<string, ToolExecutor> {
 
     read_core: async (args, ctx) => {
       const { MemoryStore } = require('@/secondbrain/MemoryStore') as typeof import('@/secondbrain/MemoryStore');
+      await MemoryStore.ensureHydrated();
       const { selectRecall } = require('@/secondbrain/recall') as typeof import('@/secondbrain/recall');
       const recall = selectRecall(
         [{ id: 'agent-recall', role: 'user', content: args.topic, createdAt: Date.now() }],

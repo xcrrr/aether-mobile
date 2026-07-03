@@ -1,6 +1,30 @@
 import type { Beat } from '@/components/phone/useTypewriter';
 
 /**
+ * The mission narrative shown beside the sticky phone. Every claim here must
+ * stay implementation-backed and avoid absolutes (no "fully private", no
+ * "zero impact", no unverified percentages).
+ */
+export const missionScenes: { headline: string; body: string }[] = [
+  {
+    headline: 'Your phone is enough.',
+    body: 'The device you already carry is personal, powerful, and closer to your life than any distant server.',
+  },
+  {
+    headline: 'Keep everyday thinking close.',
+    body: 'After a one-time model download, ordinary conversations can run directly on your device.',
+  },
+  {
+    headline: 'Use the web when you choose.',
+    body: 'Research is there when current information matters. It is a choice, not the default behind every thought.',
+  },
+  {
+    headline: 'Less distance. Lower impact.',
+    body: 'Aether is designed to reduce the energy and water impact of everyday AI use by keeping more work on the device already in your pocket.',
+  },
+];
+
+/**
  * The demo conversation. Every claim here must stay implementation-backed:
  * on-device inference (LiteRT), Core memory stored locally and editable,
  * Research as the optional online mode. No absolutes, no theatrics.

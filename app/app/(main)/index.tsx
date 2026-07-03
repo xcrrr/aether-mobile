@@ -3,8 +3,10 @@ import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Button } from '@/components/ds/Button';
 import { Logo } from '@/components/ds/Logo';
+import { ProgressBar } from '@/components/common/ProgressBar';
 import { useChatStore } from '@/state/useChatStore';
 import { useModelStore } from '@/state/useModelStore';
+import { getModelById } from '@/models/registry';
 import { spacing, fonts, Palette, fontSize } from '@/theme';
 import { useColors, useIsDark } from '@/theme/useColors';
 
@@ -13,20 +15,25 @@ export default function MainIndex() {
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(c), [c]);
   const { index, current, newChat } = useChatStore();
-  const { activeModelId, installed, hydrate } = useModelStore();
+  const { activeModelId, installed, downloads, hydrate, reattachDownloads } = useModelStore();
   const modelReady = !!activeModelId && !!installed[activeModelId];
+  const downloadingId = Object.keys(downloads).find((id) => downloads[id]?.downloading);
+  const downloading = downloadingId ? downloads[downloadingId] : undefined;
+  const downloadingModel = downloadingId ? getModelById(downloadingId) : undefined;
   const [hydrated, setHydrated] = useState(false);
   const redirecting = useRef(false);
 
   useEffect(() => {
     let alive = true;
-    void hydrate().finally(() => {
-      if (alive) setHydrated(true);
-    });
+    void hydrate()
+      .then(() => reattachDownloads())
+      .finally(() => {
+        if (alive) setHydrated(true);
+      });
     return () => {
       alive = false;
     };
-  }, [hydrate]);
+  }, [hydrate, reattachDownloads]);
 
   useEffect(() => {
     if (!hydrated || !modelReady || !activeModelId || redirecting.current) return;
@@ -62,10 +69,16 @@ export default function MainIndex() {
         <Logo size={56} tone={isDark ? 'white' : 'violet'} style={styles.logo} />
         <Text style={styles.title}>Aether</Text>
         <Text style={styles.sub}>
-          {modelReady ? 'Start a conversation with your local model.' : 'Download a model to begin.'}
+          {downloadingModel ? `Downloading ${downloadingModel.name}…` : 'Download a model to begin.'}
         </Text>
         <View style={{ height: spacing.xl }} />
-        <Button label={modelReady ? 'New chat' : 'Get a model'} onPress={start} block={false} style={styles.cta} />
+        {downloadingModel && downloading ? (
+          <View style={styles.progressWrap}>
+            <ProgressBar percent={downloading.pct} meta={`${Math.round(downloading.pct)}%${downloading.mbps > 0 ? ` · ${downloading.mbps.toFixed(1)} MB/s` : ''}`} />
+          </View>
+        ) : (
+          <Button label="Get a model" onPress={start} block={false} style={styles.cta} />
+        )}
       </Animated.View>
     </View>
   );
@@ -76,5 +89,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   logo: { alignSelf: 'center' },
   title: { fontFamily: fonts.displayBold, fontSize: fontSize.hero, color: c.text, marginTop: spacing.sm },
   cta: { alignSelf: 'center' },
+  progressWrap: { width: 220 },
   sub: { color: c.textMuted, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22, maxWidth: 280, fontFamily: fonts.sans },
 });

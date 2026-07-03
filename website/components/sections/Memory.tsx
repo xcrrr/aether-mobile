@@ -331,7 +331,7 @@ function BrainGraph() {
 
 export function Memory() {
   return (
-    <section id="memory" className="ink hairline-top" style={{ background: '#242424' }}>
+    <section id="memory" className="ink hairline-top" style={{ background: 'var(--bg)' }}>
       <div className="shell" style={{ padding: '104px 0 72px' }}>
         <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center' }}>
           <p className="eyebrow" style={{ marginBottom: 20 }}>Core · Aether’s memory</p>
