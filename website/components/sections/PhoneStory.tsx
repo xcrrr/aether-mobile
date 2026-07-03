@@ -99,7 +99,7 @@ export function PhoneStory() {
 
   return (
     <section id="demo" ref={ref} style={{ height: '340vh', position: 'relative' }} aria-label="Aether conversation demo">
-      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>
+      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', background: '#242424' }}>
         <div className="shell story-grid">
           <div className="story-copy">
             <p
@@ -139,7 +139,8 @@ export function PhoneStory() {
           gap: 8px;
           align-items: center;
           justify-items: center;
-          width: 100%;
+          width: min(1040px, 100% - 40px);
+          margin-inline: auto;
         }
         .story-copy { grid-area: copy; text-align: center; max-width: 480px; }
         .story-phone {
@@ -163,9 +164,10 @@ export function PhoneStory() {
         @media (min-width: 920px) {
           .story-grid {
             grid-template-areas: 'copy phone';
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 64px;
-            justify-items: start;
+            grid-template-columns: minmax(320px, 440px) auto;
+            justify-content: center;
+            gap: clamp(56px, 7vw, 112px);
+            width: min(1040px, 100% - 64px);
             --phone-scale: 0.82;
           }
           .story-copy { text-align: left; }

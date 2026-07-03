@@ -5,7 +5,7 @@ test('page composes the full narrative', () => {
   render(<Home />);
   expect(screen.getByText(/The assistant that stays on your phone/i)).toBeInTheDocument();
   expect(screen.getByText(/Why local-first/i)).toBeInTheDocument();
-  expect(screen.getByText(/It remembers like a notebook, not a server/i)).toBeInTheDocument();
+  expect(screen.getByText(/It remembers what matters/i)).toBeInTheDocument();
   expect(screen.getByText(/Where things actually run/i)).toBeInTheDocument();
   expect(screen.getAllByRole('link', { name: /Join the beta/i }).length).toBeGreaterThan(0);
 });

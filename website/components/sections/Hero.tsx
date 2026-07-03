@@ -5,7 +5,14 @@ const FACTS = ['On-device model', 'No account', 'Android'];
 
 export function Hero() {
   return (
-    <section id="top" className="shell" style={{ padding: 'clamp(96px, 14vh, 160px) 0 clamp(72px, 10vh, 120px)' }}>
+    <section
+      id="top"
+      className="shell"
+      style={{
+        minHeight: 'calc(100svh - 64px)',
+        padding: 'clamp(96px, 14vh, 160px) 0 clamp(72px, 10vh, 120px)',
+      }}
+    >
       <Reveal>
         <p className="eyebrow" style={{ marginBottom: 24 }}>Private AI assistant · Closed beta</p>
         <h1 className="display-1" style={{ maxWidth: 780 }}>

@@ -2,24 +2,25 @@
 
 /*
  * Aether website design system.
- * Two surfaces, one shape: warm paper (default) and deep ink (.ink scope).
+ * One dark gray surface, with scoped variables for sections that may diverge later.
  * Components read only the scoped variables so sections can flip surface
  * by adding the .ink class — no per-component color logic.
  */
 
 :root {
-  /* paper surface (matches app light theme) */
-  --bg: #f6f5f2;
-  --bg-raised: #ffffff;
-  --text: #1b1b1a;
-  --muted: #6b6a65;
-  --line: #e3e1dc;
-  --accent: #6d28d9;
-  --accent-soft: rgba(109, 40, 217, 0.1);
+  /* dark gray surface */
+  --bg: #2b2b2b;
+  --bg-deeper: #242424;
+  --bg-raised: #363636;
+  --text: #f1f1ef;
+  --muted: #b9b9b4;
+  --line: #474747;
+  --accent: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.16);
 
   /* invariants */
-  --ink-bg: #161616;
-  --paper-bg: #f6f5f2;
+  --ink-bg: #2b2b2b;
+  --paper-bg: #2b2b2b;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --font-serif-stack: var(--font-serif), Georgia, 'Times New Roman', serif;
   --font-sans-stack: var(--font-sans), system-ui, -apple-system, sans-serif;
@@ -28,12 +29,13 @@
 .ink {
   /* literal, not var(--text): the CSS optimizer strips the var() form as
      "redundant" with the body rule and dark sections lose their text color */
-  color: #f6f5f2;
-  --bg: #161616;
-  --bg-raised: #1f1f1f;
-  --text: #f6f5f2;
-  --muted: #969691;
-  --line: #2e2e2e;
+  color: #f1f1ef;
+  --bg: #2b2b2b;
+  --bg-deeper: #242424;
+  --bg-raised: #363636;
+  --text: #f1f1ef;
+  --muted: #b9b9b4;
+  --line: #474747;
   --accent: #a78bfa;
   --accent-soft: rgba(124, 58, 237, 0.16);
 }

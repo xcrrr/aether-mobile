@@ -221,6 +221,71 @@ describe('selectRecall — safety and failure (brief cases 12, 13)', () => {
   });
 });
 
+describe('selectRecall — profile route (self-context questions)', () => {
+  const identity = () => entry({ category: 'identity', key: 'home_city', value: 'Lives in Warsaw' });
+
+  it('"What do you know about me?" retrieves a cross-category summary despite zero distinctive tokens', () => {
+    expect(distinctiveTokens('What do you know about me?')).toEqual([]);
+    const r = selectRecall([user('What do you know about me?')], input([aether(), blackHoles(), marathon(), identity()]));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key).sort()).toEqual(
+      ['aether_project', 'home_city', 'marathon_goal', 'space_interest'],
+    );
+    expect(r.topical[0].why).toBe('you asked what I know about you');
+  });
+
+  it('"Who am I?" triggers the same route', () => {
+    const r = selectRecall([user('Who am I?')], input([identity(), blackHoles()]));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key)).toContain('home_city');
+  });
+
+  it('"What are my interests?" retrieves only preference notes', () => {
+    const r = selectRecall([user('What are my interests?')], input([aether(), blackHoles(), marathon()]));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key)).toEqual(['space_interest']);
+  });
+
+  it('"What projects am I working on?" hits context and goals', () => {
+    const r = selectRecall([user('What am I working on right now?')], input([aether(), blackHoles(), marathon()]));
+    expect(r.topical.map((t) => t.entry.key).sort()).toEqual(['aether_project', 'marathon_goal']);
+  });
+
+  it('broad summaries never volunteer emotional or stale notes', () => {
+    const entries = [
+      identity(),
+      entry({ category: 'emotional', key: 'work_stress', value: 'Feels stressed about deadlines' }),
+      entry({ category: 'preferences', key: 'old_hobby', value: 'Used to paint', stale: true }),
+    ];
+    const r = selectRecall([user('what do you know about me?')], input(entries));
+    expect(r.topical.map((t) => t.entry.key)).toEqual(['home_city']);
+  });
+
+  it('the profile route respects the model budget (E2B caps at 3)', () => {
+    const many = Array.from({ length: 10 }, (_, i) =>
+      entry({ category: 'preferences', key: `pref_${i}`, value: `Enjoys hobby number ${i}` }));
+    const r = selectRecall([user('what do you know about me?')], input(many, { activeModelId: 'gemma4-e2b' }));
+    expect(r.topical.length).toBe(3);
+  });
+
+  it('an empty store still flags the profile question so the answer can be honest', () => {
+    const r = selectRecall([user('What do you know about me?')], input([]));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical).toEqual([]);
+  });
+
+  it('disabled Core ignores the profile question entirely', () => {
+    const r = selectRecall([user('Who am I?')], input([identity()], { enabled: false }));
+    expect(r).toEqual(EMPTY_RECALL);
+  });
+
+  it('ordinary unrelated questions never trigger the profile route', () => {
+    const r = selectRecall([user('Give me a pasta recipe')], input([aether(), blackHoles()]));
+    expect(r.profileQuery).toBeUndefined();
+    expect(r.topical).toEqual([]);
+  });
+});
+
 describe('selectRecall — performance (brief case 20)', () => {
   it('selects from 500 entries in well under a frame', () => {
     const entries = Array.from({ length: 500 }, (_, i) =>

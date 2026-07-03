@@ -56,3 +56,5 @@ Do not recreate quick-install APK copies on the Desktop unless the user explicit
 ## APK Build Note
 
 For future Windows APK builds, use `codex-notes/android-apk-build-playbook.md`. The last successful build used a short clean copy at `C:\a2` because building directly from the Desktop workspace can fail in CMake/Ninja on long React Native native-module paths.
+
+Latest APK build log: `codex-notes/apk-build-2026-07-03-claude-upgrade.md`.

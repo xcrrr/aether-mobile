@@ -43,6 +43,8 @@ export const motion = {
   h2: createMotionComponent('h2'),
   h3: createMotionComponent('h3'),
   span: createMotionComponent('span'),
+  g: createMotionComponent('g'),
+  line: createMotionComponent('line'),
 };
 
 export const easeOut = [0.22, 1, 0.36, 1];

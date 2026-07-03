@@ -1,5 +1,5 @@
 import { Message } from '@/types';
-import { MemoryEntry } from './types';
+import { MemoryCategory, MemoryEntry } from './types';
 import { normalizeForGrounding } from './grounding';
 
 /**
@@ -31,6 +31,38 @@ const GENERIC = new Set((
 
 /** Explicit user signals that a NEW chat should pick up prior context. */
 const CONTINUATION = /\b(continue|continuing|pick up|left off|last time|as we discussed|back to (what|where|our|the))\b/i;
+
+/**
+ * Broad self-context questions ("Who am I?", "What do you know about me?") are
+ * made entirely of stopwords, so token overlap retrieves nothing by construction.
+ * They get their own deterministic route: a bounded, high-confidence profile
+ * selection instead of similarity matching.
+ */
+const PROFILE_BROAD = /\b(who am i|what do you (know|remember) about me|what (have you|did you) (learned?|saved?|remembered?) about me|do you (know|remember) (anything |something )?about me|tell me about (me|myself)|describe me|what do you know about my life)\b/i;
+
+/** A facet noun alone ("my project plan…") is a work request, not a memory
+ *  question — the message must also ASK what is known/remembered. */
+const PROFILE_ASK = /\b(what (are|is|were|am i)|what do you (know|remember)|do you (know|remember)|tell me|remind me|list)\b/i;
+
+const PROFILE_FACETS: Array<{ re: RegExp; categories: MemoryCategory[] }> = [
+  { re: /\bmy (interests?|hobbies|hobby|passions?)\b/i, categories: ['preferences'] },
+  { re: /\bmy (goals?|ambitions?)\b/i, categories: ['goals'] },
+  { re: /\b(what am i working on|my projects?)\b/i, categories: ['context', 'goals'] },
+];
+
+/** Category order for a broad profile summary. Emotional and patterns notes are
+ *  sensitive/mechanical and never volunteered in a "who am I" answer. */
+const PROFILE_CATEGORY_ORDER: MemoryCategory[] = [
+  'identity', 'preferences', 'goals', 'context', 'knowledge', 'relationships', 'personality',
+];
+
+export function profileCategories(text: string): MemoryCategory[] | null {
+  if (PROFILE_ASK.test(text)) {
+    for (const f of PROFILE_FACETS) if (f.re.test(text)) return f.categories;
+  }
+  if (PROFILE_BROAD.test(text)) return PROFILE_CATEGORY_ORDER;
+  return null;
+}
 
 export function distinctiveTokens(text: string): string[] {
   return normalizeForGrounding(text)
@@ -66,6 +98,10 @@ export interface RecallResult {
   style: MemoryEntry[];
   /** Relevance-gated notes for the current message. */
   topical: RecallItem[];
+  /** True when the user asked what Aether knows about them (Core enabled).
+   *  Set even with zero matching notes, so the injector can instruct an honest
+   *  "no saved context yet" answer instead of "I only know this chat". */
+  profileQuery?: boolean;
 }
 
 export const EMPTY_RECALL: RecallResult = { style: [], topical: [] };
@@ -100,12 +136,17 @@ function styleTier(entries: MemoryEntry[]): MemoryEntry[] {
  */
 export function selectRecall(messages: Message[], input: RecallInput): RecallResult {
   try {
-    if (!input.enabled || !input.entries.length) return EMPTY_RECALL;
+    if (!input.enabled) return EMPTY_RECALL;
 
     const userTurns = messages.filter((m) => m.role === 'user');
     const currentText = userTurns[userTurns.length - 1]?.content ?? '';
     const previousText = userTurns[userTurns.length - 2]?.content ?? '';
     const isNewConversation = userTurns.length <= 1;
+
+    const profileCats = profileCategories(currentText);
+    if (!input.entries.length) {
+      return profileCats ? { style: [], topical: [], profileQuery: true } : EMPTY_RECALL;
+    }
 
     const policy = recallPolicy(input.activeModelId);
     const current = new Set(distinctiveTokens(currentText));
@@ -137,6 +178,37 @@ export function selectRecall(messages: Message[], input: RecallInput): RecallRes
       b.entry.lastSeenAt - a.entry.lastSeenAt,
     );
 
+    // Profile route: a self-context question selects the strongest notes from
+    // the asked-about categories directly — similarity can't see "who am I".
+    // Profile picks lead; any token-scored matches fill the remaining budget.
+    if (profileCats) {
+      const byCat = new Map<MemoryCategory, MemoryEntry[]>(profileCats.map((c) => [c, []]));
+      for (const e of input.entries) {
+        if (!e.stale) byCat.get(e.category)?.push(e);
+      }
+      for (const list of byCat.values()) {
+        list.sort((a, b) =>
+          b.timesReinforced - a.timesReinforced ||
+          b.confidence - a.confidence ||
+          b.lastSeenAt - a.lastSeenAt,
+        );
+      }
+      // Round-robin across categories so a broad summary covers the whole
+      // person, not six notes from whichever category happens to be largest.
+      const picks: MemoryEntry[] = [];
+      for (let round = 0, added = true; added; round++) {
+        added = false;
+        for (const c of profileCats) {
+          const e = byCat.get(c)![round];
+          if (e) { picks.push(e); added = true; }
+        }
+        if (picks.length >= policy.maxTopical) break;
+      }
+      scored.unshift(...picks.map((entry) => ({
+        entry, score: Infinity, why: 'you asked what I know about you',
+      })));
+    }
+
     // Continuity is user-initiated: only an explicit "continue" signal in a NEW
     // chat admits recent context. Ongoing chats already carry their own history.
     if (isNewConversation && CONTINUATION.test(currentText)) {
@@ -163,7 +235,7 @@ export function selectRecall(messages: Message[], input: RecallInput): RecallRes
       topical.push({ entry: s.entry, why: s.why });
     }
 
-    return { style, topical };
+    return { style, topical, ...(profileCats ? { profileQuery: true } : {}) };
   } catch {
     return EMPTY_RECALL;
   }

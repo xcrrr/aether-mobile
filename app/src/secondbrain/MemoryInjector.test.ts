@@ -76,6 +76,26 @@ describe('buildMemorySystemPrompt', () => {
     expect(out.match(/reply_style/g)).toHaveLength(1);
   });
 
+  it('a profile question with notes appends the summarize-only rule', () => {
+    const out = buildMemorySystemPrompt(recall({
+      topical: [{ entry: entry({ category: 'preferences', key: 'main_hobby', value: 'climbing' }), why: 'you asked what I know about you' }],
+      profileQuery: true,
+    }));
+    expect(out).toContain('- preferences / main_hobby: climbing');
+    expect(out).toContain('answer naturally from the notes above, and only from them');
+    expect(out).toContain('never add a fact that is not listed');
+  });
+
+  it('a profile question with no notes yields an honest no-context instruction', () => {
+    const out = buildMemorySystemPrompt(recall({ profileQuery: true }));
+    expect(out).toContain('no saved Core notes');
+    expect(out).toContain('do not invent personal facts');
+  });
+
+  it('a non-profile empty recall still injects nothing', () => {
+    expect(buildMemorySystemPrompt(recall())).toBe('');
+  });
+
   it('skips notes whose value sanitizes to nothing', () => {
     const out = buildMemorySystemPrompt(recall({
       topical: [{ entry: entry({ category: 'context', key: 'empty', value: '<end_of_turn>' }), why: 'x' }],

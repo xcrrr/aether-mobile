@@ -4,7 +4,7 @@ Date: 2026-07-02. Owner: Claude Code. Full ground-up rebuild of the landing expe
 
 ## Concept
 
-An editorial, paper-first product site. One idea carried through the whole page:
+An editorial, dark-gray-first product site. One idea carried through the whole page:
 **Aether is a private assistant that runs on your phone; online is a choice.**
 The quality comes from typography, pacing, and a believable product demo — not from
 gradients, particles, or space theatrics. The previous cinematic direction (planet hero,
@@ -12,7 +12,7 @@ starfield, flying-phone warp handoff, Playfair Display) was removed entirely.
 
 ## Narrative structure (top to bottom)
 
-1. **Nav** — wordmark, 3 anchor links, one beta CTA. Sticky, blurred paper.
+1. **Nav** — wordmark, 3 anchor links, one beta CTA. Sticky, blurred gray.
 2. **Hero** — "The assistant that stays on your phone." + scoped supporting copy, 2 CTAs,
    3 factual proof points. Pure editorial; the product appears one scroll later.
 3. **PhoneStory** (sticky demo, preserved concept) — pinned phone, conversation streams
@@ -28,12 +28,12 @@ starfield, flying-phone warp handoff, Playfair Display) was removed entirely.
 8. **BetaCta** (ink) — "It's early. That's the point." Discord + APK.
 9. **Footer** (ink) — wordmark, links, one line.
 
-The last three sections form a deep-ink closing act; everything before sits on warm paper.
+The page now uses a single dark-gray surface.
 
 ## Design principles
 
-- **Two surfaces, one shape.** Paper `#F6F5F2` / ink `#161616` — both straight from the
-  app's own theme (`app/src/theme/index.ts`). Sections flip via the `.ink` class which
+- **One dark gray surface.** Background `#2B2B2B`, with scoped variables left in place
+  for later section-level variations. Sections can still flip via the `.ink` class which
   rescopes the CSS variables (`--bg/--text/--muted/--line/--accent`).
 - **The app's real typography.** Newsreader (serif, editorial voice) + Instrument Sans
   (UI) — identical to the mobile app's font system. Self-hosted variable woff2 in
@@ -117,7 +117,7 @@ sections, lenis smooth scroll, Playfair/Inter fonts, fontsource deps.
 ## Known limitations / assets still needed
 
 - **No OG/social preview image.** `layout.tsx` metadata is ready for one; add
-  `opengraph-image.png` (1200×630, paper bg + wordmark) when available.
+  `opengraph-image.png` (1200x630, dark gray bg + wordmark) when available.
 - **No favicon refresh** — still the default `app/favicon.ico`; replace with the Aether
   mark.
 - Boundaries list is hand-maintained; if the app gains a networked feature (e.g. update
@@ -133,7 +133,7 @@ sections, lenis smooth scroll, Playfair/Inter fonts, fontsource deps.
 - [x] Sticky demo desktop: phone pins, conversation streams, captions crossfade, no
       layout shift, settles before Premise
 - [x] Sticky demo mobile (375px): stacked layout, phone legible, captions below
-- [x] Ink sections: paper text on #161616, ghost button transparent
+- [x] Page surface: light text on #2B2B2B, ghost button transparent
 - [x] No horizontal overflow at 375px
 - [x] No console errors/warnings
 - [x] Reduced motion: static conversation variant (jest-verified)

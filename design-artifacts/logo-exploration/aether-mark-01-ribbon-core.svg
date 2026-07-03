@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Aether logo concept 01 ribbon core">
+  <defs>
+    <linearGradient id="g" x1="126" y1="404" x2="386" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7C3DFF"/>
+      <stop offset=".52" stop-color="#4C7DFF"/>
+      <stop offset="1" stop-color="#78D7FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#090A12"/>
+  <path d="M128 378 226 144c11-26 49-26 60 0l98 234" fill="none" stroke="url(#g)" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M207 289h98" fill="none" stroke="#D9F7FF" stroke-width="32" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="16" fill="#090A12"/>
+</svg>
