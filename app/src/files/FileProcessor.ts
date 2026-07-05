@@ -7,6 +7,11 @@ import { base64ToArrayBuffer } from './base64';
 const uid = (): string => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // 20 MB
+// PDF/DOCX are read fully into a JS string (base64, then inflated/unzipped) before
+// any bound kicks in — an unbounded file risks OOM on-device well before MAX_CHARS
+// ever gets a chance to trim the result. Same ceiling as images: large enough for
+// any real document, small enough to fail fast on the rest.
+const MAX_DOC_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_TEXT_CHARS = 8000;
 const TRUNCATION_NOTE = '\n\n(document truncated for context)';
 
@@ -109,11 +114,21 @@ export class FileProcessor {
   }
 
   private async processPdf(a: FileAttachment): Promise<FileAttachment> {
+    if (a.sizeBytes > MAX_DOC_BYTES) {
+      throw new FileProcessorError('This PDF is too large to read (max 20 MB).');
+    }
     try {
       const base64 = await FileSystem.readAsStringAsync(a.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      const { text, pageCount } = extractPdfText(base64);
+      const { text, pageCount, encrypted } = extractPdfText(base64);
+      if (encrypted) {
+        return {
+          ...a,
+          pageCount,
+          processingError: 'This PDF is password-protected. Remove the password and try again.',
+        };
+      }
       if (!text.trim()) {
         return {
           ...a,
@@ -130,6 +145,9 @@ export class FileProcessor {
   }
 
   private async processDocx(a: FileAttachment): Promise<FileAttachment> {
+    if (a.sizeBytes > MAX_DOC_BYTES) {
+      throw new FileProcessorError('This Word document is too large to read (max 20 MB).');
+    }
     try {
       const base64 = await FileSystem.readAsStringAsync(a.uri, {
         encoding: FileSystem.EncodingType.Base64,

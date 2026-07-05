@@ -7,6 +7,7 @@ import {
 import * as FileSystem from 'expo-file-system';
 import { Message } from '@/types';
 import { messageModelText } from '@/llm/messageParse';
+import { buildDocumentContext } from '@/llm/prompt';
 import { assertRAMSufficient } from '@/utils/ramCheck';
 
 export interface LoadOptions {
@@ -93,13 +94,22 @@ export interface ConversationParts { system: string; historyJson: string; lastTe
  * Question turns go into history as natural language (messageModelText), never
  * as the raw JSON the model emitted.
  */
+/** A user turn's text plus any attached PDF/DOCX/text content (images are
+ *  handled separately — see writeImagePaths — and never go through here). */
+function userTurnText(m: Message): string {
+  const base = messageModelText(m);
+  if (m.role !== 'user') return base;
+  const docContext = buildDocumentContext(m.attachments ?? []);
+  return docContext ? `${docContext}\n\nUser's message: ${base}` : base;
+}
+
 export function splitConversation(system: string, messages: Message[]): ConversationParts {
   let lastUserIdx = -1;
   for (let i = 0; i < messages.length; i++) if (messages[i].role === 'user') lastUserIdx = i;
   const history = (lastUserIdx >= 0 ? messages.slice(0, lastUserIdx) : messages)
-    .map((m) => ({ role: m.role === 'user' ? 'user' : 'model', text: messageModelText(m).trim() }))
+    .map((m) => ({ role: m.role === 'user' ? 'user' : 'model', text: userTurnText(m).trim() }))
     .filter((t) => t.text);
-  const lastText = lastUserIdx >= 0 ? messages[lastUserIdx].content.trim() : '';
+  const lastText = lastUserIdx >= 0 ? userTurnText(messages[lastUserIdx]).trim() : '';
   return { system: system.trim(), historyJson: JSON.stringify(history), lastText };
 }
 

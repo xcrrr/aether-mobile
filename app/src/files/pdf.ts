@@ -18,6 +18,9 @@ import { base64ToUint8Array } from './base64';
 export interface PdfExtraction {
   text: string;
   pageCount: number;
+  /** Trailer references an /Encrypt dict — content streams are ciphertext, so
+   *  text extraction cannot work regardless of MAX_PAGES/MAX_CHARS. */
+  encrypted: boolean;
 }
 
 const MAX_PAGES = 50;
@@ -79,6 +82,8 @@ export function extractPdfText(base64: string): PdfExtraction {
   const raw = bytesToLatin1(bytes);
 
   const pageCount = (raw.match(/\/Type\s*\/Page[^s]/g) ?? []).length || 0;
+  const encrypted = /\/Encrypt\s+\d+\s+\d+\s+R/.test(raw);
+  if (encrypted) return { text: '', pageCount, encrypted: true };
 
   let collected = '';
   let pagesProcessed = 0;
@@ -120,5 +125,5 @@ export function extractPdfText(base64: string): PdfExtraction {
   let text = collected.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   if (text.length > MAX_CHARS) text = text.slice(0, MAX_CHARS) + TRUNCATION_NOTE;
 
-  return { text, pageCount };
+  return { text, pageCount, encrypted: false };
 }
