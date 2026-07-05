@@ -64,6 +64,13 @@ export default function RootLayout() {
   }, [c]);
 
   useEffect(() => {
+    // Opening a "PDF ready" notification (tap or Open action) opens the file.
+    const { registerNotificationOpenHandler } =
+      require('@/files/artifactNotifier') as typeof import('@/files/artifactNotifier');
+    return registerNotificationOpenHandler();
+  }, []);
+
+  useEffect(() => {
     const id = setTimeout(() => setStartupTimedOut(true), STARTUP_WAIT_MS);
     return () => clearTimeout(id);
   }, []);

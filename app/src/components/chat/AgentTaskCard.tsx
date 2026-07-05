@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
-import { Check, X, CircleSlash, FileText, Globe, Brain, Paperclip, PenLine, Sparkles, MessageCircleQuestion } from 'lucide-react-native';
+import { Check, X, CircleSlash, FileText, Globe, Brain, Paperclip, PenLine, Sparkles, MessageCircleQuestion, Download } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { PressableScale } from '@/components/ds/PressableScale';
 import { QuestionCard } from './QuestionCard';
 import { CopyBlock } from './CopyBlock';
 import { useAgentStore } from '@/state/useAgentStore';
 import { useChatStore } from '@/state/useChatStore';
+import { useExportStore } from '@/state/useExportStore';
 import { AgentReceipt, AgentStep } from '@/agent/types';
 import { loadTask, saveArtifact } from '@/agent/taskStorage';
 import { useToast } from '@/state/useToast';
@@ -192,6 +193,7 @@ function ArtifactBlock({ taskId, artifactId, title, savedInitially }: {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const show = useToast((s) => s.show);
+  const exportEntry = useExportStore((s) => s.exports[artifactId]);
   const [content, setContent] = useState<string | null>(null);
   const [saved, setSaved] = useState(savedInitially);
   const [open, setOpen] = useState(false);
@@ -202,6 +204,33 @@ function ArtifactBlock({ taskId, artifactId, title, savedInitially }: {
       setContent(task?.artifacts.find((a) => a.id === artifactId)?.content ?? '(artifact content unavailable)');
     }
     setOpen((v) => !v);
+  };
+
+  const phase = exportEntry?.phase;
+  const busy = phase === 'preparing' || phase === 'saving';
+
+  const download = async () => {
+    if (busy) return;
+    const task = await loadTask(taskId);
+    const text = task?.artifacts.find((a) => a.id === artifactId)?.content;
+    if (!text) { show('Artifact unavailable'); return; }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void useExportStore.getState().exportArtifact({ id: artifactId, title, content: text });
+  };
+
+  const downloadLabel =
+    phase === 'preparing' ? 'Preparing…'
+    : phase === 'saving' ? 'Saving…'
+    : phase === 'done' ? 'Open'
+    : phase === 'failed' ? 'Retry'
+    : 'Download PDF';
+
+  const onDownloadPress = () => {
+    if (phase === 'done' && exportEntry?.uri) {
+      useExportStore.getState().open(exportEntry.uri);
+    } else {
+      void download();
+    }
   };
 
   const keep = async () => {
@@ -230,6 +259,31 @@ function ArtifactBlock({ taskId, artifactId, title, savedInitially }: {
             </PressableScale>
           )}
       </View>
+      <PressableScale
+        onPress={onDownloadPress}
+        hitSlop={8}
+        disabled={busy}
+        style={styles.downloadRow}
+        accessibilityRole="button"
+        accessibilityLabel="Download PDF"
+        accessibilityState={{ disabled: busy, busy }}
+      >
+        <Download
+          size={14}
+          color={phase === 'failed' ? c.danger : phase === 'done' ? c.success : c.violet}
+          strokeWidth={1.8}
+        />
+        <Text
+          style={[
+            styles.downloadLabel,
+            busy && { color: c.textMuted },
+            phase === 'done' && { color: c.success },
+            phase === 'failed' && { color: c.danger },
+          ]}
+        >
+          {downloadLabel}
+        </Text>
+      </PressableScale>
       {open && content !== null && <CopyBlock content={content} mono={false} />}
     </View>
   );
@@ -331,4 +385,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   artifactTitle: { flex: 1, color: c.text, ...typography.label },
   artifactAction: { color: c.violet, ...typography.chip },
   artifactKept: { color: c.success, ...typography.chip },
+  downloadRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    alignSelf: 'flex-start', marginTop: spacing.xs,
+  },
+  downloadLabel: { color: c.violet, ...typography.chip },
 });

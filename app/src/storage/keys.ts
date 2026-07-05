@@ -6,4 +6,6 @@ export const KEYS = {
   legalAcceptance: '@aether/legal_acceptance',
   conversationsIndex: '@aether/conversations_index',
   conversation: (id: string) => `@aether/conversation/${id}`,
+  /** Persisted SAF tree URI where exported artifact PDFs are saved. */
+  downloadsTreeUri: '@aether/downloads_tree_uri',
 } as const;
