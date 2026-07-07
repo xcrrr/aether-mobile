@@ -39,8 +39,19 @@ function queueMemoryExtraction(): void {
   extractionQueue.flush();
 }
 
+// Sync check so the loading overlay can be the very first paint instead of
+// popping in a frame after the chat screen mounts (loading starts as state,
+// but the actual load only kicks off inside a useEffect after that first paint).
+function needsLoad(modelId: string | undefined): boolean {
+  if (!modelId) return false;
+  const model = getModelById(modelId);
+  if (!model) return false;
+  const MM = require('@/models/ModelManager') as typeof import('@/models/ModelManager');
+  return getLlama().getLoadedPath() !== MM.localPath(model);
+}
+
 export function useInference(modelId: string | undefined) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => needsLoad(modelId));
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ramWarning, setRamWarning] = useState<RAMWarning | null>(null);

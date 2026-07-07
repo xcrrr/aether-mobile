@@ -98,7 +98,7 @@ export default function ChatScreen() {
   const [pendingOnlineAction, setPendingOnlineAction] = useState<{ kind: 'research' | 'act'; text: string } | null>(null);
   const [showResearchDisclosure, setShowResearchDisclosure] = useState(false);
   const [actMode, setActMode] = useState(false);
-  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(loading);
   const [loadingComplete, setLoadingComplete] = useState(false);
   const supportsVision = model?.supportsVision ?? false;
 
