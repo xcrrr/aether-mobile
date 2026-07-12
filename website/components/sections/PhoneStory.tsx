@@ -46,7 +46,7 @@ function MissionCopy({ scenes, activeIndex, started }: { scenes: Scene[]; active
 
 function StaticStory() {
   return (
-    <section id="demo" className="shell hairline-top" style={{ padding: '96px 0 112px' }}>
+    <section id="mission" className="shell hairline-top" style={{ padding: '96px 0 112px' }}>
       <h2 className="display-2" style={{ maxWidth: 560 }}>Aether&rsquo;s mission</h2>
       <div style={{ display: 'flex', justifyContent: 'center', margin: '56px 0 40px' }}>
         <div style={{ transform: 'scale(0.9)', transformOrigin: 'top center' }}>
@@ -89,7 +89,7 @@ export function PhoneStory() {
   const sceneIdx = Math.min(missionScenes.length - 1, Math.floor(convo * missionScenes.length));
 
   return (
-    <section id="demo" ref={ref} style={{ height: '340vh', position: 'relative' }} aria-label="Aether's mission: your phone is enough">
+    <section id="mission" ref={ref} style={{ height: '340vh', position: 'relative' }} aria-label="Aether's mission: your phone is enough">
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', background: '#242424' }}>
         <div className="shell story-grid">
           <div className="story-copy">

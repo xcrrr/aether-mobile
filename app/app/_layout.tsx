@@ -45,11 +45,13 @@ export default function RootLayout() {
     (async () => {
       try {
         const { markInterruptedTasks } = require('@/agent/taskStorage') as typeof import('@/agent/taskStorage');
+        const { useLibraryStore } = require('@/state/useLibraryStore') as typeof import('@/state/useLibraryStore');
         await Promise.all([
           useProfileStore.getState().hydrate(),
           useChatStore.getState().refreshIndex(),
           // Agent tasks killed with the app must never read as still running.
           markInterruptedTasks(),
+          useLibraryStore.getState().hydrate(),
         ]);
       } catch (error) {
         console.warn('Aether startup hydration failed', error);
@@ -62,6 +64,13 @@ export default function RootLayout() {
   useEffect(() => {
     SystemUI.setBackgroundColorAsync(c.bg).catch(() => {});
   }, [c]);
+
+  useEffect(() => {
+    // Opening a "PDF ready" notification (tap or Open action) opens the file.
+    const { registerNotificationOpenHandler } =
+      require('@/files/artifactNotifier') as typeof import('@/files/artifactNotifier');
+    return registerNotificationOpenHandler();
+  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => setStartupTimedOut(true), STARTUP_WAIT_MS);

@@ -1,0 +1,10 @@
+workload,scenario,local_electricity_wh,cloud_electricity_wh
+Short,low,0.001262,0.054646
+Short,central,0.002103,0.124288
+Short,high,0.003364,0.750917
+Standard,low,0.005258,0.159508
+Standard,central,0.008763,0.361338
+Standard,high,0.014021,2.178297
+Extended,low,0.011968,0.339681
+Extended,central,0.019947,0.768784
+Extended,high,0.031915,4.632279

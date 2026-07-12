@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
-import { Check, X, CircleSlash, FileText, Globe, Brain, Paperclip, PenLine, Sparkles, MessageCircleQuestion } from 'lucide-react-native';
+import { Check, X, CircleSlash, FileText, Globe, Brain, Paperclip, PenLine, Sparkles, MessageCircleQuestion, Download, ArrowUpRight } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { PressableScale } from '@/components/ds/PressableScale';
 import { QuestionCard } from './QuestionCard';
-import { CopyBlock } from './CopyBlock';
+import { ArtifactPreviewModal } from '@/components/library/ArtifactPreviewModal';
 import { useAgentStore } from '@/state/useAgentStore';
 import { useChatStore } from '@/state/useChatStore';
-import { AgentReceipt, AgentStep } from '@/agent/types';
-import { loadTask, saveArtifact } from '@/agent/taskStorage';
+import { useLibraryStore } from '@/state/useLibraryStore';
+import { useExportStore } from '@/state/useExportStore';
+import { deriveTitle } from '@/library/artifact';
+import { AgentArtifact, AgentReceipt, AgentStep } from '@/agent/types';
+import { loadTask } from '@/agent/taskStorage';
 import { useToast } from '@/state/useToast';
 import { radius, spacing, Palette, typography, motion } from '@/theme';
 import { useColors } from '@/theme/useColors';
@@ -186,51 +190,150 @@ export function AgentLiveCard() {
   );
 }
 
-function ArtifactBlock({ taskId, artifactId, title, savedInitially }: {
-  taskId: string; artifactId: string; title: string; savedInitially: boolean;
+/**
+ * Task-output surface: See the real result, Keep it into local Library (durable,
+ * idempotent), and Download it as a file — before or after keeping. Once kept,
+ * the control settles into a quiet "Kept ✓" with a direct route to the saved
+ * item. Keep never claims success before local persistence resolves.
+ */
+function ArtifactBlock({ taskId, artifactId, title }: {
+  taskId: string; artifactId: string; title: string;
 }) {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const show = useToast((s) => s.show);
-  const [content, setContent] = useState<string | null>(null);
-  const [saved, setSaved] = useState(savedInitially);
-  const [open, setOpen] = useState(false);
+  const keptInLibrary = useLibraryStore((s) => s.items.some((a) => a.id === artifactId));
 
-  const toggle = async () => {
-    if (!open && content === null) {
-      const task = await loadTask(taskId);
-      setContent(task?.artifacts.find((a) => a.id === artifactId)?.content ?? '(artifact content unavailable)');
-    }
-    setOpen((v) => !v);
+  const [artifact, setArtifact] = useState<AgentArtifact | null>(null);
+  const convRef = useRef<string | undefined>(undefined);
+  const [preview, setPreview] = useState(false);
+  const [keeping, setKeeping] = useState(false);
+  const [keepFailed, setKeepFailed] = useState(false);
+
+  const ensure = async (): Promise<AgentArtifact | null> => {
+    if (artifact) return artifact;
+    const task = await loadTask(taskId);
+    const found = task?.artifacts.find((a) => a.id === artifactId) ?? null;
+    convRef.current = task?.conversationId;
+    if (found) setArtifact(found);
+    return found;
   };
 
-  const keep = async () => {
-    const task = await loadTask(taskId);
-    const artifact = task?.artifacts.find((a) => a.id === artifactId);
-    if (!artifact) { show('Artifact unavailable'); return; }
-    await saveArtifact(artifact);
-    setSaved(true);
+  const onSee = async () => {
+    const a = await ensure();
+    if (!a) { show('Output unavailable'); return; }
+    setPreview(true);
+  };
+
+  const exportPhase = useExportStore((s) => s.exports[artifactId]?.phase);
+  const exportUri = useExportStore((s) => s.exports[artifactId]?.uri);
+  const exportBusy = exportPhase === 'preparing' || exportPhase === 'saving';
+
+  const onDownload = async () => {
+    if (exportBusy) return;
+    if (exportPhase === 'done' && exportUri) {
+      useExportStore.getState().open(exportUri);
+      return;
+    }
+    const a = await ensure();
+    if (!a) { show('Output unavailable'); return; }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    show('Kept in your artifacts');
+    void useExportStore.getState().exportArtifact({
+      id: artifactId,
+      title: deriveTitle(a.title, a.content),
+      content: a.content,
+    });
+  };
+
+  const downloadLabel =
+    exportPhase === 'preparing' ? 'Preparing…'
+    : exportPhase === 'saving' ? 'Saving…'
+    : exportPhase === 'done' ? 'Open PDF'
+    : exportPhase === 'failed' ? 'Retry PDF'
+    : 'Download PDF';
+
+  const onKeep = async () => {
+    if (keeping) return;
+    const a = await ensure();
+    if (!a) { show('Output unavailable'); return; }
+    setKeeping(true);
+    setKeepFailed(false);
+    try {
+      await useLibraryStore.getState().keep(a, convRef.current);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      show('Kept in Library');
+    } catch {
+      setKeepFailed(true);
+      show("Couldn't keep — tap to retry");
+    } finally {
+      setKeeping(false);
+    }
+  };
+
+  const openInLibrary = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/(main)/library/${artifactId}`);
   };
 
   return (
     <View style={styles.artifact}>
       <View style={styles.artifactHead}>
         <FileText size={15} color={c.violet} strokeWidth={1.8} />
-        <Text style={styles.artifactTitle} numberOfLines={1}>{title}</Text>
-        <PressableScale onPress={toggle} hitSlop={8}>
-          <Text style={styles.artifactAction}>{open ? 'Hide' : 'View'}</Text>
-        </PressableScale>
-        {saved
-          ? <Text style={styles.artifactKept}>Kept</Text>
-          : (
-            <PressableScale onPress={keep} hitSlop={8}>
-              <Text style={styles.artifactAction}>Keep</Text>
-            </PressableScale>
-          )}
+        <Text style={styles.artifactTitle} numberOfLines={1}>{artifact?.title || title}</Text>
       </View>
-      {open && content !== null && <CopyBlock content={content} mono={false} />}
+
+      <View style={styles.artifactActions}>
+        <PressableScale onPress={onSee} hitSlop={8}>
+          <Text style={styles.artifactAction}>See</Text>
+        </PressableScale>
+        <PressableScale
+          onPress={onDownload}
+          hitSlop={8}
+          disabled={exportBusy}
+          style={styles.actionInline}
+          accessibilityRole="button"
+          accessibilityLabel="Download PDF"
+          accessibilityState={{ disabled: exportBusy, busy: exportBusy }}
+        >
+          <Download
+            size={13}
+            color={exportPhase === "failed" ? c.danger : exportPhase === "done" ? c.success : c.textMuted}
+            strokeWidth={1.9}
+          />
+          <Text
+            style={[
+              styles.artifactActionMuted,
+              exportPhase === "done" && { color: c.success },
+              exportPhase === "failed" && { color: c.danger },
+            ]}
+          >
+            {downloadLabel}
+          </Text>
+        </PressableScale>
+
+        <View style={{ flex: 1 }} />
+
+        {keptInLibrary ? (
+          <View style={styles.keptCluster}>
+            <View style={styles.actionInline}>
+              <Check size={13} color={c.success} strokeWidth={2.4} />
+              <Text style={styles.artifactKept}>Kept</Text>
+            </View>
+            <PressableScale onPress={openInLibrary} hitSlop={8} style={styles.actionInline}>
+              <Text style={styles.artifactAction}>Open in Library</Text>
+              <ArrowUpRight size={13} color={c.violet} strokeWidth={2} />
+            </PressableScale>
+          </View>
+        ) : (
+          <PressableScale onPress={onKeep} hitSlop={8} disabled={keeping}>
+            <Text style={[styles.artifactAction, keepFailed && { color: c.danger }]}>
+              {keeping ? 'Keeping…' : keepFailed ? 'Retry Keep' : 'Keep'}
+            </Text>
+          </PressableScale>
+        )}
+      </View>
+
+      <ArtifactPreviewModal visible={preview} artifact={artifact} onClose={() => setPreview(false)} />
     </View>
   );
 }
@@ -253,7 +356,7 @@ export function AgentReceiptCard({ receipt, taskId }: { receipt: AgentReceipt; t
   return (
     <View style={styles.receipt}>
       {receipt.artifacts.map((a) => (
-        <ArtifactBlock key={a.id} taskId={taskId} artifactId={a.id} title={a.title} savedInitially={a.saved} />
+        <ArtifactBlock key={a.id} taskId={taskId} artifactId={a.id} title={a.title} />
       ))}
       <PressableScale onPress={() => setOpen((v) => !v)} style={styles.receiptHead} hitSlop={6}>
         <Sparkles size={12} color={c.textMuted} strokeWidth={2} />
@@ -329,6 +432,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   artifactHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   artifactTitle: { flex: 1, color: c.text, ...typography.label },
+  artifactActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  actionInline: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  keptCluster: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   artifactAction: { color: c.violet, ...typography.chip },
+  artifactActionMuted: { color: c.textMuted, ...typography.chip },
   artifactKept: { color: c.success, ...typography.chip },
 });

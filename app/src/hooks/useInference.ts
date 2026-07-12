@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { buildSystemPrompt } from '@/llm/prompt';
+import { buildSystemPrompt, trimToContext } from '@/llm/prompt';
 import { useChatStore } from '@/state/useChatStore';
 import { useProfileStore } from '@/state/useProfileStore';
 import { getModelById } from '@/models/registry';
@@ -145,9 +145,13 @@ export function useInference(modelId: string | undefined) {
       );
     }
     const Llama = getLlama();
+    // Bound history to the engine's actual configured window (MAX_TOKENS) — without
+    // this, a long-running chat sends its entire unbounded transcript every turn and
+    // silently exceeds the native context once it grows past it.
+    const trimmed = trimToContext(messages, Llama.MAX_TOKENS);
     await Llama.generate(
       system,
-      messages,
+      trimmed,
       (token) => useChatStore.getState().appendToken(token),
       () => {
         // Auto-name the chat first (context is free right after the reply), then
@@ -185,6 +189,11 @@ export function useInference(modelId: string | undefined) {
         history,
         (answer) => setContent(answer),
       );
+      useChatStore.getState().setAssistantResearch({
+        query: result.query,
+        answer: result.answer,
+        sources: result.sources.map((s) => ({ title: s.title || s.url, url: s.url })),
+      });
       setContent(formatResearchMarkdown(result));
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'research failed';
@@ -229,6 +238,7 @@ export function useInference(modelId: string | undefined) {
       .map((a) => ({ name: a.name, text: a.extractedText! }));
     try {
       const runner = require('@/agent/runner') as typeof import('@/agent/runner');
+      const { buildConversationContext } = require('@/agent/context') as typeof import('@/agent/context');
       const ctx = {
         conversationId: state.current?.id ?? '',
         goal: text,
@@ -237,6 +247,7 @@ export function useInference(modelId: string | undefined) {
         attachments,
         priorArtifacts,
         researchAllowed: opts?.researchAllowed !== false,
+        conversationContext: buildConversationContext(messages),
       };
       // Strict refinements go through the kernel so the approval matrix stays
       // in charge of every write; otherwise refine is one direct revise call.

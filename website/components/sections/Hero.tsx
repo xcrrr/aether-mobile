@@ -19,7 +19,7 @@ export function Hero() {
               <a href={DISCORD_URL} target="_blank" rel="noreferrer" className="btn btn-primary">
                 Join the beta
               </a>
-              <a href="#demo" className="btn btn-ghost">
+              <a href="#mission" className="btn btn-ghost">
                 See it work
               </a>
             </div>

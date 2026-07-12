@@ -1,9 +1,9 @@
 import { DISCORD_URL } from '@/lib/links';
 
 const LINKS = [
-  { href: '#demo', label: 'See it work' },
+  { href: '#mission', label: 'Our Mission' },
   { href: '#memory', label: 'Memory' },
-  { href: '#privacy', label: 'Privacy' },
+  { href: '#features', label: 'Features' },
 ];
 
 export function Nav() {

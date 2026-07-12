@@ -43,13 +43,11 @@ async function saveIndex(index: ConversationMeta[]): Promise<void> {
 }
 
 export async function createConversation(modelId: string): Promise<Conversation> {
-  const now = Date.now();
+  // A brand-new chat is persisted but intentionally kept out of the recents
+  // index until it has a real message. saveConversation() inserts the index row
+  // on the first message, so unstarted chats never clutter recents.
   const convo: Conversation = { id: newId(), modelId, messages: [] };
   await saveConversation(convo);
-  const meta: ConversationMeta = {
-    id: convo.id, title: 'New chat', modelId, createdAt: now, updatedAt: now, preview: '',
-  };
-  await saveIndex([meta, ...(await loadIndex())]);
   return convo;
 }
 
@@ -81,6 +79,18 @@ export async function saveConversation(convo: Conversation): Promise<void> {
       preview: last ? last.content.slice(0, 60) : '',
     };
     await saveIndex(index);
+  } else if (convo.messages.length > 0) {
+    // First message on a not-yet-indexed chat: add it to recents now.
+    const now = Date.now();
+    const meta: ConversationMeta = {
+      id: convo.id,
+      title: firstUser ? firstUser.content.slice(0, 40) : 'New chat',
+      modelId: convo.modelId,
+      createdAt: now,
+      updatedAt: now,
+      preview: last ? last.content.slice(0, 60) : '',
+    };
+    await saveIndex([meta, ...index]);
   }
 }
 

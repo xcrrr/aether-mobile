@@ -51,7 +51,7 @@ export function Capabilities() {
   const ActiveDemo = active.Demo;
 
   return (
-    <section className="capabilities-overview ink hairline-top" aria-labelledby="capabilities-title">
+    <section id="features" className="capabilities-overview ink hairline-top" aria-labelledby="capabilities-title">
       <div className="shell capabilities-grid">
         <div className="capabilities-copy">
           <Reveal>

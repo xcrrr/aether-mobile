@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Button } from '@/components/ds/Button';
 import { Logo } from '@/components/ds/Logo';
 import { ProgressBar } from '@/components/common/ProgressBar';
@@ -21,7 +21,6 @@ export default function MainIndex() {
   const downloading = downloadingId ? downloads[downloadingId] : undefined;
   const downloadingModel = downloadingId ? getModelById(downloadingId) : undefined;
   const [hydrated, setHydrated] = useState(false);
-  const redirecting = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -35,19 +34,28 @@ export default function MainIndex() {
     };
   }, [hydrate, reattachDownloads]);
 
-  useEffect(() => {
-    if (!hydrated || !modelReady || !activeModelId || redirecting.current) return;
-    redirecting.current = true;
-    void (async () => {
-      const existing = current?.id ?? index.find((meta) => installed[meta.modelId])?.id;
-      if (existing) {
-        router.replace(`/(main)/chat/${existing}`);
-        return;
-      }
-      const id = await newChat(activeModelId);
-      router.replace(`/(main)/chat/${id}`);
-    })();
-  }, [activeModelId, current?.id, hydrated, index, installed, modelReady, newChat]);
+  // Index is the drawer's initial route, so it stays mounted and every in-app
+  // back action returns here. Re-run the forward-to-chat redirect on every focus
+  // (not once on mount) so landing back on this route never leaves a blank screen.
+  useFocusEffect(
+    useCallback(() => {
+      if (!hydrated || !modelReady || !activeModelId) return;
+      let cancelled = false;
+      void (async () => {
+        const existing = current?.id ?? index.find((meta) => installed[meta.modelId])?.id;
+        if (cancelled) return;
+        if (existing) {
+          router.replace(`/(main)/chat/${existing}`);
+          return;
+        }
+        const id = await newChat(activeModelId);
+        if (!cancelled) router.replace(`/(main)/chat/${id}`);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [activeModelId, current?.id, hydrated, index, installed, modelReady, newChat]),
+  );
 
   const start = async () => {
     if (!modelReady) return router.push('/(main)/settings');
@@ -61,7 +69,7 @@ export default function MainIndex() {
   }, [a]);
   const enter = { opacity: a, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] };
 
-  if (!hydrated || modelReady || redirecting.current) return <View style={styles.c} />;
+  if (!hydrated || modelReady) return <View style={styles.c} />;
 
   return (
     <View style={styles.c}>

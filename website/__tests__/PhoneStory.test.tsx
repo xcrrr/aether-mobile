@@ -18,7 +18,7 @@ function mockMatchMedia(reducedMatches: boolean) {
 test('renders the sticky scroll story by default', () => {
   mockMatchMedia(false);
   const { container } = render(<PhoneStory />);
-  expect(container.querySelector('#demo')).toBeTruthy();
+  expect(container.querySelector('#mission')).toBeTruthy();
   expect(screen.getByText(/Keep scrolling/i)).toBeInTheDocument();
 });
 

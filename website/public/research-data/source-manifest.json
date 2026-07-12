@@ -1,0 +1,119 @@
+{
+  "$schema": "source-manifest v1 — every quantitative input used by calculate-study.ts must cite a key from this file",
+  "sources": [
+    {
+      "key": "luccioni2024",
+      "title": "Power Hungry Processing: Watts Driving the Cost of AI Deployment?",
+      "authors": "Alexandra Sasha Luccioni, Yacine Jernite, Emma Strubell",
+      "organization": "Hugging Face / Carnegie Mellon University",
+      "publication_date": "2024",
+      "venue": "ACM Conference on Fairness, Accountability, and Transparency (FAccT 2024)",
+      "url": "https://arxiv.org/abs/2311.16863",
+      "accessed_date": "2026-07-03",
+      "source_type": "peer-reviewed conference paper",
+      "supports_variables": [
+        "cloud_datacenter_energy_per_token.low",
+        "cloud_datacenter_energy_per_token.reference_class"
+      ],
+      "notes": "Directly measured GPU energy (CodeCarbon, single NVIDIA A100-SXM4-80GB, no PUE/datacenter-overhead applied) for text-generation inference across BLOOMz 560M-7B: 0.054-0.104 kWh per 1,000 inferences. Used as the low-end anchor for per-token cloud compute energy. A larger BLOOM-176B API deployment figure (~0.004 kWh/query) is cited within this paper from external work, not from the authors' own controlled measurement; used only as directional context for the high-end scenario, not as a primary data point. Single-query, unbatched lab measurement — does not reflect production request batching, which could lower true marginal per-query cloud energy. See limitations.md."
+    },
+    {
+      "key": "husom2024",
+      "title": "The Price of Prompting: Profiling Energy Use in Large Language Models Inference",
+      "authors": "Erik Johannes Husom, Arda Goknil, Lwin Khin Shar, Sagar Sen",
+      "organization": "SINTEF",
+      "publication_date": "2024 (revised 2026)",
+      "venue": "arXiv preprint",
+      "url": "https://arxiv.org/abs/2407.16893",
+      "accessed_date": "2026-07-03",
+      "source_type": "preprint with explicit methodology",
+      "supports_variables": [
+        "cloud_datacenter_energy_per_token.central"
+      ],
+      "notes": "Directly measured (Scaphandre + nvidia-smi) GPU/CPU energy across open models 2B-72B parameters on workstation/server-class GPUs (NVIDIA RTX A2000, RTX A5000), no PUE applied. Regression fit: response energy scales with output token count, coefficient beta_1 = 5.28e-7 kWh/token (0.528 Wh per 1,000 output tokens), R^2 = 0.9962. Used as the central per-token cloud compute energy anchor. Same batching caveat as luccioni2024 applies."
+    },
+    {
+      "key": "li2023",
+      "title": "Making AI Less \"Thirsty\": Uncovering and Addressing the Secret Water Footprint of AI Models",
+      "authors": "Pengfei Li, Jianyi Yang, Mohammad A. Islam, Shaolei Ren",
+      "organization": "University of California, Riverside / Texas Arlington / Loyola Marymount",
+      "publication_date": "2023 (revised 2025)",
+      "venue": "Communications of the ACM / arXiv preprint",
+      "url": "https://arxiv.org/abs/2304.03271",
+      "accessed_date": "2026-07-03",
+      "source_type": "peer-reviewed / reputable preprint with explicit methodology",
+      "supports_variables": [
+        "datacenter_onsite_wue.low",
+        "datacenter_onsite_wue.central",
+        "datacenter_onsite_wue.high",
+        "grid_ewif_water.central",
+        "water_model_formula"
+      ],
+      "notes": "Source of the operational water formula used in this study: Water = sum( energy_t * [WUE_onsite + PUE * WUE_offsite] ). Reports on-site data center Water Usage Effectiveness (WUE) ranging 0.012 L/kWh (low-water-stress region) to 2.24 L/kWh (high-water-stress region), with a large operator's reported annualized average near 1.0 L/kWh cited as a mid-range reference point. Reports U.S. national average off-site electricity-generation water intensity (EWIF): 3.1 L/kWh consumption, 43.8 L/kWh withdrawal. This study uses the consumption figure only, per Phase 3 instructions to avoid mixing withdrawal and consumption."
+    },
+    {
+      "key": "uptime2024",
+      "title": "Uptime Institute Global Data Center Survey 2024 / \"Large data centers are mostly more efficient, analysis confirms\"",
+      "authors": "Uptime Institute",
+      "organization": "Uptime Institute",
+      "publication_date": "2024-02-07",
+      "venue": "Uptime Institute Journal / Global Data Center Survey (14th annual)",
+      "url": "https://journal.uptimeinstitute.com/large-data-centers-are-mostly-more-efficient-analysis-confirms/",
+      "accessed_date": "2026-07-03",
+      "source_type": "industry survey / official association report",
+      "supports_variables": [
+        "datacenter_pue.low",
+        "datacenter_pue.central",
+        "datacenter_pue.high"
+      ],
+      "notes": "Industry-wide average PUE reported at 1.56-1.58 (flat for five consecutive years), capacity-weighted average 1.47. New hyperscale campuses are reported as commonly designed for PUE of 1.4 or lower, with some large operators publicly claiming PUE of 1.2 or lower at individual sites. Used for low/central PUE scenario bounds. High-scenario PUE (2.0) is this study's own conservative upper bound, informed by the survey's note that roughly half of surveyed facilities are over 11 years old and older facilities run less efficiently — not a directly quoted figure."
+    },
+    {
+      "key": "aslan2018",
+      "title": "Electricity Intensity of Internet Data Transmission: Untangling the Estimates",
+      "authors": "Joshua Aslan, Kieren Mayers, Jonathan G. Koomey, Chris France",
+      "organization": "—",
+      "publication_date": "2018",
+      "venue": "Journal of Industrial Ecology, 22(4), 785-798",
+      "url": "https://onlinelibrary.wiley.com/doi/full/10.1111/jiec.12630",
+      "accessed_date": "2026-07-03",
+      "source_type": "peer-reviewed journal article",
+      "supports_variables": [
+        "network_transmission_energy.central"
+      ],
+      "notes": "Revised, methodologically-scrutinized estimate of internet data transmission electricity intensity: approximately 0.06 kWh/GB for fixed-line networks (2015 baseline year), down from historical estimates of 0.14-7+ kWh/GB in earlier, less rigorous work. Used as the central scenario for network transmission energy. Because chat request/response payloads are only a few kilobytes, this term is a minor contributor to the total regardless of the exact value chosen — see calculation-notes.md sensitivity discussion."
+    },
+    {
+      "key": "google_litertlm_2026",
+      "title": "Blazing fast on-device GenAI with LiteRT-LM",
+      "authors": "Google AI Edge team",
+      "organization": "Google",
+      "publication_date": "2026-05-19",
+      "venue": "Google Developers Blog",
+      "url": "https://developers.googleblog.com/blazing-fast-on-device-genai-with-litert-lm/",
+      "accessed_date": "2026-07-03",
+      "source_type": "official primary-source technical documentation",
+      "supports_variables": [
+        "local_decode_tokens_per_second"
+      ],
+      "notes": "Official Google-reported decode throughput for Gemma 4 E2B on the Android GPU backend (OpenCL), without Multi-Token Prediction: 52 tokens/sec, tested on a Samsung S26 Ultra. This is the same model family and the same LiteRT-LM engine Aether ships (app/src/models/registry.ts, app/src/llm/engine.ts). Used directly as the local decode-speed input to this study's electricity model."
+    },
+    {
+      "key": "chipset_power_benchmarks_2024",
+      "title": "Qualcomm Snapdragon 8 Gen 3 review (XDA-Developers) and Snapdragon 8 Gen 4 power draw coverage (NotebookCheck)",
+      "authors": "XDA-Developers; NotebookCheck editorial staff",
+      "organization": "XDA-Developers; NotebookCheck",
+      "publication_date": "2024",
+      "venue": "XDA-Developers; NotebookCheck.net",
+      "url": "https://www.xda-developers.com/qualcomm-snapdragon-8-gen-3-review/ ; https://www.notebookcheck.net/Qualcomm-Snapdragon-8-Gen-4-power-draw-revealed-by-new-rumour.796242.0.html",
+      "accessed_date": "2026-07-03",
+      "source_type": "technical benchmark journalism (measured, tool-based, not peer-reviewed)",
+      "supports_variables": [
+        "local_incremental_power_draw.low",
+        "local_incremental_power_draw.central",
+        "local_incremental_power_draw.high"
+      ],
+      "notes": "IMPORTANT LIMITATION: these outlets measure GPU/SoC power under gaming and synthetic all-core benchmark workloads (measured GPU power 3.5-8.5 W during graphics workloads; measured all-core sustained SoC power 12.7-14.2 W), not LiteRT GPU-delegate LLM inference specifically. No public study measuring watts-during-on-device-LLM-decode on a matched Android device was found during this research pass (see limitations.md). This study uses the graphics-workload GPU power range as a scenario-bounded proxy for LLM GPU-delegate power draw, clearly labeled MODELED, not MEASURED. This is the single highest-priority item for direct measurement in v2."
+    }
+  ]
+}

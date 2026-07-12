@@ -27,21 +27,32 @@ export function AttachmentChip({ attachment, processing, error, onRemove, onPres
   const styles = useMemo(() => makeStyles(c), [c]);
   if (processing) {
     return (
-      <View style={styles.chip}>
+      <View
+        style={styles.chip}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel="Reading locally"
+        accessibilityLiveRegion="polite"
+      >
         <ActivityIndicator size="small" color={c.violet} />
-        <Text style={styles.name}>Processing...</Text>
+        <Text style={styles.name}>Reading locally…</Text>
       </View>
     );
   }
 
   if (error) {
     return (
-      <Pressable style={[styles.chip, styles.errorChip]} onPress={() => onPressError(error)}>
+      <Pressable
+        style={[styles.chip, styles.errorChip]}
+        onPress={() => onPressError(error)}
+        accessibilityRole="button"
+        accessibilityLabel={`Attachment failed: ${error}`}
+      >
         <AlertTriangle size={16} color={c.danger} />
         <Text style={[styles.name, { color: c.danger }]} numberOfLines={1}>
           Attachment failed
         </Text>
-        <Pressable onPress={onRemove} hitSlop={8} style={styles.remove}>
+        <Pressable onPress={onRemove} hitSlop={8} style={styles.remove} accessibilityRole="button" accessibilityLabel="Remove attachment">
           <X size={14} color={c.danger} />
         </Pressable>
       </Pressable>
@@ -52,10 +63,21 @@ export function AttachmentChip({ attachment, processing, error, onRemove, onPres
 
   const hasWarning = !!attachment.processingError;
   const isLarge = (attachment.extractedText?.length ?? 0) > 6000;
+  const chipLabel = [
+    truncateName(attachment.name),
+    LABEL[attachment.type],
+    attachment.pageCount ? `${attachment.pageCount} pages` : null,
+    hasWarning ? attachment.processingError : null,
+  ].filter(Boolean).join(', ');
 
   return (
     <View style={styles.column}>
-      <View style={[styles.chip, hasWarning && styles.warnChip]}>
+      <View
+        style={[styles.chip, hasWarning && styles.warnChip]}
+        accessible
+        accessibilityLabel={chipLabel}
+        accessibilityLiveRegion="polite"
+      >
         {attachment.type === 'image' && attachment.imageBase64 ? (
           <Image
             source={{ uri: attachment.uri }}
@@ -74,13 +96,13 @@ export function AttachmentChip({ attachment, processing, error, onRemove, onPres
             {attachment.pageCount ? ` / ${attachment.pageCount}p` : ''}
           </Text>
         </View>
-        <Pressable onPress={onRemove} hitSlop={8} style={styles.remove}>
+        <Pressable onPress={onRemove} hitSlop={8} style={styles.remove} accessibilityRole="button" accessibilityLabel="Remove attachment">
           <X size={15} color={c.textMuted} />
         </Pressable>
       </View>
 
       {hasWarning && (
-        <Pressable onPress={() => onPressError(attachment.processingError!)} style={styles.badge}>
+        <Pressable onPress={() => onPressError(attachment.processingError!)} style={styles.badge} accessibilityRole="button">
           <AlertTriangle size={12} color={c.warning} />
           <Text style={styles.badgeText} numberOfLines={2}>{attachment.processingError}</Text>
         </Pressable>

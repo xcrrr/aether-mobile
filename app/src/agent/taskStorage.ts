@@ -68,6 +68,25 @@ export async function saveArtifact(artifact: AgentArtifact): Promise<void> {
   await AsyncStorage.setItem(ARTIFACTS_KEY, JSON.stringify(next.slice(0, MAX_ARTIFACTS)));
 }
 
+export async function loadArtifact(id: string): Promise<AgentArtifact | null> {
+  const all = await loadArtifacts();
+  return all.find((a) => a.id === id) ?? null;
+}
+
+/** Patch a kept artifact in place (e.g. title/updatedAt). No-op if absent. */
+export async function updateArtifact(
+  id: string,
+  patch: Partial<AgentArtifact>,
+): Promise<AgentArtifact | null> {
+  const all = await loadArtifacts();
+  const idx = all.findIndex((a) => a.id === id);
+  if (idx < 0) return null;
+  const next = { ...all[idx], ...patch, id: all[idx].id };
+  all[idx] = next;
+  await AsyncStorage.setItem(ARTIFACTS_KEY, JSON.stringify(all));
+  return next;
+}
+
 export async function deleteArtifact(id: string): Promise<void> {
   const all = await loadArtifacts();
   await AsyncStorage.setItem(ARTIFACTS_KEY, JSON.stringify(all.filter((a) => a.id !== id)));

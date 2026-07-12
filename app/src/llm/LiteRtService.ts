@@ -7,6 +7,7 @@ import {
 import * as FileSystem from 'expo-file-system';
 import { Message } from '@/types';
 import { messageModelText } from '@/llm/messageParse';
+import { buildDocumentContext } from '@/llm/prompt';
 import { assertRAMSufficient } from '@/utils/ramCheck';
 
 export interface LoadOptions {
@@ -44,7 +45,7 @@ const emitter = LiteRt ? new NativeEventEmitter(LiteRt) : null;
 
 export const isAvailable = (): boolean => !!LiteRt;
 
-const MAX_TOKENS = 4096;
+export const MAX_TOKENS = 4096;
 // Gemma's official sampling (matches Google's AI Edge Gallery).
 const TOP_K = 64;
 const TOP_P = 0.95;
@@ -93,13 +94,22 @@ export interface ConversationParts { system: string; historyJson: string; lastTe
  * Question turns go into history as natural language (messageModelText), never
  * as the raw JSON the model emitted.
  */
+/** A user turn's text plus any attached PDF/DOCX/text content (images are
+ *  handled separately — see writeImagePaths — and never go through here). */
+function userTurnText(m: Message): string {
+  const base = messageModelText(m);
+  if (m.role !== 'user') return base;
+  const docContext = buildDocumentContext(m.attachments ?? []);
+  return docContext ? `${docContext}\n\nUser's message: ${base}` : base;
+}
+
 export function splitConversation(system: string, messages: Message[]): ConversationParts {
   let lastUserIdx = -1;
   for (let i = 0; i < messages.length; i++) if (messages[i].role === 'user') lastUserIdx = i;
   const history = (lastUserIdx >= 0 ? messages.slice(0, lastUserIdx) : messages)
-    .map((m) => ({ role: m.role === 'user' ? 'user' : 'model', text: messageModelText(m).trim() }))
+    .map((m) => ({ role: m.role === 'user' ? 'user' : 'model', text: userTurnText(m).trim() }))
     .filter((t) => t.text);
-  const lastText = lastUserIdx >= 0 ? messages[lastUserIdx].content.trim() : '';
+  const lastText = lastUserIdx >= 0 ? userTurnText(messages[lastUserIdx]).trim() : '';
   return { system: system.trim(), historyJson: JSON.stringify(history), lastText };
 }
 
@@ -114,6 +124,25 @@ async function writeImagePaths(messages: Message[]): Promise<string[]> {
     paths.push(uri.replace(/^file:\/\//, ''));
   }
   return paths;
+}
+
+/** Dev-only proof of what the runtime actually did: backend, prompt/output size,
+ *  latency, throughput. Gated by __DEV__ so it never ships to release builds —
+ *  check via `adb logcat` / Metro console filtering on "[LiteRtDebug]". Logs
+ *  counts and flags only, never prompt/response text or Core memory values. */
+function logGenerationStats(mode: string, startedAt: number, promptChars: number, tokensApprox: number): void {
+  if (!__DEV__) return;
+  const ms = Date.now() - startedAt;
+  console.log('[LiteRtDebug]', {
+    mode,
+    modelPath: currentPath,
+    gpuActive,
+    visionEnabled,
+    promptTokensApprox: Math.round(promptChars / 4),
+    generatedTokensApprox: tokensApprox,
+    durationMs: ms,
+    tokensPerSec: ms > 0 ? Number((tokensApprox / (ms / 1000)).toFixed(1)) : 0,
+  });
 }
 
 async function drainActive(): Promise<void> {
@@ -145,9 +174,16 @@ export async function generate(
   cancelled = false;
   activeKind = 'chat';
 
-  const sub = emitter.addListener('LiteRtToken', (piece: string) => onToken(piece));
+  const devStart = Date.now();
+  const devPromptChars = sys.length + historyJson.length + lastText.length;
+  let devTokens = 0;
+
+  const sub = emitter.addListener('LiteRtToken', (piece: string) => {
+    devTokens += Math.max(1, Math.round(piece.length / 4));
+    onToken(piece);
+  });
   const run = LiteRt.generate(sys, historyJson, lastText, imagePaths, TOP_K, TOP_P, TEMPERATURE, true, 0)
-    .then(() => onDone())
+    .then(() => { logGenerationStats('chat', devStart, devPromptChars, devTokens); onDone(); })
     .catch((e) => onError(e instanceof Error ? e.message : String(e)))
     .finally(() => { sub.remove(); activeCompletion = null; activeKind = null; });
   activeCompletion = run;
@@ -166,13 +202,15 @@ export function plainFromGemma(prompt: string): string {
 
 export async function extract(
   prompt: string,
-  opts: { maxTokens?: number; temperature?: number; preempt?: boolean; onToken?: (t: string) => void } = {},
+  opts: { maxTokens?: number; temperature?: number; preempt?: boolean; onToken?: (t: string) => void; label?: string } = {},
 ): Promise<string | null> {
   if (!LiteRt) return null;
   if (opts.preempt) await drainActive();
   else if (activeCompletion) return null;
 
   activeKind = 'extract';
+  const devStart = Date.now();
+  const devPromptChars = prompt.length;
   // Stream only when a token sink is given (research answer to live bubble). The
   // maxTokens cap is now enforced natively, so research no longer runs to the 4096
   // engine ceiling, the single biggest latency win.
@@ -184,6 +222,7 @@ export async function extract(
   activeCompletion = run.finally(() => { sub?.remove(); activeCompletion = null; activeKind = null; });
   try {
     const text = await run;
+    logGenerationStats(opts.label ?? 'extract', devStart, devPromptChars, Math.round((text?.length ?? 0) / 4));
     return text && text.length ? text : null;
   } catch {
     return null;

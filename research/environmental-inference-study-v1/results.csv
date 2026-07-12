@@ -1,0 +1,10 @@
+workload,scenario,local_electricity_wh,cloud_electricity_wh,electricity_reduction_pct,local_water_ml,cloud_water_ml,water_reduction_pct
+Short,low,0.001262,0.054646,97.7,0.001892,0.08154,97.7
+Short,central,0.002103,0.124288,98.3,0.006518,0.462211,98.6
+Short,high,0.003364,0.750917,99.6,0.016821,4.59,99.6
+Standard,low,0.005258,0.159508,96.7,0.007887,0.236466,96.7
+Standard,central,0.008763,0.361338,97.6,0.027165,1.340412,98
+Standard,high,0.014021,2.178297,99.4,0.070103,13.311,99.5
+Extended,low,0.011968,0.339681,96.5,0.017952,0.50283,96.4
+Extended,central,0.019947,0.768784,97.4,0.061834,2.850302,97.8
+Extended,high,0.031915,4.632279,99.3,0.159573,28.305,99.4

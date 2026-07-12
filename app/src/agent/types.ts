@@ -52,6 +52,9 @@ export interface AgentSource {
   url: string;
 }
 
+/** Coarse artifact kind, shown as a compact label in Library. */
+export type ArtifactType = 'document' | 'plan' | 'report' | 'note';
+
 export interface AgentArtifact {
   id: string;
   taskId: string;
@@ -60,6 +63,12 @@ export interface AgentArtifact {
   createdAt: number;
   /** True once the user kept it (or Auto mode saved it to the workspace). */
   saved: boolean;
+  /** Compact kind label for Library. Absent on legacy records → treated as 'document'. */
+  type?: ArtifactType;
+  /** Set when kept/renamed in Library. Absent → falls back to createdAt. */
+  updatedAt?: number;
+  /** Conversation the task ran in, when known — for "From Task" source context. */
+  sourceConversationId?: string;
 }
 
 export type TaskStatus =
@@ -150,4 +159,13 @@ export interface TaskContext {
    * web_research is then hidden from the model and blocked in code. Default true.
    */
   researchAllowed?: boolean;
+  /**
+   * Compact grounding block built by agent/context.ts: recent conversation turns
+   * plus the most recent structured research handoff from this same conversation.
+   * Lets a referential goal ("make a document about why he died") resolve who/what
+   * it means and see what Research actually found, without pasting the raw
+   * transcript. Empty string when there is nothing to ground (e.g. a brand new
+   * conversation) — prompt builders skip the block entirely in that case.
+   */
+  conversationContext?: string;
 }

@@ -40,7 +40,7 @@ export async function generateTitle(messages: Message[]): Promise<string | null>
   ]);
   let raw: string | null;
   try {
-    raw = await Llama.extract(prompt, { maxTokens: MAX_TITLE_TOKENS, temperature: TITLE_TEMPERATURE });
+    raw = await Llama.extract(prompt, { maxTokens: MAX_TITLE_TOKENS, temperature: TITLE_TEMPERATURE, label: 'title' });
   } catch {
     return null;
   }

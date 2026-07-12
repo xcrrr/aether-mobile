@@ -1,0 +1,72 @@
+{
+  "$schema": "workload-definitions v1 — representative modeled workloads, not observed user behavior",
+  "notes": "Token targets are anchored to real limits found in the Aether codebase (app/src/agent/AgentKernel.ts, app/src/agent/runner.ts, app/src/webresearch/ResearchEngine.ts, app/src/llm/LiteRtService.ts), not invented. A fixed system-prompt overhead is added to input tokens identically for both the local and cloud side of every workload, so the comparison stays matched.",
+  "shared_assumptions": {
+    "system_prompt_tokens": 150,
+    "system_prompt_note": "Fixed assistant system-prompt overhead, applied equally to local and cloud input token counts for every workload. Not a measured Aether system-prompt length; a conservative round-number placeholder pending direct measurement.",
+    "chars_per_token": 4,
+    "bytes_per_char": 1,
+    "http_overhead_bytes": 2048,
+    "http_overhead_note": "Fixed allowance for TLS/HTTP request and response framing on the cloud path only. Local inference has no network path and is not charged this overhead."
+  },
+  "workloads": [
+    {
+      "id": "short",
+      "label": "Short",
+      "description": "A brief factual or conversational request — the kind of single-turn exchange that dominates everyday chat.",
+      "input_tokens_excl_system": 30,
+      "output_tokens": 60,
+      "anchor": "Below AgentKernel.ts PROPOSE_MAX_TOKENS (220); representative of ordinary short chat replies, not that cap itself."
+    },
+    {
+      "id": "standard",
+      "label": "Standard",
+      "description": "An ordinary assistant task with a moderate-length response — a paragraph-scale answer or short piece of writing.",
+      "input_tokens_excl_system": 120,
+      "output_tokens": 300,
+      "anchor": "Between runner.ts default maxTokens (256) and ResearchEngine.ts ANSWER_MAX_TOKENS (640)."
+    },
+    {
+      "id": "extended",
+      "label": "Extended",
+      "description": "A structured task with a longer response — multi-part writing, comparison, or synthesis.",
+      "input_tokens_excl_system": 300,
+      "output_tokens": 700,
+      "anchor": "Matches the scale of AgentKernel.ts ARTIFACT_MAX_TOKENS (900) and refine.ts REVISE_MAX_TOKENS (900)."
+    }
+  ],
+  "local_configuration": {
+    "model_id": "gemma4-e2b",
+    "model_label": "Gemma 4 E2B (Aether \"Fast\" mode, the default mode)",
+    "engine": "LiteRT-LM, Android GPU backend (OpenCL)",
+    "decode_tokens_per_second": 52,
+    "decode_source": "google_litertlm_2026",
+    "prefill_tokens_per_second_low_bound": 500,
+    "prefill_note": "No official GPU-backend prefill figure for this exact model/device was found. 500 tok/s is a conservative (slow) placeholder bound versus the 1916 tok/s Pixel 7 Pro CPU-backend prefill figure reported in the same product line; prefill time is a small fraction of total generation time at these workload sizes regardless, since decode dominates wall-clock time. See limitations.md.",
+    "reference_device": "8 GB+ RAM Android device meeting Aether's stated minimum (app/src/models/registry.ts minRamGb: 8), Snapdragon 8-series-class SoC, GPU inference delegate active.",
+    "device_generalization_note": "This is a single reference-class device assumption. Actual on-device throughput and power draw vary by chipset, thermal state, and RAM headroom. Not generalized to all Android phones."
+  },
+  "cloud_configuration": {
+    "label": "Cloud-based LLM inference (generic, unnamed service)",
+    "compute_hardware_class": "Data-center GPU serving hardware, single/unbatched request attribution (see limitations.md batching caveat)",
+    "streaming_display_rate_tokens_per_second": {
+      "low": 60,
+      "central": 30,
+      "high": 15
+    },
+    "streaming_rate_note": "Assumption, not a cited measurement: the wall-clock pace at which a cloud response is displayed to the user, which determines how long the phone's radio stays active during a streamed reply. Order-of-magnitude consistent with commonly observed streaming-assistant response pacing. Low streaming-rate scenario = high radio energy (worse for cloud); high streaming-rate = low radio energy (better for cloud)."
+  },
+  "exclusions_for_all_workloads": [
+    "Model training",
+    "Phone manufacturing / embodied hardware footprint",
+    "Server manufacturing / embodied data-center footprint",
+    "Device end-of-life and recycling",
+    "Office and app-development energy",
+    "Software distribution infrastructure beyond the model file / app download itself",
+    "Non-AI app usage (navigation, storage browsing, settings)",
+    "User screen power (identical for both conditions while reading a reply; excluded from both)",
+    "External tools used by optional features (Research web-fetching network cost; Task mode tool calls)",
+    "Per-session model load time/energy (amortized differently than per-query cost; out of scope for v1)",
+    "Server-side request batching efficiency (see limitations.md — likely makes real-world cloud energy lower than modeled here)"
+  ]
+}

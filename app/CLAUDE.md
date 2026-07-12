@@ -71,7 +71,6 @@ cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 npm test          # Jest (currently ~137 tests)
 npm run typecheck # tsc --noEmit strict
 ```
-All new code needs tests. TDD preferred: test→RED→impl→GREEN.
 
 ## File layout
 ```

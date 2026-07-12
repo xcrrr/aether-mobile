@@ -1,0 +1,69 @@
+{
+  "$schema": "scenario-inputs v1 — every numeric coefficient used by calculate-study.ts, each traceable to source-manifest.json",
+  "local_incremental_power_draw_watts": {
+    "low": 3.0,
+    "central": 5.0,
+    "high": 8.0,
+    "source": "chipset_power_benchmarks_2024",
+    "unit": "W",
+    "definition": "Incremental GPU/SoC electrical power drawn above idle while the LiteRT GPU delegate is actively generating. MODELED proxy from graphics/synthetic-benchmark power draw, not a direct LLM-inference measurement."
+  },
+  "cloud_datacenter_energy_per_1000_output_tokens_wh": {
+    "low": 0.3,
+    "central": 0.528,
+    "high": 2.5,
+    "source": "luccioni2024_and_husom2024",
+    "unit": "Wh per 1,000 output tokens",
+    "definition": "Raw GPU compute energy (no PUE) to generate output tokens on server/data-center-class GPU hardware. Central value is the directly-measured Husom et al. regression coefficient. Low value reflects the small-model end of Luccioni et al.'s measured range. High value is this study's own scenario upper bound, informed by (not equal to) the externally-cited BLOOM-176B API figure noted in Luccioni et al., representing a larger, more capable multi-purpose assistant model class."
+  },
+  "cloud_prefill_energy_discount_factor": {
+    "value": 0.5,
+    "definition": "Input (prefill) tokens are charged at this fraction of the per-output-token compute energy rate, reflecting that prefill is typically cheaper per token than autoregressive decode. A simplifying assumption, not independently sourced."
+  },
+  "datacenter_pue": {
+    "low": 1.2,
+    "central": 1.56,
+    "high": 2.0,
+    "source": "uptime2024",
+    "unit": "dimensionless (facility power / IT power)",
+    "definition": "Power Usage Effectiveness. Central is the official 2024 industry-wide average. Low reflects publicly reported hyperscale best-in-class sites. High is this study's own conservative bound for older/smaller facilities."
+  },
+  "datacenter_onsite_wue_l_per_kwh": {
+    "low": 0.012,
+    "central": 1.0,
+    "high": 2.24,
+    "source": "li2023",
+    "unit": "L/kWh",
+    "definition": "On-site direct water consumption per unit of IT (compute) energy, for cooling. Range reflects regional/climate variation reported in Li et al. 2023; central is a large operator's reported annualized average cited in that paper."
+  },
+  "grid_ewif_water_l_per_kwh": {
+    "low": 1.5,
+    "central": 3.1,
+    "high": 5.0,
+    "source": "li2023",
+    "unit": "L/kWh (consumption, not withdrawal)",
+    "definition": "Off-site electricity-generation water consumption intensity. Central (3.1 L/kWh) is the U.S. national average consumption figure directly reported in Li et al. 2023. Low/high are this study's own scenario band around that single documented point estimate — regional grid water intensity varies substantially; see limitations.md."
+  },
+  "network_transmission_energy_kwh_per_gb": {
+    "low": 0.03,
+    "central": 0.06,
+    "high": 0.12,
+    "source": "aslan2018",
+    "unit": "kWh/GB",
+    "definition": "Electricity intensity of internet data transmission. Central is the Aslan et al. 2018 revised estimate. Low/high are a 2x scenario band around it. Because chat payloads are kilobytes, not gigabytes, this term is a minor contributor regardless of the exact value — see calculation-notes.md."
+  },
+  "client_radio_active_power_watts": {
+    "low": 0.5,
+    "central": 1.0,
+    "high": 2.0,
+    "source": "informed by huang2012_lte_characterization (see calculation-notes.md — not a directly quoted figure)",
+    "unit": "W",
+    "definition": "Phone cellular/WiFi radio active-state power while a cloud request/response is in flight. Order-of-magnitude assumption informed by the LTE radio power-state literature; not independently re-measured for this study."
+  },
+  "model_download": {
+    "model_id": "gemma4-e2b",
+    "size_bytes": 2588147712,
+    "size_source": "app/src/models/registry.ts (Aether repository, exact value)",
+    "amortization_request_counts": [1000, 10000, 100000]
+  }
+}

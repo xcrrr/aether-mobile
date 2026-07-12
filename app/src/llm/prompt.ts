@@ -93,27 +93,18 @@ const TYPE_LABEL: Record<FileAttachment['type'], string> = {
 };
 
 /**
- * Weave a user message's attachments into its text so the model sees them:
- *  - images get a short "analyze the attached image" preamble (the pixels are
- *    delivered separately through the multimodal API)
- *  - documents have their extracted text injected as a quoted block
- *  - unreadable documents fall back to naming the file and asking the user to
- *    paste the relevant text
+ * Weave a message's non-image attachments (PDF/DOCX/text) into a document
+ * context block: extracted text is quoted in full (already bounded by
+ * FileProcessor's truncation), unreadable documents fall back to naming the
+ * file and asking the user to paste the relevant text. Shared by every prompt
+ * builder — including the live chat path in LiteRtService — so a document
+ * only needs one formatting rule.
  */
-export function buildUserContent(message: Message, visionActive = false): string {
-  const attachments = message.attachments ?? [];
-  if (attachments.length === 0) return message.content;
-
+export function buildDocumentContext(attachments: FileAttachment[]): string {
   const blocks: string[] = [];
   for (const a of attachments) {
-    if (a.type === 'image') {
-      // Only claim the image is viewable when its pixels are actually being fed
-      // to the active engine. The marker is kept for legacy prompt builders; the
-      // LiteRT engine receives image bytes through the native API.
-      blocks.push(visionActive
-        ? `${MEDIA_MARKER}\nThe user shared this image. Describe and analyze ONLY what is actually visible in it. Do not invent anything you cannot see.`
-        : 'The user attached an image, but image analysis is not available in this session, so you genuinely cannot see it. Tell the user you can\'t view the image right now and do NOT guess or make up what it shows.');
-    } else if (a.extractedText) {
+    if (a.type === 'image') continue;
+    if (a.extractedText) {
       const meta = a.pageCount
         ? `${TYPE_LABEL[a.type]}, ${a.pageCount} pages`
         : `${TYPE_LABEL[a.type]}, ${a.extractedText.length} chars`;
@@ -128,6 +119,31 @@ export function buildUserContent(message: Message, visionActive = false): string
       );
     }
   }
+  return blocks.join('\n\n');
+}
+
+/**
+ * Weave a user message's attachments into its text so the model sees them:
+ *  - images get a short "analyze the attached image" preamble (the pixels are
+ *    delivered separately through the multimodal API)
+ *  - documents go through {@link buildDocumentContext}
+ */
+export function buildUserContent(message: Message, visionActive = false): string {
+  const attachments = message.attachments ?? [];
+  if (attachments.length === 0) return message.content;
+
+  const blocks: string[] = [];
+  const image = attachments.find((a) => a.type === 'image');
+  if (image) {
+    // Only claim the image is viewable when its pixels are actually being fed
+    // to the active engine. The marker is kept for legacy prompt builders; the
+    // LiteRT engine receives image bytes through the native API.
+    blocks.push(visionActive
+      ? `${MEDIA_MARKER}\nThe user shared this image. Describe and analyze ONLY what is actually visible in it. Do not invent anything you cannot see.`
+      : 'The user attached an image, but image analysis is not available in this session, so you genuinely cannot see it. Tell the user you can\'t view the image right now and do NOT guess or make up what it shows.');
+  }
+  const docBlock = buildDocumentContext(attachments);
+  if (docBlock) blocks.push(docBlock);
 
   const userMessage = message.content.trim();
   const prefix = blocks.join('\n\n');

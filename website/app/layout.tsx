@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import './globals.css';
+import { SmoothScroll } from '@/components/ui/SmoothScroll';
 
 export const metadata: Metadata = {
   title: 'Aether — a private AI assistant for Android',
@@ -40,7 +41,10 @@ const instrumentSans = localFont({
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${newsreader.variable} ${instrumentSans.variable}`}>
-      <body>{children}</body>
+      <body>
+        <SmoothScroll />
+        {children}
+      </body>
     </html>
   );
 }

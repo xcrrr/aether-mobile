@@ -1,0 +1,4 @@
+workload,local_high_wh,cloud_low_wh,conservative_reduction_pct
+short,0.003364,0.054646,93.8
+standard,0.014021,0.159508,91.2
+extended,0.031915,0.339681,90.6

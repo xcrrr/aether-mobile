@@ -46,6 +46,10 @@ export interface Message {
   agentTaskId?: string;
   /** The task's receipt — what actually ran. Set once the task ends. */
   agentReceipt?: AgentReceipt;
+  /** Structured research handoff, set only on a Research-mode reply. Lets a later
+   *  Task follow-up in the same conversation ("make a document about why he died")
+   *  see what was actually found instead of re-deriving it from rendered markdown. */
+  research?: { query: string; answer: string; sources: { title: string; url: string }[] };
 }
 
 export interface Conversation {

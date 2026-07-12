@@ -47,6 +47,9 @@ export const motion = {
   line: createMotionComponent('line'),
 };
 
+export const AnimatePresence = ({ children }: { children?: React.ReactNode }) =>
+  React.createElement(React.Fragment, null, children);
+
 export const easeOut = [0.22, 1, 0.36, 1];
 export const useInView = () => true;
 export const useScroll = () => ({ scrollYProgress: { get: () => 0, on: () => () => {} } });

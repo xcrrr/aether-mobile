@@ -290,6 +290,7 @@ export async function extractFromConversation(
       maxTokens: MAX_EXTRACT_TOKENS,
       temperature: EXTRACT_TEMPERATURE,
       preempt: opts.force,
+      label: 'core-extract',
     });
   } catch (err) {
     console.error('[MemoryExtractor] inference failed', err);

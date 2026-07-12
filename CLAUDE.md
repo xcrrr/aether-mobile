@@ -42,3 +42,10 @@ beautiful, spectacular app with **zero "AI slop."**
 ## Collaboration
 
 Codex and Claude are collaborators here. Leave clear notes for the other agent when you make architecture changes, especially in `claude-notes/` or `codex-notes/`.
+
+## Agent role split (set 2026-07-04)
+
+- **Codex** — mechanical only: rebuilding the Android APK / EAS or Gradle builds, deploying `website/` to Vercel, running the test suite, installing dependencies, routine config/scaffolding. Invoke via `codex exec "<prompt>"`.
+- **Claude Sonnet 5** — default for everything else: UI/UX implementation, component work, styling against `app/src/theme/index.ts`, normal feature/bugfix work.
+- **Claude Opus 4.8** — hard cases only: architecture decisions, tricky `.litertlm` inference issues, anything where a wrong call is costly. Via the `Agent` tool with `model: "opus"`.
+- Codex does **not** design UI or build features, even small ones — the user's explicit call after seeing Codex handle builds/deploys well but not being trusted for product/design judgment. Always verify Codex's build/deploy output before calling it done.

@@ -7,10 +7,15 @@ import {
 beforeEach(() => AsyncStorage.clear());
 
 describe('conversation storage', () => {
-  it('creates a conversation and indexes it', async () => {
+  it('creates a conversation but keeps it out of recents until it has a message', async () => {
     const c = await createConversation('gemma4-e2b');
     expect(c.modelId).toBe('gemma4-e2b');
     expect(c.messages).toEqual([]);
+    // An unstarted chat must not appear in the recents index.
+    expect(await loadIndex()).toHaveLength(0);
+    // It becomes visible only once a real message is saved.
+    c.messages.push({ id: 'm1', role: 'user', content: 'First', createdAt: 1 });
+    await saveConversation(c);
     const index = await loadIndex();
     expect(index).toHaveLength(1);
     expect(index[0].id).toBe(c.id);

@@ -19,9 +19,10 @@ test('page keeps honest scoping: no absolute privacy claims', () => {
   expect(text).not.toMatch(/fully (offline|private|secure)/i);
 });
 
-test('demo and privacy anchors exist for nav links', () => {
+test('mission, memory, features and privacy anchors exist for nav links', () => {
   const { container } = render(<Home />);
-  expect(container.querySelector('#demo')).toBeTruthy();
+  expect(container.querySelector('#mission')).toBeTruthy();
   expect(container.querySelector('#privacy')).toBeTruthy();
   expect(container.querySelector('#memory')).toBeTruthy();
+  expect(container.querySelector('#features')).toBeTruthy();
 });

@@ -1,9 +1,10 @@
 import { DISCORD_URL, GITHUB_URL, RELEASE_URL } from '@/lib/links';
 
 const LINKS = [
-  { href: '#demo', label: 'See it work' },
+  { href: '#mission', label: 'Our Mission' },
   { href: '#memory', label: 'Memory' },
-  { href: '#privacy', label: 'Privacy' },
+  { href: '#features', label: 'Features' },
+  { href: '/research', label: 'Research' },
   { href: RELEASE_URL, label: 'Releases', external: true },
   { href: GITHUB_URL, label: 'GitHub', external: true },
   { href: DISCORD_URL, label: 'Discord', external: true },

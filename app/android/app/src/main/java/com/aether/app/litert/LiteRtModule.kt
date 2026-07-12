@@ -48,6 +48,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
   @Volatile private var modelPath: String? = null
   @Volatile private var conversation: Conversation? = null
   @Volatile private var visionEnabled = false
+  @Volatile private var lastGpu = false
   @Volatile private var cancelled = false
 
   override fun getName() = "LiteRt"
@@ -111,7 +112,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
       try {
         val clean = path.removePrefix("file://")
         if (engine != null && modelPath == clean) {
-          promise.resolve("{\"gpu\":true,\"vision\":$visionEnabled}"); return@execute
+          promise.resolve("{\"gpu\":$lastGpu,\"vision\":$visionEnabled}"); return@execute
         }
         val file = File(clean)
         if (!file.exists()) { promise.reject("LITERT_NO_FILE", "Model file not found"); return@execute }
@@ -123,6 +124,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
         val res = createEngine(clean, maxTokens)
         engine = res.engine
         visionEnabled = res.vision
+        lastGpu = res.gpu
         modelPath = clean
         promise.resolve("{\"gpu\":${res.gpu},\"vision\":${res.vision}}")
       } catch (t: Throwable) {
@@ -308,5 +310,6 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
     engine = null
     modelPath = null
     visionEnabled = false
+    lastGpu = false
   }
 }

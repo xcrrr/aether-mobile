@@ -42,7 +42,7 @@ export async function contextualizeQuery(query: string, history: Message[]): Pro
       `the query; no quotes, no explanation.\n\nConversation:\n${transcript}\n\n` +
       `Latest message: ${sanitizeModelText(query)}\n\nSearch query:`,
   }]);
-  const out = await Llama.extract(prompt, { maxTokens: 48, temperature: 0.1, preempt: true });
+  const out = await Llama.extract(prompt, { maxTokens: 48, temperature: 0.1, preempt: true, label: 'research-contextualize' });
   const rewritten = (out ? stripSpecialTokens(out) : '')
     .trim()
     .split('\n')[0]
@@ -165,6 +165,7 @@ export async function runResearch(
     temperature: ANSWER_TEMPERATURE,
     preempt: true,
     onToken: onAnswer ? (t) => { streamed += t; onAnswer(stripSpecialTokens(streamed).trim()); } : undefined,
+    label: 'research-answer',
   });
 
   if (!raw) {

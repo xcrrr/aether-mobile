@@ -30,6 +30,8 @@ interface ChatState {
   setAssistantContent: (content: string) => void;
   /** Record which Core notes were provided as context for the in-progress reply. */
   setAssistantRecall: (items: { key: string; why: string }[]) => void;
+  /** Record the structured research handoff for the in-progress reply (Research mode). */
+  setAssistantResearch: (research: { query: string; answer: string; sources: { title: string; url: string }[] }) => void;
   /** Mark the in-progress assistant message as an agent task result. */
   setAssistantAgent: (taskId: string, receipt?: AgentReceipt) => void;
   finishAssistant: () => Promise<void>;
@@ -158,6 +160,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const last = messages[messages.length - 1];
     if (!last || last.role !== 'assistant') return;
     messages[messages.length - 1] = { ...last, coreRecall: items };
+    set({ current: { ...c, messages } });
+  },
+  setAssistantResearch: (research) => {
+    const c = get().current;
+    if (!c) return;
+    const messages = [...c.messages];
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant') return;
+    messages[messages.length - 1] = { ...last, research };
     set({ current: { ...c, messages } });
   },
   setAssistantAgent: (taskId, receipt) => {

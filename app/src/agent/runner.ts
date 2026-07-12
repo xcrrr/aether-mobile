@@ -23,6 +23,7 @@ const llm: KernelLlm = {
       maxTokens: opts?.maxTokens ?? 256,
       temperature: STEP_TEMPERATURE,
       preempt: true,
+      label: 'task',
     });
   },
 };

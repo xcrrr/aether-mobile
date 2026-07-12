@@ -8,6 +8,7 @@ import { Settings, Plus, ChevronRight } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useChatStore } from '@/state/useChatStore';
 import { useModelStore } from '@/state/useModelStore';
+import { useLibraryStore } from '@/state/useLibraryStore';
 import { ConversationRow } from './ConversationRow';
 import { radius, spacing, fonts, Palette, fontSize, typography } from '@/theme';
 import { useColors } from '@/theme/useColors';
@@ -21,6 +22,7 @@ export function SidebarContent(props: DrawerContentComponentProps) {
   const styles = useMemo(() => makeStyles(c), [c]);
   const { index, current, newChat, remove } = useChatStore();
   const { activeModelId } = useModelStore();
+  const libraryCount = useLibraryStore((s) => s.items.length);
 
   const close = () => props.navigation.closeDrawer();
   const footerH = BTN_H + 22 + insets.bottom;
@@ -71,6 +73,18 @@ export function SidebarContent(props: DrawerContentComponentProps) {
               <Text style={styles.brainLabel}>Core</Text>
               <Text style={styles.brainMeta}>Memory / thought graph</Text>
             </View>
+            <ChevronRight size={18} color={c.textMuted} strokeWidth={2} />
+          </PressableScale>
+        </View>
+
+        {/* Library */}
+        <View style={styles.sectionTight}>
+          <PressableScale style={styles.brainBtn} onPress={() => { close(); router.push('/(main)/library'); }} scaleTo={0.98}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.brainLabel}>Library</Text>
+              <Text style={styles.brainMeta}>Kept Task outputs</Text>
+            </View>
+            {libraryCount > 0 && <Text style={styles.countPill}>{libraryCount}</Text>}
             <ChevronRight size={18} color={c.textMuted} strokeWidth={2} />
           </PressableScale>
         </View>
@@ -129,6 +143,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   brainBtn: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 10 },
   brainLabel: { color: c.text, ...typography.sectionTitle },
   brainMeta: { color: c.textMuted, fontSize: fontSize.xs, marginTop: 1, fontFamily: fonts.sans },
+  countPill: { color: c.textMuted, fontSize: fontSize.xs, fontFamily: fonts.sansSemibold, marginRight: 6 },
   empty: { color: c.textMuted, fontSize: fontSize.sm2, paddingVertical: spacing.sm, fontFamily: fonts.sans },
 
   fade: { position: 'absolute', left: 0, right: 0, height: FADE_H },

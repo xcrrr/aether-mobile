@@ -49,7 +49,8 @@
           "cameraPermission": "Aether needs the camera to take a photo to ask about."
         }
       ],
-      "expo-document-picker"
+      "expo-document-picker",
+      "expo-notifications"
     ]
   }
 }
