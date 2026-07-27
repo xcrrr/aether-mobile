@@ -29,6 +29,9 @@ export interface Message {
   role: MessageRole;
   content: string;
   createdAt: number;
+  /** Consent generation active when this user message was sent. Automatic Core
+   *  extraction only reads messages from its currently queued generation. */
+  coreConsentToken?: string;
   /** Set when generation was aborted by the user — renders a muted "(stopped)" suffix. */
   stopped?: boolean;
   /** Files attached to this (user) message. */

@@ -61,6 +61,8 @@ export interface MemoryEntry {
   value: string;                 // the extracted fact
   confidence: number;            // 0.0–1.0
   visualCategory?: MemoryVisualCategory; // user-corrected graph/category placement
+  categoryCorrectedAt?: number;  // user authority over extraction category (Unix ms)
+  categoryAliases?: MemoryCategory[]; // prior extraction categories preserved after correction
   sourceConversationId: string;
   createdAt: number;             // Unix ms
   updatedAt: number;
@@ -80,10 +82,19 @@ export interface MemoryEdge {
   relation: string;
 }
 
+export interface MemoryDeletion {
+  category: MemoryCategory;
+  categoryAliases?: MemoryCategory[];
+  categoryCorrectedAt?: number;
+  key: string;
+  deletedAt: number;
+}
+
 export interface UserMemory {
   userId: string;                // device-generated UUID, persisted
   entries: MemoryEntry[];
   edges: MemoryEdge[];
+  deletions?: MemoryDeletion[];  // local authority against replaying older conversations
   lastExtractionAt: number;      // Unix ms, 0 if never
   totalConversationsAnalyzed: number;
 }

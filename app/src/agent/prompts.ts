@@ -30,9 +30,32 @@ const MAX_HISTORY_LINES = 10;
 /** Rich detail budget for the final answer / artifact prompts. */
 const DETAIL_CHARS_E4B = 1500;
 const DETAIL_CHARS_E2B = 900;
+/** A single gathered result can contain two bounded attachment excerpts. */
+const GATHERED_DETAIL_CHARS = 5200;
+/** Keep combined tool/artifact data bounded even when several steps completed. */
+const GATHERED_DATA_CHARS = 5200;
 
 export function detailBudget(modelId: string | null): number {
   return modelId === 'gemma4-e2b' ? DETAIL_CHARS_E2B : DETAIL_CHARS_E4B;
+}
+
+export function gatheredDetailBudget(): number {
+  return GATHERED_DETAIL_CHARS;
+}
+
+function gatheredData(details: string[]): string {
+  if (!details.length) return '';
+  const selected: string[] = [];
+  let remaining = GATHERED_DATA_CHARS;
+  for (let i = details.length - 1; i >= 0 && remaining > 0; i--) {
+    const content = scrubUntrusted(details[i], Math.min(gatheredDetailBudget(), remaining));
+    if (!content) continue;
+    selected.unshift(content);
+    remaining -= content.length;
+  }
+  return selected
+    .map((content, index) => `--- data ${index + 1} ---\n${content}`)
+    .join('\n\n');
 }
 
 /** Tighter budget for the conversation-context block inside the loop prompt,
@@ -158,9 +181,8 @@ export function buildArtifactPrompt(
   details: string[],
 ): string {
   const budget = detailBudget(ctx.modelId);
-  const data = details.length
-    ? details.map((d, i) => `--- data ${i + 1} ---\n${scrubUntrusted(d, budget)}`).join('\n\n')
-    : '(no gathered data; write from the task description alone)';
+  const data = gatheredData(details)
+    || '(no gathered data; write from the task description alone)';
   const parts = [
     `Write the full markdown content of a deliverable titled "${scrubUntrusted(title, 120)}".`,
     `It is for this task: ${clampChars(ctx.goal, 600)}`,
@@ -184,9 +206,7 @@ export function buildRevisePrompt(
   details: string[],
 ): string {
   const budget = detailBudget(ctx.modelId);
-  const data = details.length
-    ? details.slice(-2).map((d, i) => `--- data ${i + 1} ---\n${scrubUntrusted(d, budget)}`).join('\n\n')
-    : '(none)';
+  const data = gatheredData(details.slice(-2)) || '(none)';
   const parts = [
     `Revise the markdown artifact titled "${scrubUntrusted(title, 120)}".`,
     `It is for this task: ${clampChars(ctx.goal, 600)}`,
@@ -214,9 +234,7 @@ export function buildFinalAnswerPrompt(
   caveat?: string,
 ): string {
   const budget = detailBudget(ctx.modelId);
-  const data = details.length
-    ? details.map((d, i) => `--- data ${i + 1} ---\n${scrubUntrusted(d, budget)}`).join('\n\n')
-    : '(none)';
+  const data = gatheredData(details) || '(none)';
   const parts = [
     `Write Aether's final reply to the user for this task:\n${clampChars(ctx.goal, 1200)}`,
     `Work that was actually completed:\n${workLines(task, ctx.priorArtifacts)}`,

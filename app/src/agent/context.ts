@@ -19,6 +19,27 @@ const RECENT_TURNS = 8;
 const TURN_CHARS = 220;
 const RESEARCH_ANSWER_CHARS = 900;
 const RESEARCH_SOURCES = 4;
+const MULTI_TURN_ATTACHMENTS = /\b(both|all (?:the )?(?:attachments|documents|files)|previous|earlier|other (?:attachment|document|file))\b/i;
+
+function extractedAttachments(messages: Message[]): { name: string; text: string }[] {
+  return messages
+    .flatMap((message) => message.attachments ?? [])
+    .filter((attachment) => !!attachment.extractedText)
+    .map((attachment) => ({ name: attachment.name, text: attachment.extractedText! }));
+}
+
+export function buildTaskAttachments(
+  messages: Message[],
+  goal = [...messages].reverse().find((message) => message.role === 'user')?.content ?? '',
+): { name: string; text: string }[] {
+  const userMessages = messages.filter((message) => message.role === 'user');
+  const current = userMessages[userMessages.length - 1];
+  const currentAttachments = current ? extractedAttachments([current]) : [];
+  if (currentAttachments.length && !MULTI_TURN_ATTACHMENTS.test(goal)) {
+    return currentAttachments;
+  }
+  return extractedAttachments(userMessages);
+}
 
 export function buildConversationContext(messages: Message[]): string {
   if (!messages.length) return '';

@@ -1,5 +1,10 @@
 import { useMemoryStore, MemoryStore, dedupeEntries } from './MemoryStore';
 import { MemoryEntry } from './types';
+import { recallDisclosureItems, selectRecall } from './recall';
+import { buildMemorySystemPrompt } from './MemoryInjector';
+import { captureCoreSendSnapshot } from './CoreSendSnapshot';
+import { useChatStore } from '@/state/useChatStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const mkEntry = (over: Partial<MemoryEntry>): MemoryEntry => ({
   id: over.id ?? 'i', category: over.category ?? 'identity', key: over.key ?? 'k',
@@ -20,6 +25,285 @@ describe('MemoryStore hydration gate', () => {
   it('ensureHydrated resolves and reports hydration so recall never reads an empty store on cold start', async () => {
     await expect(MemoryStore.ensureHydrated()).resolves.toBeUndefined();
     expect(MemoryStore.hasHydrated()).toBe(true);
+  });
+
+  it('persists a transparent disclosure for only the relevant correction after a cold restart', async () => {
+    MemoryStore.addOrUpdateEntry({
+      category: 'goals', key: 'race_schedule', value: 'Race training happens on Saturdays', confidence: 0.85,
+      sourceConversationId: 'training-chat', evidence: 'I train for the race on Sundays',
+    });
+    const schedule = MemoryStore.getAllEntries()[0];
+    MemoryStore.updateEntry(schedule.id, { value: 'Race training happens on Tuesdays' });
+    MemoryStore.addOrUpdateEntry({
+      category: 'preferences', key: 'reading_preference', value: 'Enjoys historical biographies', confidence: 0.9,
+      sourceConversationId: 'reading-chat', evidence: 'I enjoy historical biographies',
+    });
+
+    const beforeRestart = useMemoryStore.getState();
+    const persistedBeforeRestart = JSON.stringify({
+      state: { memory: beforeRestart.memory, enabled: beforeRestart.enabled },
+      version: 0,
+    });
+    useMemoryStore.setState({
+      memory: { userId: 'cold-process', entries: [], edges: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 },
+      enabled: true,
+      recentKeys: [],
+    });
+    await AsyncStorage.setItem('aether_second_brain', persistedBeforeRestart);
+    await useMemoryStore.persist.rehydrate();
+
+    const core = await captureCoreSendSnapshot(MemoryStore);
+    const recall = selectRecall([
+      { id: 'u-cold', role: 'user', content: 'Which day is my race training?', createdAt: 1 },
+    ], { entries: core.entries, enabled: core.enabled, activeModelId: 'gemma4-e4b' });
+
+    expect(recall.topical.map((item) => item.entry.key)).toEqual(['race_schedule']);
+    expect(buildMemorySystemPrompt(recall)).toContain('Race training happens on Tuesdays');
+    expect(buildMemorySystemPrompt(recall)).not.toContain('historical biographies');
+
+    // Drive the same assistant metadata path used by send(), then reopen the
+    // conversation to prove the disclosure survives navigation/process state
+    // loss and cannot pick up an unrelated persisted note.
+    useChatStore.getState().resetLocalState();
+    const conversationId = await useChatStore.getState().newChat('gemma4-e4b');
+    await useChatStore.getState().appendUser('Which day is my race training?', undefined, core.consentToken);
+    useChatStore.getState().startAssistant();
+    useChatStore.getState().setAssistantRecall(recallDisclosureItems(recall));
+    useChatStore.getState().appendToken('Your race training is on Tuesdays.');
+    await useChatStore.getState().finishAssistant();
+
+    useChatStore.getState().resetLocalState();
+    await useChatStore.getState().open(conversationId);
+    const reply = useChatStore.getState().current?.messages.at(-1);
+    expect(reply?.coreRecall).toEqual([{
+      key: 'race_schedule',
+      why: expect.stringContaining('matched:'),
+    }]);
+    expect(reply?.coreRecall?.map((item) => item.key)).not.toContain('reading_preference');
+  });
+
+  it('keeps a deleted correction out of prompt grounding and disclosure after a cold restart', async () => {
+    MemoryStore.addOrUpdateEntry({
+      category: 'goals', key: 'race_schedule', value: 'Race training happens on Saturdays', confidence: 0.85,
+      sourceConversationId: 'training-chat', evidence: 'I train for the race on Saturdays',
+    });
+    const schedule = MemoryStore.getAllEntries()[0];
+    MemoryStore.updateEntry(schedule.id, { value: 'Race training happens on Tuesdays' });
+    MemoryStore.deleteEntry(schedule.id);
+
+    const beforeRestart = useMemoryStore.getState();
+    const persistedBeforeRestart = JSON.stringify({
+      state: { memory: beforeRestart.memory, enabled: beforeRestart.enabled },
+      version: 0,
+    });
+    useMemoryStore.setState({
+      memory: { userId: 'cold-process', entries: [], edges: [], deletions: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 },
+      enabled: true,
+      recentKeys: [],
+    });
+    await AsyncStorage.setItem('aether_second_brain', persistedBeforeRestart);
+    await useMemoryStore.persist.rehydrate();
+
+    const core = await captureCoreSendSnapshot(MemoryStore);
+    const recall = selectRecall([
+      { id: 'u-deleted', role: 'user', content: 'Which day is my race training?', createdAt: 1 },
+    ], { entries: core.entries, enabled: core.enabled, activeModelId: 'gemma4-e4b' });
+
+    expect(core.entries).toEqual([]);
+    expect(MemoryStore.getDeletions()).toEqual([expect.objectContaining({ key: 'race_schedule' })]);
+    expect(recall.topical).toEqual([]);
+    expect(buildMemorySystemPrompt(recall)).toBe('');
+    expect(recallDisclosureItems(recall)).toEqual([]);
+
+    useChatStore.getState().resetLocalState();
+    const conversationId = await useChatStore.getState().newChat('gemma4-e4b');
+    await useChatStore.getState().appendUser('Which day is my race training?', undefined, core.consentToken);
+    useChatStore.getState().startAssistant();
+    useChatStore.getState().setAssistantRecall(recallDisclosureItems(recall));
+    useChatStore.getState().appendToken('I do not have a saved training day to rely on.');
+    await useChatStore.getState().finishAssistant();
+
+    useChatStore.getState().resetLocalState();
+    await useChatStore.getState().open(conversationId);
+    const reply = useChatStore.getState().current?.messages.at(-1);
+    expect(reply?.coreRecall).toBeUndefined();
+  });
+
+  it('keeps a bulk Core clear out of prompt grounding and disclosure after a cold restart', async () => {
+    MemoryStore.addOrUpdateEntry({
+      category: 'goals', key: 'race_schedule', value: 'Race training happens on Tuesdays', confidence: 0.85,
+      sourceConversationId: 'training-chat', evidence: 'I train for the race on Tuesdays',
+    });
+    MemoryStore.addOrUpdateEntry({
+      category: 'preferences', key: 'reading_preference', value: 'Enjoys historical biographies', confidence: 0.9,
+      sourceConversationId: 'reading-chat', evidence: 'I enjoy historical biographies',
+    });
+    MemoryStore.clearAll();
+
+    const beforeRestart = useMemoryStore.getState();
+    const persistedBeforeRestart = JSON.stringify({
+      state: { memory: beforeRestart.memory, enabled: beforeRestart.enabled },
+      version: 0,
+    });
+    useMemoryStore.setState({
+      memory: { userId: 'cold-process', entries: [], edges: [], deletions: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 },
+      enabled: true,
+      recentKeys: [],
+    });
+    await AsyncStorage.setItem('aether_second_brain', persistedBeforeRestart);
+    await useMemoryStore.persist.rehydrate();
+
+    const core = await captureCoreSendSnapshot(MemoryStore);
+    const recall = selectRecall([
+      { id: 'u-cleared', role: 'user', content: 'Which day is my race training?', createdAt: 1 },
+    ], { entries: core.entries, enabled: core.enabled, activeModelId: 'gemma4-e4b' });
+
+    expect(core.entries).toEqual([]);
+    expect(MemoryStore.getDeletions()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'race_schedule' }),
+      expect.objectContaining({ key: 'reading_preference' }),
+    ]));
+    expect(recall.topical).toEqual([]);
+    expect(buildMemorySystemPrompt(recall)).toBe('');
+    expect(recallDisclosureItems(recall)).toEqual([]);
+
+    useChatStore.getState().resetLocalState();
+    const conversationId = await useChatStore.getState().newChat('gemma4-e4b');
+    await useChatStore.getState().appendUser('Which day is my race training?', undefined, core.consentToken);
+    useChatStore.getState().startAssistant();
+    useChatStore.getState().setAssistantRecall(recallDisclosureItems(recall));
+    useChatStore.getState().appendToken('I do not have a saved training day to rely on.');
+    await useChatStore.getState().finishAssistant();
+
+    useChatStore.getState().resetLocalState();
+    await useChatStore.getState().open(conversationId);
+    const reply = useChatStore.getState().current?.messages.at(-1);
+    expect(reply?.coreRecall).toBeUndefined();
+  });
+
+  it('keeps persisted notes private when Core is disabled across a cold restart', async () => {
+    MemoryStore.addOrUpdateEntry({
+      category: 'goals', key: 'race_schedule', value: 'Race training happens on Tuesdays', confidence: 0.85,
+      sourceConversationId: 'training-chat', evidence: 'I train for the race on Tuesdays',
+    });
+    MemoryStore.addOrUpdateEntry({
+      category: 'preferences', key: 'reading_preference', value: 'Enjoys historical biographies', confidence: 0.9,
+      sourceConversationId: 'reading-chat', evidence: 'I enjoy historical biographies',
+    });
+    MemoryStore.setEnabled(false);
+
+    const beforeRestart = useMemoryStore.getState();
+    const persistedBeforeRestart = JSON.stringify({
+      state: { memory: beforeRestart.memory, enabled: beforeRestart.enabled },
+      version: 0,
+    });
+    useMemoryStore.setState({
+      memory: { userId: 'cold-process', entries: [], edges: [], deletions: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 },
+      enabled: true,
+      recentKeys: [],
+    });
+    await AsyncStorage.setItem('aether_second_brain', persistedBeforeRestart);
+    await useMemoryStore.persist.rehydrate();
+
+    const core = await captureCoreSendSnapshot(MemoryStore);
+    const recall = selectRecall([
+      { id: 'u-disabled', role: 'user', content: 'Which day is my race training?', createdAt: 1 },
+    ], { entries: core.entries, enabled: core.enabled, activeModelId: 'gemma4-e4b' });
+
+    expect(MemoryStore.isEnabled()).toBe(false);
+    expect(MemoryStore.getAllEntries().map((entry) => entry.key)).toEqual([
+      'race_schedule',
+      'reading_preference',
+    ]);
+    expect(core).toEqual({ enabled: false, entries: [] });
+    expect(recall.topical).toEqual([]);
+    expect(buildMemorySystemPrompt(recall)).toBe('');
+    expect(recallDisclosureItems(recall)).toEqual([]);
+
+    useChatStore.getState().resetLocalState();
+    const conversationId = await useChatStore.getState().newChat('gemma4-e4b');
+    await useChatStore.getState().appendUser('Which day is my race training?', undefined, core.consentToken);
+    useChatStore.getState().startAssistant();
+    useChatStore.getState().setAssistantRecall(recallDisclosureItems(recall));
+    useChatStore.getState().appendToken('Core is off, so I did not use saved notes for that reply.');
+    await useChatStore.getState().finishAssistant();
+
+    useChatStore.getState().resetLocalState();
+    await useChatStore.getState().open(conversationId);
+    const messages = useChatStore.getState().current?.messages ?? [];
+    expect(messages[0]?.coreConsentToken).toBeUndefined();
+    expect(messages.at(-1)?.coreRecall).toBeUndefined();
+  });
+
+  it('restores persisted grounding only for sends after Core is re-enabled', async () => {
+    MemoryStore.addOrUpdateEntry({
+      category: 'goals', key: 'race_schedule', value: 'Race training happens on Tuesdays', confidence: 0.85,
+      sourceConversationId: 'training-chat', evidence: 'I train for the race on Tuesdays',
+    });
+    MemoryStore.addOrUpdateEntry({
+      category: 'preferences', key: 'reading_preference', value: 'Enjoys historical biographies', confidence: 0.9,
+      sourceConversationId: 'reading-chat', evidence: 'I enjoy historical biographies',
+    });
+    MemoryStore.setEnabled(false);
+
+    const beforeRestart = useMemoryStore.getState();
+    const persistedBeforeRestart = JSON.stringify({
+      state: { memory: beforeRestart.memory, enabled: beforeRestart.enabled },
+      version: 0,
+    });
+    useMemoryStore.setState({
+      memory: { userId: 'cold-process', entries: [], edges: [], deletions: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 },
+      enabled: true,
+      recentKeys: [],
+    });
+    await AsyncStorage.setItem('aether_second_brain', persistedBeforeRestart);
+    await useMemoryStore.persist.rehydrate();
+
+    useChatStore.getState().resetLocalState();
+    const conversationId = await useChatStore.getState().newChat('gemma4-e4b');
+    const disabledCore = await captureCoreSendSnapshot(MemoryStore);
+    const disabledRecall = selectRecall([
+      { id: 'u-disabled', role: 'user', content: 'Which day is my race training?', createdAt: 1 },
+    ], { entries: disabledCore.entries, enabled: disabledCore.enabled, activeModelId: 'gemma4-e4b' });
+    await useChatStore.getState().appendUser(
+      'Which day is my race training?',
+      undefined,
+      disabledCore.consentToken,
+    );
+    useChatStore.getState().startAssistant();
+    useChatStore.getState().setAssistantRecall(recallDisclosureItems(disabledRecall));
+    useChatStore.getState().appendToken('Core is off, so I did not use saved notes for that reply.');
+    await useChatStore.getState().finishAssistant();
+
+    MemoryStore.setEnabled(true);
+    const enabledCore = await captureCoreSendSnapshot(MemoryStore);
+    const enabledRecall = selectRecall([
+      { id: 'u-enabled', role: 'user', content: 'Which day is my race training?', createdAt: 2 },
+    ], { entries: enabledCore.entries, enabled: enabledCore.enabled, activeModelId: 'gemma4-e4b' });
+    await useChatStore.getState().appendUser(
+      'Now that Core is on, which day is my race training?',
+      undefined,
+      enabledCore.consentToken,
+    );
+    useChatStore.getState().startAssistant();
+    useChatStore.getState().setAssistantRecall(recallDisclosureItems(enabledRecall));
+    useChatStore.getState().appendToken('Your race training is on Tuesdays.');
+    await useChatStore.getState().finishAssistant();
+
+    expect(buildMemorySystemPrompt(disabledRecall)).toBe('');
+    expect(buildMemorySystemPrompt(enabledRecall)).toContain('Race training happens on Tuesdays');
+    expect(buildMemorySystemPrompt(enabledRecall)).not.toContain('historical biographies');
+
+    useChatStore.getState().resetLocalState();
+    await useChatStore.getState().open(conversationId);
+    const messages = useChatStore.getState().current?.messages ?? [];
+    expect(messages[0]?.coreConsentToken).toBeUndefined();
+    expect(messages[1]?.coreRecall).toBeUndefined();
+    expect(messages[2]?.coreConsentToken).toBe(enabledCore.consentToken);
+    expect(messages[3]?.coreRecall).toEqual([{
+      key: 'race_schedule',
+      why: expect.stringContaining('matched:'),
+    }]);
   });
 });
 
@@ -48,6 +332,57 @@ describe('MemoryStore', () => {
     expect(all[0].confidence).toBe(0.8);         // new observation earns its own confidence
     expect(all[0].timesReinforced).toBe(0);      // reset: the new value is unconfirmed
     expect(all[0].history?.[0]?.value).toBe('Adam'); // old value preserved, not erased
+  });
+
+  it('a manual correction supersedes the prior fact in storage, recall, and prompt injection', () => {
+    MemoryStore.addOrUpdateEntry({
+      category: 'goals', key: 'october_marathon', value: 'Marathon in October', confidence: 0.85,
+      sourceConversationId: 'c1', evidence: 'My marathon is in October', reason: 'You shared this goal',
+    });
+    const original = MemoryStore.getAllEntries()[0];
+
+    MemoryStore.updateEntry(original.id, { value: 'Marathon moved to December' });
+
+    const corrected = MemoryStore.getAllEntries()[0];
+    expect(corrected).toMatchObject({
+      id: original.id,
+      value: 'Marathon moved to December',
+      confidence: 1,
+      sourceConversationId: 'manual',
+      timesReinforced: 0,
+      evidence: undefined,
+      reason: 'You corrected this Core note',
+    });
+    expect(corrected.history?.[0]?.value).toBe('Marathon in October');
+
+    const oldRecall = selectRecall([
+      { id: 'u1', role: 'user', content: 'What are my October plans?', createdAt: 1 },
+    ], { entries: [corrected], enabled: true, activeModelId: 'gemma4-e4b' });
+    expect(oldRecall.topical).toEqual([]);
+
+    const currentRecall = selectRecall([
+      { id: 'u2', role: 'user', content: 'When is my marathon now?', createdAt: 2 },
+    ], { entries: [corrected], enabled: true, activeModelId: 'gemma4-e4b' });
+    expect(currentRecall.topical.map((item) => item.entry.value)).toEqual(['Marathon moved to December']);
+    const prompt = buildMemorySystemPrompt(currentRecall);
+    expect(prompt).toContain('Marathon moved to December');
+    expect(prompt).not.toContain('Marathon in October');
+
+    // A later conversation must not match the superseded month through the
+    // original extraction key, which remains useful as the note's stable id.
+    const nextConversationOldTopic = selectRecall([
+      { id: 'u3', role: 'user', content: 'What are my October plans?', createdAt: 3 },
+    ], { entries: MemoryStore.getAllEntries(), enabled: true, activeModelId: 'gemma4-e4b' });
+    expect(nextConversationOldTopic.topical).toEqual([]);
+
+    // Deleting the corrected note before another new conversation removes it
+    // from both model context and the disclosure source set.
+    MemoryStore.deleteEntry(original.id);
+    const afterDelete = selectRecall([
+      { id: 'u4', role: 'user', content: 'When is my marathon in December?', createdAt: 4 },
+    ], { entries: MemoryStore.getAllEntries(), enabled: true, activeModelId: 'gemma4-e4b' });
+    expect(afterDelete.topical).toEqual([]);
+    expect(buildMemorySystemPrompt(afterDelete)).toBe('');
   });
 
   it('re-observing the same value reinforces without inflating confidence', () => {

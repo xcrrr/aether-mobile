@@ -9,6 +9,7 @@ const STORAGE_KEY = 'aether_second_brain';
 
 const STALE_WINDOW_MS = 1000 * 60 * 60 * 24 * 90; // 90 days
 const MAX_HISTORY = 5;
+let extractionConsentToken = uuid();
 
 /** Stale = a single unconfirmed observation not re-seen for the whole window. */
 function isStale(e: MemoryEntry, now: number): boolean {
@@ -16,12 +17,17 @@ function isStale(e: MemoryEntry, now: number): boolean {
 }
 
 function emptyMemory(): UserMemory {
-  return { userId: uuid(), entries: [], edges: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 };
+  return { userId: uuid(), entries: [], edges: [], deletions: [], lastExtractionAt: 0, totalConversationsAnalyzed: 0 };
 }
 
 /** Normalise a fact value for duplicate detection (case/whitespace/trailing punctuation). */
 function normValue(v: string): string {
   return v.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.!?,;:]+$/, '');
+}
+
+/** Keep manually entered labels aligned with the extractor's stable key format. */
+function normKey(key: string): string {
+  return key.trim().toLowerCase().replace(/\s+/g, '_');
 }
 
 /**
@@ -104,9 +110,13 @@ export const useMemoryStore = create<SecondBrainState>()(
 
       addOrUpdateEntry: (entry) => {
         const now = Date.now();
+        const deletions = (get().memory.deletions ?? []).filter(
+          (deletion) =>
+            deletion.category !== entry.category || normKey(deletion.key) !== normKey(entry.key),
+        );
         const entries = [...get().memory.entries];
         let idx = entries.findIndex(
-          (e) => e.category === entry.category && e.key === entry.key,
+          (e) => e.category === entry.category && normKey(e.key) === normKey(entry.key),
         );
         // No key match? The model often re-emits the same fact under a fresh key.
         // Same category + same value = the same fact → reinforce, don't duplicate.
@@ -163,18 +173,42 @@ export const useMemoryStore = create<SecondBrainState>()(
             timesReinforced: 0,
           });
         }
-        set({ memory: { ...get().memory, entries } });
+        set({ memory: { ...get().memory, entries, deletions } });
       },
 
       updateEntry: (id, patch) => {
         const now = Date.now();
         const entries = get().memory.entries.map((e) => {
           if (e.id !== id) return e;
+          const valueChanged = patch.value !== undefined && normValue(patch.value) !== normValue(e.value);
+          const categoryChanged = patch.category !== undefined && patch.category !== e.category;
+          const history: MemoryRevision[] | undefined = valueChanged
+            ? [
+                { value: e.value, replacedAt: now },
+                ...(e.history ?? []),
+              ].slice(0, MAX_HISTORY)
+            : e.history;
           return {
             ...e,
             ...(patch.value !== undefined ? { value: patch.value } : {}),
             ...(patch.category !== undefined ? { category: patch.category } : {}),
             ...(patch.visualCategory !== undefined ? { visualCategory: patch.visualCategory } : {}),
+            ...(categoryChanged ? {
+              categoryCorrectedAt: now,
+              categoryAliases: [...new Set([...(e.categoryAliases ?? []), e.category])],
+            } : {}),
+            ...(valueChanged ? {
+              confidence: 1,
+              sourceConversationId: 'manual',
+              timesReinforced: 0,
+              evidence: undefined,
+              reason: 'You corrected this Core note',
+              history,
+            } : {}),
+            ...(categoryChanged && !valueChanged ? {
+              sourceConversationId: 'manual',
+              reason: 'You corrected this Core note category',
+            } : {}),
             updatedAt: now,
             lastSeenAt: now,
             stale: false,
@@ -189,19 +223,55 @@ export const useMemoryStore = create<SecondBrainState>()(
       getAllEntries: () => get().memory.entries,
 
       deleteEntry: (id) => {
+        const deleted = get().memory.entries.find((e) => e.id === id);
         const entries = get().memory.entries.filter((e) => e.id !== id);
         const keys = new Set(entries.map((e) => e.key));
         const edges = (get().memory.edges ?? []).filter((e) => keys.has(e.fromKey) && keys.has(e.toKey));
-        set({ memory: { ...get().memory, entries, edges } });
+        const deletions = deleted
+          ? [
+              ...(get().memory.deletions ?? []).filter(
+                (item) => item.category !== deleted.category || item.key !== deleted.key,
+              ),
+              {
+                category: deleted.category,
+                categoryAliases: deleted.categoryAliases,
+                categoryCorrectedAt: deleted.categoryCorrectedAt,
+                key: deleted.key,
+                deletedAt: Date.now(),
+              },
+            ]
+          : get().memory.deletions;
+        set({ memory: { ...get().memory, entries, edges, deletions } });
       },
 
-      clearAll: () =>
-        set({ memory: { ...get().memory, entries: [], edges: [] } }),
+      clearAll: () => {
+        const memory = get().memory;
+        const clearedAt = Date.now();
+        const clearedKeys = new Set(
+          memory.entries.map((entry) => `${entry.category}\n${entry.key}`),
+        );
+        const deletions = [
+          ...(memory.deletions ?? []).filter(
+            (deletion) => !clearedKeys.has(`${deletion.category}\n${deletion.key}`),
+          ),
+          ...memory.entries.map((entry) => ({
+            category: entry.category,
+            categoryAliases: entry.categoryAliases,
+            categoryCorrectedAt: entry.categoryCorrectedAt,
+            key: entry.key,
+            deletedAt: clearedAt,
+          })),
+        ];
+        set({
+          memory: { ...memory, entries: [], edges: [], deletions },
+          recentKeys: [],
+        });
+      },
 
       addManualEntry: (input) => {
         get().addOrUpdateEntry({
           category: input.category,
-          key: input.key,
+          key: normKey(input.key),
           value: input.value,
           confidence: 1,
           sourceConversationId: 'manual',
@@ -235,7 +305,10 @@ export const useMemoryStore = create<SecondBrainState>()(
         set({ memory: { ...get().memory, entries } });
       },
 
-      setEnabled: (enabled) => set({ enabled }),
+      setEnabled: (enabled) => {
+        if (enabled !== get().enabled) extractionConsentToken = uuid();
+        set({ enabled });
+      },
 
       recordExtraction: () =>
         set({
@@ -260,11 +333,13 @@ export const useMemoryStore = create<SecondBrainState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ memory: s.memory, enabled: s.enabled }),
       onRehydrateStorage: () => (state) => {
+        extractionConsentToken = uuid();
         // Ensure a userId exists even on a fresh install / corrupt payload.
         // Backfill new fields on legacy payloads.
         if (state) {
           if (!state.memory?.userId) state.memory = emptyMemory();
           if (!Array.isArray(state.memory.edges)) state.memory.edges = [];
+          if (!Array.isArray(state.memory.deletions)) state.memory.deletions = [];
           state.memory.entries = (state.memory.entries ?? []).map((e) => ({
             ...e,
             lastSeenAt: e.lastSeenAt ?? e.updatedAt ?? e.createdAt ?? Date.now(),
@@ -333,6 +408,19 @@ export const MemoryStore = {
   getEntriesByCategory: (category: MemoryCategory) =>
     useMemoryStore.getState().getEntriesByCategory(category),
   getAllEntries: () => useMemoryStore.getState().getAllEntries(),
+  getDeletions: () => useMemoryStore.getState().memory.deletions ?? [],
+  deletionFor: (category: MemoryCategory, key: string) => {
+    const matches = (useMemoryStore.getState().memory.deletions ?? []).filter(
+      (deletion) => deletion.key === key && (
+        deletion.category === category || deletion.categoryAliases?.includes(category)
+      ),
+    );
+    return matches.length === 1 ? matches[0] : undefined;
+  },
+  deletedAt: (category: MemoryCategory, key: string) =>
+    useMemoryStore.getState().memory.deletions?.find(
+      (deletion) => deletion.category === category && deletion.key === key,
+    )?.deletedAt,
   deleteEntry: (id: string) => useMemoryStore.getState().deleteEntry(id),
   clearAll: () => useMemoryStore.getState().clearAll(),
   addManualEntry: (input: { category: MemoryCategory; key: string; value: string }) =>
@@ -343,6 +431,7 @@ export const MemoryStore = {
   markStale: () => useMemoryStore.getState().markStale(),
   getAllEdges: () => useMemoryStore.getState().memory.edges,
   isEnabled: () => useMemoryStore.getState().enabled,
+  extractionConsentToken: () => extractionConsentToken,
   setEnabled: (enabled: boolean) => useMemoryStore.getState().setEnabled(enabled),
   recordExtraction: () => useMemoryStore.getState().recordExtraction(),
   setRecentKeys: (keys: string[]) => useMemoryStore.getState().setRecentKeys(keys),

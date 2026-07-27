@@ -15,12 +15,25 @@ const MIN_USER_MESSAGES = 1;
 // plenty for a handful of them.
 const MAX_EXTRACT_TOKENS = 380;
 const EXTRACT_TEMPERATURE = 0.1;
+const manualExtractions = new Map<string, Promise<number>>();
 
 // Don't even run inference on trivial exchanges (greetings, one-word replies).
 // This is what stops the brain "fetching on every message" — a plain "hi" never
 // reaches the model, so nothing churns and nothing junk gets saved.
 const MIN_SUBSTANCE_CHARS = 12;
 const GREETING_ONLY = /^(hi+|hey+|hello+|yo+|sup|hiya|howdy|heya|good\s?(morning|evening|afternoon|night)|thanks?|thank\s?you|thx|ty|ok(ay)?|k|cool|nice|great|lol|lmao|test+|yes|yeah|yep|sure|no+|nope|y|n|hmm+|wassup|what'?s\s?up)[\s!.,?]*$/i;
+
+/** Keep only exchanges whose user turn was sent under the queued Core consent.
+ * Assistant turns inherit the eligibility of the user turn they answer. */
+export function messagesForConsent(messages: Message[], consentToken: string): Message[] {
+  const eligible: Message[] = [];
+  let includeExchange = false;
+  for (const message of messages) {
+    if (message.role === 'user') includeExchange = message.coreConsentToken === consentToken;
+    if (includeExchange) eligible.push(message);
+  }
+  return eligible;
+}
 
 /**
  * Per-model conservatism. Both models pass the same grounding gate, so final
@@ -258,6 +271,63 @@ const CATEGORY_REASON: Record<MemoryCategory, string> = {
   context: 'You described this ongoing situation yourself',
 };
 
+const GENERIC_KEY_PARTS = new Set([
+  'current', 'main', 'new', 'old', 'preferred', 'primary', 'latest',
+  'date', 'schedule', 'status', 'detail', 'info', 'value',
+]);
+
+function keyAnchors(key: string): string[] {
+  return key
+    .split(/[^a-z0-9]+/i)
+    .map((part) => part.toLowerCase())
+    .filter((part) => part.length >= 4 && !GENERIC_KEY_PARTS.has(part));
+}
+
+/**
+ * Small models occasionally ignore the prompt's exact-key instruction when a
+ * known fact changes (`marathon_date` -> `marathon_schedule`). Reuse the saved
+ * key only when one same-category fact shares an explicit distinctive key
+ * anchor. Ambiguous or generic keys deliberately remain separate facts.
+ */
+function canonicalKeyFor(entry: ValidEntry): string {
+  const candidateKeys = new Set([
+    ...MemoryStore.getAllEntries()
+      .filter((fact) => fact.category === entry.category)
+      .map((fact) => fact.key),
+    ...MemoryStore.getDeletions()
+      .filter((deletion) =>
+        deletion.category === entry.category || deletion.categoryAliases?.includes(entry.category),
+      )
+      .map((deletion) => deletion.key),
+  ]);
+  if (candidateKeys.has(entry.key)) {
+    return entry.key;
+  }
+  const anchors = new Set(keyAnchors(entry.key));
+  if (!anchors.size) return entry.key;
+  const matches = [...candidateKeys].filter((key) =>
+    keyAnchors(key).some((anchor) => anchors.has(anchor)),
+  );
+  return matches.length === 1 ? matches[0] : entry.key;
+}
+
+function matchingDeletionsFor(entry: ValidEntry) {
+  const anchors = new Set(keyAnchors(entry.key));
+  if (!anchors.size) return [];
+  return MemoryStore.getDeletions().filter((deletion) =>
+    (deletion.category === entry.category || deletion.categoryAliases?.includes(entry.category)) &&
+    keyAnchors(deletion.key).some((anchor) => anchors.has(anchor)),
+  );
+}
+
+function deletionAuthorityFor(entry: ValidEntry) {
+  const exact = MemoryStore.deletionFor(entry.category, entry.key);
+  if (exact) return exact;
+
+  const matches = matchingDeletionsFor(entry);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 /**
  * Analyse a finished conversation and upsert any extracted facts. Returns the
  * number of facts learned or updated (0 if none).
@@ -272,11 +342,12 @@ const CATEGORY_REASON: Record<MemoryCategory, string> = {
  * No-ops when the Second Brain is disabled, the exchange is trivial, or no model
  * is loaded.
  */
-export async function extractFromConversation(
+async function runExtraction(
   messages: Message[],
   conversationId: string,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; consentToken?: string } = {},
 ): Promise<number> {
+  await MemoryStore.ensureHydrated();
   if (!MemoryStore.isEnabled()) return 0;
   const userMessages = messages.filter((m) => m.role === 'user');
   if (userMessages.length < MIN_USER_MESSAGES) return 0;
@@ -297,6 +368,11 @@ export async function extractFromConversation(
     return 0;
   }
   if (!response) return 0;
+  if (!MemoryStore.isEnabled()) return 0;
+  if (
+    opts.consentToken !== undefined &&
+    opts.consentToken !== MemoryStore.extractionConsentToken()
+  ) return 0;
 
   const rawEntries = parseEntries(response);
   if (!rawEntries) return 0;
@@ -320,17 +396,71 @@ export async function extractFromConversation(
 
   let applied = 0;
   const appliedKeys: string[] = [];
+  const appliedTargets = new Set<string>();
+  const newestUserMessageAt = Math.max(...userMessages.map((message) => message.createdAt));
   for (const entry of grounded.slice(0, policy.maxFacts)) {
+    // A user-corrected extraction category remains authoritative. Match the
+    // stable key across categories so replay cannot recreate the old category,
+    // while a genuinely later statement can still refresh the corrected note.
+    const categoryCorrections = MemoryStore.getAllEntries().filter(
+      (fact) => fact.key === entry.key && fact.categoryCorrectedAt !== undefined,
+    );
+    const categoryCorrection = categoryCorrections.length === 1 ? categoryCorrections[0] : undefined;
+    // A live user-corrected note is stronger authority than an unrelated
+    // remaining tombstone that happens to share a broad key anchor.
+    const categoryDeletion = categoryCorrection ? undefined : deletionAuthorityFor(entry);
+    const effectiveEntry = categoryCorrection || categoryDeletion
+      ? { ...entry, category: (categoryCorrection ?? categoryDeletion)!.category }
+      : entry;
+    const key = categoryDeletion?.key ?? canonicalKeyFor(effectiveEntry);
+    const target = `${effectiveEntry.category}\n${key}`;
+    if (appliedTargets.has(target)) continue;
+    const saved = MemoryStore.getAllEntries().find(
+      (fact) => fact.category === effectiveEntry.category && fact.key === key,
+    );
+    // Multiple corrected tombstones may share a broad anchor, so none can be
+    // selected as the canonical note. Their correction metadata still makes
+    // an older former-category replay stale without suppressing a genuinely
+    // new ambiguous concept that only overlaps ordinary deletions.
+    const matchingDeletionTimes = matchingDeletionsFor(entry)
+      .filter((deletion) =>
+        deletion.categoryCorrectedAt !== undefined &&
+        deletion.categoryAliases?.includes(entry.category),
+      )
+      .map((deletion) => deletion.deletedAt);
+    const deletedAt = categoryDeletion?.deletedAt
+      ?? (matchingDeletionTimes.length ? Math.max(...matchingDeletionTimes) : undefined)
+      ?? MemoryStore.deletedAt(effectiveEntry.category, key);
+    // Re-running extraction on an older conversation must not outrank a later
+    // user edit. A statement sent after the edit remains eligible, so Core can
+    // still learn a genuine subsequent change without freezing the note.
+    if (
+      saved?.sourceConversationId === 'manual' &&
+      newestUserMessageAt <= saved.updatedAt
+    ) continue;
+    if (
+      categoryCorrection?.categoryCorrectedAt !== undefined &&
+      newestUserMessageAt <= categoryCorrection.categoryCorrectedAt
+    ) continue;
+    if (deletedAt !== undefined && newestUserMessageAt <= deletedAt) continue;
+    // Candidates are confidence-sorted. Apply only the strongest grounded
+    // interpretation of one canonical note so a weaker stale alternate key
+    // from the same response cannot immediately overwrite it.
+    appliedTargets.add(target);
     MemoryStore.addOrUpdateEntry({
-      category: entry.category,
-      key: entry.key,
+      category: effectiveEntry.category,
+      key,
       value: entry.value,
       confidence: entry.effectiveConfidence,
+      ...(categoryDeletion?.categoryAliases?.length ? {
+        categoryAliases: categoryDeletion.categoryAliases,
+        categoryCorrectedAt: categoryDeletion.categoryCorrectedAt ?? categoryDeletion.deletedAt,
+      } : {}),
       sourceConversationId: conversationId,
       evidence: entry.quote,
-      reason: CATEGORY_REASON[entry.category],
+      reason: CATEGORY_REASON[effectiveEntry.category],
     });
-    appliedKeys.push(entry.key);
+    appliedKeys.push(key);
     applied += 1;
   }
 
@@ -349,4 +479,23 @@ export async function extractFromConversation(
   // Light up the just-learned facts in the graph (cleared once the user views them).
   if (appliedKeys.length) MemoryStore.setRecentKeys(appliedKeys);
   return applied;
+}
+
+export function extractFromConversation(
+  messages: Message[],
+  conversationId: string,
+  opts: { force?: boolean; consentToken?: string } = {},
+): Promise<number> {
+  if (!opts.force) return runExtraction(messages, conversationId, opts);
+
+  const active = manualExtractions.get(conversationId);
+  if (active) return active;
+
+  const extraction = runExtraction(messages, conversationId, opts).finally(() => {
+    if (manualExtractions.get(conversationId) === extraction) {
+      manualExtractions.delete(conversationId);
+    }
+  });
+  manualExtractions.set(conversationId, extraction);
+  return extraction;
 }

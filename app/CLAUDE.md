@@ -68,7 +68,7 @@ cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 
 ## Tests
 ```bash
-npm test          # Jest (currently ~137 tests)
+npm test          # Jest (43 suites / 538 tests verified 2026-07-14)
 npm run typecheck # tsc --noEmit strict
 ```
 

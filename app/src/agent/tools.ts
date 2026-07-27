@@ -1,5 +1,6 @@
 import { clampChars } from '@/webresearch/safety';
 import { ToolExecutor } from './ToolRegistry';
+import type { MemoryCategory } from '@/secondbrain/types';
 
 /**
  * Real executors for the V1 tool set. Each wraps an existing, already-hardened
@@ -11,6 +12,31 @@ import { ToolExecutor } from './ToolRegistry';
  */
 
 const ATTACHMENT_CHARS = 2500;
+
+function broadCoreCategories(topic: string): Set<MemoryCategory> | null {
+  const tokens = topic
+    .toLowerCase()
+    .replace(/[’']s\b/g, '')
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  const ignored = new Set(['my', 'user', 'saved', 'core', 'note', 'notes', 'and', 'or']);
+  const categories = new Set<MemoryCategory>();
+  for (const token of tokens) {
+    if (ignored.has(token)) continue;
+    if (token === 'goal' || token === 'goals' || token === 'priority' || token === 'priorities') {
+      categories.add('goals');
+    } else if (token === 'preference' || token === 'preferences' || token === 'interest' || token === 'interests') {
+      categories.add('preferences');
+    } else if (token === 'project' || token === 'projects') {
+      categories.add('context');
+      categories.add('goals');
+    } else {
+      return null;
+    }
+  }
+  return categories.size ? categories : null;
+}
 
 export function createExecutors(): Record<string, ToolExecutor> {
   return {
@@ -32,10 +58,17 @@ export function createExecutors(): Record<string, ToolExecutor> {
       const { MemoryStore } = require('@/secondbrain/MemoryStore') as typeof import('@/secondbrain/MemoryStore');
       await MemoryStore.ensureHydrated();
       const { selectRecall } = require('@/secondbrain/recall') as typeof import('@/secondbrain/recall');
+      const categories = broadCoreCategories(args.topic);
+      const entries = MemoryStore.getAllEntries();
       const recall = selectRecall(
-        [{ id: 'agent-recall', role: 'user', content: args.topic, createdAt: Date.now() }],
+        [{
+          id: 'agent-recall',
+          role: 'user',
+          content: categories ? 'What do you know about me?' : args.topic,
+          createdAt: Date.now(),
+        }],
         {
-          entries: MemoryStore.getAllEntries(),
+          entries: categories ? entries.filter((entry) => categories.has(entry.category)) : entries,
           enabled: MemoryStore.isEnabled(),
           activeModelId: ctx.modelId,
         },

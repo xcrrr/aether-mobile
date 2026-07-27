@@ -150,6 +150,16 @@ export function MemoryListPanel({ open, onClose, onOpenEntry }: Props) {
       ],
     );
 
+  const confirmDelete = (entry: MemoryEntry) =>
+    Alert.alert(
+      'Delete this memory?',
+      `"${entry.value}" will be removed from Core, along with its connections.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteEntry(entry.id) },
+      ],
+    );
+
   if (!rendered) return null;
 
   const backdropOpacity = tx.interpolate({ inputRange: [0, PANEL_W], outputRange: [1, 0] });
@@ -238,7 +248,9 @@ export function MemoryListPanel({ open, onClose, onOpenEntry }: Props) {
                       <Text style={styles.confidenceText}>{confidenceLabel(e.confidence)}</Text>
                     </View>
                     <Pressable
-                      onPress={(ev) => { ev.stopPropagation(); deleteEntry(e.id); }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${e.key.replace(/_/g, ' ')}`}
+                      onPress={(ev) => { ev.stopPropagation(); confirmDelete(e); }}
                       hitSlop={8}
                       style={styles.trash}
                     >

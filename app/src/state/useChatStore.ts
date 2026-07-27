@@ -23,7 +23,7 @@ interface ChatState {
   open: (id: string) => Promise<void>;
   setCurrentModel: (modelId: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  appendUser: (content: string, attachments?: FileAttachment[]) => Promise<void>;
+  appendUser: (content: string, attachments?: FileAttachment[], coreConsentToken?: string) => Promise<void>;
   startAssistant: () => void;
   appendToken: (token: string) => void;
   /** Replace the in-progress assistant message's content outright (research mode). */
@@ -103,12 +103,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (get().current?.id === id) set({ current: null });
     await get().refreshIndex();
   },
-  appendUser: async (content, attachments) => {
+  appendUser: async (content, attachments, coreConsentToken) => {
     const c = get().current;
     if (!c) return;
     const msg: Message = {
       id: uid(), role: 'user', content, createdAt: Date.now(),
       ...(attachments && attachments.length ? { attachments } : {}),
+      ...(coreConsentToken ? { coreConsentToken } : {}),
     };
     const updated = { ...c, messages: [...c.messages, msg] };
     set({ current: updated });

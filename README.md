@@ -89,8 +89,10 @@ claude-notes/     Claude handoff notes and product/development context
 - App version: `2.1.0`
 - Android package: `com.aether.app`
 - Active inference engine: LiteRT `.litertlm`
-- Latest APK: `releases/Aether-2.1.0-latest.apk`
-- Latest verified test run: `38` suites, `500` tests passing
+- Documented APK target: `releases/Aether-2.1.0-latest.apk` (not present in this checkout)
+- Current verification baseline: app typecheck and `43` suites / `538` tests pass;
+  website tests (`21`), lint and production build pass
+- Evidence and remaining release gaps: [`docs/current-verification-baseline.md`](docs/current-verification-baseline.md)
 
 ## Getting Started
 

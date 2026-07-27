@@ -81,6 +81,22 @@ describe('MessageBubble', () => {
     fireEvent.press(s.getByText('B'));
     expect(onSelect).toHaveBeenCalledWith('B', 'm1');
   });
+
+  it('shows why a style-only Core note influenced the reply', () => {
+    const s = render(<MessageBubble message={msg({
+      content: 'Good morning.',
+      coreRecall: [{ key: 'reply_style', why: 'saved communication preference' }],
+    })} />);
+
+    fireEvent.press(s.getByText('From your Core: reply style'));
+    expect(s.getByText('reply style — saved communication preference')).toBeTruthy();
+  });
+
+  it('keeps an ordinary reply without recalled notes free of Core chrome', () => {
+    const s = render(<MessageBubble message={msg({ content: 'Good morning.' })} />);
+
+    expect(s.queryByText(/From your Core/)).toBeNull();
+  });
 });
 
 describe('QuestionCard', () => {

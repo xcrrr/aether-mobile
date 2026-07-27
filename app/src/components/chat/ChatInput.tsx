@@ -26,7 +26,7 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
   onResearch?: (text: string) => void;
   researchMode?: boolean;
   onToggleResearch?: () => void;
-  onAct?: (text: string) => void;
+  onAct?: (text: string, attachment?: FileAttachment) => void;
   actMode?: boolean;
   onToggleAct?: () => void;
   disabled?: boolean;
@@ -82,18 +82,22 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
   const send = () => {
     const t = text.trim();
     if (!t && !att.attachment) return;
-    if (actMode && onAct) { setText(''); onAct(t); return; }
-    if (researchMode && onResearch) { setText(''); onResearch(t); return; }
-
     // Don't ship an image the active model can't actually see.
     const attachment = att.attachment && !(att.attachment.type === 'image' && !supportsVision)
       ? att.attachment
       : undefined;
+    if (actMode && onAct) {
+      setText('');
+      att.remove();
+      onAct(t, attachment);
+      return;
+    }
+    if (researchMode && onResearch) { setText(''); onResearch(t); return; }
     doSend(t, attachment);
   };
 
   const hasContent = !!text.trim() || (!!att.attachment && !att.processing);
-  const sendDisabled = !isGenerating && (disabled || !hasContent);
+  const sendDisabled = !isGenerating && (disabled || !hasContent || (actMode && visionUnsupported));
   const showMic = !isGenerating && !hasContent;
   const placeholder = disabled
     ? 'Loading model...'
@@ -261,6 +265,8 @@ export function ChatInput({ onSend, onResearch, researchMode = false, onToggleRe
             onPress={send}
             disabled={sendDisabled}
             haptic
+            accessibilityRole="button"
+            accessibilityLabel={actMode ? 'Run task' : researchMode ? 'Start research' : 'Send message'}
           >
             <ArrowUp size={19} color={sendDisabled ? c.textMuted : c.white} strokeWidth={2.2} />
           </PressableScale>

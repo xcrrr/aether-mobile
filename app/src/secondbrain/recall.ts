@@ -48,9 +48,9 @@ const PROFILE_BROAD = /\b(who am i|do you know who i am|do (you|you all) (know|r
 const PROFILE_ASK = /\b(what\s+(?:\w+\s+){0,3}(?:are|is|were|am i)\b|what do you (know|remember)|do you (know|remember)|tell me|remind me|list)\b/i;
 
 const PROFILE_FACETS: Array<{ re: RegExp; categories: MemoryCategory[] }> = [
-  { re: /\bmy (interests?|hobbies|hobby|passions?)\b/i, categories: ['preferences'] },
-  { re: /\bmy (goals?|ambitions?)\b/i, categories: ['goals'] },
-  { re: /\b(working on|my projects?)\b/i, categories: ['context', 'goals'] },
+  { re: /\b(?:my|and) (preferences?|interests?|hobbies|hobby|passions?)\b/i, categories: ['preferences'] },
+  { re: /\b(?:my|and) (goals?|ambitions?)\b/i, categories: ['goals'] },
+  { re: /\b(working on|(?:my|and) projects?)\b/i, categories: ['context', 'goals'] },
 ];
 
 /** Category order for a broad profile summary. Emotional and patterns notes are
@@ -61,7 +61,11 @@ const PROFILE_CATEGORY_ORDER: MemoryCategory[] = [
 
 export function profileCategories(text: string): MemoryCategory[] | null {
   if (PROFILE_ASK.test(text)) {
-    for (const f of PROFILE_FACETS) if (f.re.test(text)) return f.categories;
+    const matched = new Set<MemoryCategory>();
+    for (const facet of PROFILE_FACETS) {
+      if (facet.re.test(text)) facet.categories.forEach((category) => matched.add(category));
+    }
+    if (matched.size) return [...matched];
   }
   if (PROFILE_BROAD.test(text)) return PROFILE_CATEGORY_ORDER;
   return null;
@@ -109,6 +113,26 @@ export interface RecallResult {
 
 export const EMPTY_RECALL: RecallResult = { style: [], topical: [] };
 
+export interface RecallDisclosureItem {
+  key: string;
+  why: string;
+}
+
+/** Every saved note that reached the model must also reach the reply disclosure. */
+export function recallDisclosureItems(recall: RecallResult): RecallDisclosureItem[] {
+  const items: RecallDisclosureItem[] = recall.topical.map((item) => ({
+    key: item.entry.key,
+    why: item.why,
+  }));
+  const seen = new Set(items.map((item) => item.key));
+  for (const entry of recall.style) {
+    if (seen.has(entry.key)) continue;
+    seen.add(entry.key);
+    items.push({ key: entry.key, why: 'saved communication preference' });
+  }
+  return items;
+}
+
 export interface RecallInput {
   entries: MemoryEntry[];
   enabled: boolean;
@@ -116,7 +140,23 @@ export interface RecallInput {
 }
 
 function entryTokens(e: MemoryEntry): Set<string> {
-  return new Set(distinctiveTokens(`${e.key.replace(/_/g, ' ')} ${e.value}`));
+  const valueTokens = distinctiveTokens(e.value);
+  const keyTokens = distinctiveTokens(e.key.replace(/_/g, ' '));
+  if (e.sourceConversationId !== 'manual' || !e.history?.length) {
+    return new Set([...keyTokens, ...valueTokens]);
+  }
+
+  // A corrected terse value still needs its stable subject key for later
+  // recall. When part of the old key also names the superseded value
+  // (`october_marathon`), keep the key's current-value anchor (`marathon`) and
+  // drop only its old-only fragment (`october`).
+  const current = new Set(valueTokens);
+  const history = new Set(e.history.flatMap((revision) => distinctiveTokens(revision.value)));
+  const keyHasCurrentAnchor = keyTokens.some((token) => current.has(token));
+  const stableKeyTokens = keyHasCurrentAnchor
+    ? keyTokens.filter((token) => current.has(token) || !history.has(token))
+    : keyTokens;
+  return new Set([...stableKeyTokens, ...valueTokens]);
 }
 
 /** Sensitive or unconfirmed context needs strong evidence of relevance. */
@@ -124,9 +164,17 @@ function thresholdFor(e: MemoryEntry, policy: RecallPolicy): number {
   return e.category === 'emotional' || e.stale ? policy.minScore * 2 : policy.minScore;
 }
 
+const COMMUNICATION_STYLE =
+  /\b(answers?|repl(?:y|ies)|responses?|messages?|writing|communication|tone|wording|format|concise|brief|detailed|direct|formal|casual|humou?r|jokes?|puns?|emojis?)\b/i;
+
 function styleTier(entries: MemoryEntry[]): MemoryEntry[] {
   return entries
-    .filter((e) => (e.category === 'personality' || e.category === 'patterns') && e.timesReinforced >= 1 && !e.stale)
+    .filter((e) =>
+      (e.category === 'personality' || e.category === 'patterns') &&
+      e.timesReinforced >= 1 &&
+      !e.stale &&
+      COMMUNICATION_STYLE.test(`${e.key.replace(/_/g, ' ')} ${e.value}`),
+    )
     .sort((a, b) => b.timesReinforced - a.timesReinforced || b.confidence - a.confidence)
     .slice(0, 2);
 }

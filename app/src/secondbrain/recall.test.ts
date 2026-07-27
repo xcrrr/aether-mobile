@@ -1,4 +1,11 @@
-import { selectRecall, recallPolicy, distinctiveTokens, RecallInput, EMPTY_RECALL } from './recall';
+import {
+  selectRecall,
+  recallPolicy,
+  distinctiveTokens,
+  recallDisclosureItems,
+  RecallInput,
+  EMPTY_RECALL,
+} from './recall';
 import { MemoryEntry, MemoryCategory } from './types';
 import { Message } from '@/types';
 
@@ -157,6 +164,32 @@ describe('selectRecall — sensitive and stale context (brief cases 8, 16)', () 
     const current = selectRecall([user('when is my marathon now?')], input([moved]));
     expect(current.topical[0].entry.value).toBe('Marathon moved to December');
   });
+
+  it('a later conversation can find a terse correction by its stable subject without reviving the old value', () => {
+    const corrected = entry({
+      category: 'goals',
+      key: 'race_schedule',
+      value: 'Tuesdays',
+      sourceConversationId: 'manual',
+      history: [{ value: 'Race training happens on Saturdays', replacedAt: 1 }],
+    });
+
+    const laterConversation = selectRecall(
+      [user('Which day is my race training?')],
+      input([corrected]),
+    );
+    expect(laterConversation.topical.map((item) => item.entry.value)).toEqual(['Tuesdays']);
+    expect(recallDisclosureItems(laterConversation)).toEqual([{
+      key: 'race_schedule',
+      why: expect.stringContaining('matched:'),
+    }]);
+
+    const supersededDay = selectRecall(
+      [user('What do I have planned on Saturdays?')],
+      input([corrected]),
+    );
+    expect(supersededDay.topical).toEqual([]);
+  });
 });
 
 describe('selectRecall — model policies (brief cases 10, 11)', () => {
@@ -193,6 +226,8 @@ describe('selectRecall — style tier', () => {
     const entries = [
       entry({ category: 'patterns', key: 'reply_style', value: 'prefers concise answers', timesReinforced: 3 }),
       entry({ category: 'personality', key: 'humor', value: 'dry humor', timesReinforced: 2 }),
+      entry({ category: 'patterns', key: 'work_rhythm', value: 'usually codes late at night', timesReinforced: 8 }),
+      entry({ category: 'personality', key: 'social_energy', value: 'describes themselves as introverted', timesReinforced: 7 }),
       entry({ category: 'personality', key: 'unconfirmed', value: 'maybe likes puns', timesReinforced: 0 }),
       entry({ category: 'patterns', key: 'stale_style', value: 'used emojis once', timesReinforced: 5, stale: true }),
       entry({ category: 'preferences', key: 'coffee', value: 'espresso', timesReinforced: 9 }),
@@ -200,6 +235,24 @@ describe('selectRecall — style tier', () => {
     const r = selectRecall([user('Hi')], input(entries));
     expect(r.style.map((e) => e.key)).toEqual(['reply_style', 'humor']);
     expect(r.topical).toEqual([]);
+  });
+
+  it('discloses a style-only influence on an otherwise unrelated greeting', () => {
+    const concise = entry({
+      category: 'patterns', key: 'reply_style', value: 'prefers concise answers', timesReinforced: 3,
+    });
+    const recall = selectRecall([user('Good morning')], input([concise]));
+
+    expect(recall.topical).toEqual([]);
+    expect(recallDisclosureItems(recall)).toEqual([
+      { key: 'reply_style', why: 'saved communication preference' },
+    ]);
+  });
+
+  it('keeps a true no-match turn free of a Core disclosure', () => {
+    const recall = selectRecall([user('Good morning')], input([aether(), marathon()]));
+
+    expect(recallDisclosureItems(recall)).toEqual([]);
   });
 });
 
@@ -268,6 +321,24 @@ describe('selectRecall — profile route (self-context questions)', () => {
     const r = selectRecall([user('What are my interests?')], input([aether(), blackHoles(), marathon()]));
     expect(r.profileQuery).toBe(true);
     expect(r.topical.map((t) => t.entry.key)).toEqual(['space_interest']);
+  });
+
+  it('"What are my preferences?" uses the preference facet without value-token overlap', () => {
+    const r = selectRecall(
+      [user('What are my preferences?')],
+      input([aether(), blackHoles(), marathon()]),
+    );
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key)).toEqual(['space_interest']);
+  });
+
+  it('a multi-facet question retrieves both goals and interests without unrelated context', () => {
+    const r = selectRecall(
+      [user('What are my goals and interests?')],
+      input([aether(), blackHoles(), marathon()]),
+    );
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((t) => t.entry.key).sort()).toEqual(['marathon_goal', 'space_interest']);
   });
 
   it('"What projects am I working on?" hits context and goals', () => {

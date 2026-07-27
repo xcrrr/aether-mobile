@@ -16,6 +16,7 @@ import { useProfileStore } from '@/state/useProfileStore';
 import { useInference } from '@/hooks/useInference';
 import { useAttachment } from '@/hooks/useAttachment';
 import { getModelById, modeForModel } from '@/models/registry';
+import { FileAttachment } from '@/types';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { ModeSelector } from '@/components/chat/ModeSelector';
@@ -95,7 +96,11 @@ export default function ChatScreen() {
   const att = useAttachment();
   const mode = modeForModel(modelId).id;
   const [researchMode, setResearchMode] = useState(false);
-  const [pendingOnlineAction, setPendingOnlineAction] = useState<{ kind: 'research' | 'act'; text: string } | null>(null);
+  const [pendingOnlineAction, setPendingOnlineAction] = useState<{
+    kind: 'research' | 'act';
+    text: string;
+    attachment?: FileAttachment;
+  } | null>(null);
   const [showResearchDisclosure, setShowResearchDisclosure] = useState(false);
   const [actMode, setActMode] = useState(false);
   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
@@ -140,13 +145,17 @@ export default function ChatScreen() {
     router.push(`/(main)/chat/${nextId}`);
   };
 
-  const runOnlineWithDisclosure = (kind: 'research' | 'act', text: string) => {
+  const runOnlineWithDisclosure = (
+    kind: 'research' | 'act',
+    text: string,
+    attachment?: FileAttachment,
+  ) => {
     if (getResearchDisclosureAction(legalAcceptance) === 'show-disclosure') {
-      setPendingOnlineAction({ kind, text });
+      setPendingOnlineAction({ kind, text, attachment });
       setShowResearchDisclosure(true);
       return;
     }
-    void (kind === 'research' ? research(text) : act(text));
+    void (kind === 'research' ? research(text) : act(text, undefined, attachment));
   };
 
   const acceptResearchDisclosure = async () => {
@@ -155,7 +164,11 @@ export default function ChatScreen() {
     await refreshLegalAcceptance();
     setPendingOnlineAction(null);
     setShowResearchDisclosure(false);
-    if (pending) void (pending.kind === 'research' ? research(pending.text) : act(pending.text));
+    if (pending) {
+      void (pending.kind === 'research'
+        ? research(pending.text)
+        : act(pending.text, undefined, pending.attachment));
+    }
   };
 
   // Declining never swallows the message: research falls back to ordinary
@@ -166,7 +179,7 @@ export default function ChatScreen() {
     setShowResearchDisclosure(false);
     if (!pending) return;
     if (pending.kind === 'research') void send(pending.text);
-    else void act(pending.text, { researchAllowed: false });
+    else void act(pending.text, { researchAllowed: false }, pending.attachment);
   };
 
   const empty = !current || current.messages.length === 0;
@@ -207,7 +220,7 @@ export default function ChatScreen() {
             onResearch={(text) => runOnlineWithDisclosure('research', text)}
             researchMode={researchMode}
             onToggleResearch={() => { setResearchMode((v) => !v); setActMode(false); }}
-            onAct={(text) => runOnlineWithDisclosure('act', text)}
+            onAct={(text, attachment) => runOnlineWithDisclosure('act', text, attachment)}
             actMode={actMode}
             onToggleAct={() => { setActMode((v) => !v); setResearchMode(false); }}
             disabled={!modelReady || loading || !!error || !!ramWarning}

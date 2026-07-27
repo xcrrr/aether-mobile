@@ -19,12 +19,25 @@ function getLlama(): LlamaModule {
 
 const extractionQueue = new ExtractionQueue({
   isBusy: () => getLlama().isBusy(),
-  extract: async (conversationId) => {
-    const { extractFromConversation } = require('@/secondbrain/MemoryExtractor') as typeof import('@/secondbrain/MemoryExtractor');
+  canQueue: () => {
+    const { MemoryStore } = require('@/secondbrain/MemoryStore') as typeof import('@/secondbrain/MemoryStore');
+    return MemoryStore.isEnabled();
+  },
+  queueToken: () => {
+    const { MemoryStore } = require('@/secondbrain/MemoryStore') as typeof import('@/secondbrain/MemoryStore');
+    return MemoryStore.extractionConsentToken();
+  },
+  extract: async (conversationId, queueToken) => {
+    const { extractFromConversation, messagesForConsent } = require('@/secondbrain/MemoryExtractor') as typeof import('@/secondbrain/MemoryExtractor');
     const convo = useChatStore.getState().current;
     const messages = convo && convo.id === conversationId ? convo.messages : [];
     if (!messages.length) return 0;
-    return extractFromConversation(messages, conversationId);
+    const consentToken = String(queueToken);
+    return extractFromConversation(
+      messagesForConsent(messages, consentToken),
+      conversationId,
+      { consentToken },
+    );
   },
   // Surface a "N saved to your Second Brain" pill whenever a chat yields facts.
   onResult: (_id, count) => useBrainNotice.getState().show(count),
@@ -105,17 +118,21 @@ export function useInference(modelId: string | undefined) {
   const dismissRamWarning = useCallback(() => setRamWarning(null), []);
 
   const send = useCallback(async (text: string, attachment?: FileAttachment) => {
-    await chat.appendUser(text, attachment ? [attachment] : undefined);
-    const messages = useChatStore.getState().current?.messages ?? [];
     const { MemoryStore } = require('@/secondbrain/MemoryStore') as typeof import('@/secondbrain/MemoryStore');
-    // The first send after a cold start is often what loads this module, so its
-    // AsyncStorage rehydration may still be in flight. Wait for it, or recall
-    // reads an empty store and Core answers "I have no saved notes".
-    await MemoryStore.ensureHydrated();
-    const { selectRecall } = require('@/secondbrain/recall') as typeof import('@/secondbrain/recall');
+    const { captureCoreSendSnapshot } = require('@/secondbrain/CoreSendSnapshot') as typeof import('@/secondbrain/CoreSendSnapshot');
+    // Resolve cold persistence first, then freeze consent and recall inputs for
+    // this reply. A later toggle applies to the next send, never mid-prompt.
+    const core = await captureCoreSendSnapshot(MemoryStore);
+    await chat.appendUser(
+      text,
+      attachment ? [attachment] : undefined,
+      core.consentToken,
+    );
+    const messages = useChatStore.getState().current?.messages ?? [];
+    const { selectRecall, recallDisclosureItems } = require('@/secondbrain/recall') as typeof import('@/secondbrain/recall');
     const recall = selectRecall(messages, {
-      entries: MemoryStore.getAllEntries(),
-      enabled: MemoryStore.isEnabled(),
+      entries: core.entries,
+      enabled: core.enabled,
       activeModelId: modelId ?? null,
     });
     const system = buildSystemPrompt(profile, {
@@ -130,8 +147,8 @@ export function useInference(modelId: string | undefined) {
       console.log('[CoreDebug]', {
         modelId,
         coreHydrated: MemoryStore.hasHydrated(),
-        coreEnabled: MemoryStore.isEnabled(),
-        storedEntryCount: MemoryStore.getAllEntries().length,
+        coreEnabled: core.enabled,
+        storedEntryCount: core.entries.length,
         recallTopicalKeys: recall.topical.map((t) => t.entry.key),
         recallStyleKeys: recall.style.map((e) => e.key),
         profileQuery: recall.profileQuery ?? false,
@@ -139,10 +156,9 @@ export function useInference(modelId: string | undefined) {
       });
     }
     chat.startAssistant();
-    if (recall.topical.length) {
-      useChatStore.getState().setAssistantRecall(
-        recall.topical.map((t) => ({ key: t.entry.key, why: t.why })),
-      );
+    const recallDisclosure = recallDisclosureItems(recall);
+    if (recallDisclosure.length) {
+      useChatStore.getState().setAssistantRecall(recallDisclosure);
     }
     const Llama = getLlama();
     // Bound history to the engine's actual configured window (MAX_TOKENS) — without
@@ -211,7 +227,11 @@ export function useInference(modelId: string | undefined) {
    * Research disclosure zeroes web access in code. Failures surface honestly,
    * never as fake success.
    */
-  const act = useCallback(async (text: string, opts?: { researchAllowed?: boolean }) => {
+  const act = useCallback(async (
+    text: string,
+    opts?: { researchAllowed?: boolean },
+    attachment?: FileAttachment,
+  ) => {
     const { routeGoal } = require('@/agent/router') as typeof import('@/agent/router');
     const { loadTask } = require('@/agent/taskStorage') as typeof import('@/agent/taskStorage');
     const { useAgentStore } = require('@/state/useAgentStore') as typeof import('@/state/useAgentStore');
@@ -222,23 +242,26 @@ export function useInference(modelId: string | undefined) {
     const priorArtifacts = priorTask?.artifacts ?? [];
     const mode = useAgentStore.getState().mode;
 
-    const route = routeGoal(text, { hasPriorArtifact: priorArtifacts.length > 0 });
+    const route = routeGoal(text, {
+      hasPriorArtifact: priorArtifacts.length > 0,
+      hasConversationContext: messages.some((message) => !!message.content.trim()),
+      hasAttachments: !!attachment?.extractedText || messages.some((message) =>
+        message.attachments?.some((item) => !!item.extractedText),
+      ),
+      hasImageAttachment: attachment?.type === 'image',
+    });
     if (route === 'chat') {
-      await send(text);
+      await send(text, attachment);
       return;
     }
 
-    await chat.appendUser(text);
+    await chat.appendUser(text, attachment ? [attachment] : undefined);
     chat.startAssistant();
     const state = useChatStore.getState();
-    const attachments = (state.current?.messages ?? [])
-      .filter((m) => m.role === 'user')
-      .flatMap((m) => m.attachments ?? [])
-      .filter((a) => a.extractedText)
-      .map((a) => ({ name: a.name, text: a.extractedText! }));
     try {
       const runner = require('@/agent/runner') as typeof import('@/agent/runner');
-      const { buildConversationContext } = require('@/agent/context') as typeof import('@/agent/context');
+      const { buildConversationContext, buildTaskAttachments } = require('@/agent/context') as typeof import('@/agent/context');
+      const attachments = buildTaskAttachments(state.current?.messages ?? [], text);
       const ctx = {
         conversationId: state.current?.id ?? '',
         goal: text,

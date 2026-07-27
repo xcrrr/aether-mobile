@@ -20,8 +20,21 @@ describe('routeGoal — chat stays chat', () => {
     expect(routeGoal('who wrote Dune?', noPrior)).toBe('chat');
   });
 
+  it('a short comparison follow-up needs real conversation context to become a task', () => {
+    const goal = 'Which is the better fit for me, and why?';
+    expect(routeGoal(goal, noPrior)).toBe('chat');
+    expect(routeGoal(goal, { ...noPrior, hasConversationContext: true })).toBe('task');
+  });
+
   it('empty input routes to chat', () => {
     expect(routeGoal('   ', noPrior)).toBe('chat');
+  });
+
+  it('a current image attachment uses multimodal chat rather than the document-only task path', () => {
+    expect(routeGoal(
+      'Analyze this image and prepare the main takeaways.',
+      { ...noPrior, hasImageAttachment: true },
+    )).toBe('chat');
   });
 
   it('current-information questions are NOT chat — they need research', () => {
@@ -61,6 +74,21 @@ describe('routeGoal — refinement targets the existing draft', () => {
   it('refinement phrasing without a prior artifact is a task', () => {
     expect(routeGoal('make it shorter', noPrior)).toBe('task');
     expect(routeGoal('add risks', noPrior)).toBe('task');
+  });
+
+  it('an attachment-dependent revision uses the task path to read the file first', () => {
+    const goal = 'Update the roadmap using this attached project debrief.';
+    expect(routeGoal(goal, { ...withPrior, hasAttachments: false })).toBe('refine');
+    expect(routeGoal(goal, { ...withPrior, hasAttachments: true })).toBe('task');
+    expect(routeGoal('make it shorter', { ...withPrior, hasAttachments: true })).toBe('refine');
+  });
+
+  it('an explicitly Core-dependent revision uses the task path to read saved context first', () => {
+    expect(routeGoal(
+      'Update the roadmap using what Core remembers about my goals.',
+      withPrior,
+    )).toBe('task');
+    expect(routeGoal('update the roadmap milestones', withPrior)).toBe('refine');
   });
 
   it('a long fresh spec is a new task even when a draft exists', () => {

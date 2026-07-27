@@ -6,7 +6,7 @@ import { ToolRegistry } from './ToolRegistry';
 import { parseAction, actionKey, looksLikeFinish, normalizeKey } from './parse';
 import {
   buildStepPrompt, buildArtifactPrompt, buildRevisePrompt, buildFinalAnswerPrompt,
-  scrubUntrusted, detailBudget,
+  scrubUntrusted, gatheredDetailBudget,
 } from './prompts';
 import {
   AgentArtifact, AgentReceipt, AgentStep, AgentTask, ProposedAction, StepStatus,
@@ -52,6 +52,7 @@ const ARTIFACT_MAX_TOKENS = 900;
 const ANSWER_MAX_TOKENS = 700;
 /** Rolling window of tool detail fed to finish/artifact prompts. */
 const MAX_DETAILS = 4;
+const ATTACHMENT_DEPENDENCY = /\b(attach(?:ed|ment)?|document|file|pdf|debrief)\b/i;
 
 function argsSummary(a: ProposedAction): string {
   const parts = Object.entries(a.args)
@@ -105,9 +106,11 @@ export class AgentKernel {
     let duplicateArtifactAttempts = 0;
     const details: string[] = [];
     const executedKeys = new Set<string>();
+    const declinedKeys = new Set<string>();
     const failedKeyCounts = new Map<string, number>();
     /** Normalized outlines of created artifacts — catches "same deliverable, new title". */
     const createdOutlines = new Set<string>();
+    const attachmentReadRequired = ctx.attachments.length > 0 && ATTACHMENT_DEPENDENCY.test(ctx.goal);
 
     const setStatus = (status: TaskStatus) => {
       task.status = status;
@@ -235,6 +238,16 @@ export class AgentKernel {
       const spec = registry.get(action.tool)!;
       const key = actionKey(action);
 
+      if (
+        attachmentReadRequired &&
+        !task.steps.some((step) => step.tool === 'read_attachments' && step.status === 'executed') &&
+        (action.tool === 'create_artifact' || action.tool === 'revise_artifact' || action.tool === 'finish')
+      ) {
+        record(action.tool, argsSummary(action), 'blocked', 'blocked',
+          'read the attached document(s) before writing or finishing');
+        continue;
+      }
+
       // Deterministic duplicate prevention: an equivalent artifact (same
       // normalized title or same normalized outline) is never created twice.
       // First attempt gets guidance; insisting means the model believes the
@@ -261,6 +274,11 @@ export class AgentKernel {
           'already done — its result is in the steps above; pick a different step or finish');
         continue;
       }
+      if (declinedKeys.has(key)) {
+        record(action.tool, argsSummary(action), 'blocked', 'blocked',
+          'already declined — pick a different step or finish');
+        continue;
+      }
       if ((failedKeyCounts.get(key) ?? 0) > MAX_RETRIES_PER_TOOL) {
         record(action.tool, argsSummary(action), 'blocked', 'blocked', 'retry limit reached for this step');
         continue;
@@ -284,6 +302,7 @@ export class AgentKernel {
         if (this.cancelled) return finalize('cancelled', task.finalAnswer);
         setStatus('running');
         if (!approved) {
+          declinedKeys.add(key);
           record(action.tool, argsSummary(action), 'approval', 'declined', 'the user declined this step');
           continue;
         }
@@ -389,7 +408,7 @@ export class AgentKernel {
           }
         }
         record(action.tool, argsSummary(action), decision, 'executed', result.summary);
-        pushDetail(scrubUntrusted(result.detail, detailBudget(ctx.modelId)));
+        pushDetail(scrubUntrusted(result.detail, gatheredDetailBudget()));
       } else {
         failedKeyCounts.set(key, (failedKeyCounts.get(key) ?? 0) + 1);
         record(action.tool, argsSummary(action), decision, 'failed', result.summary);

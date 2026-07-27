@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { ChevronLeft, ExternalLink, List, Locate, Pencil, Search, Trash2, X } from 'lucide-react-native';
 import { PressableScale } from '@/components/ds/PressableScale';
 import { MemoryGraphView, MemoryGraphViewHandle } from '@/components/secondbrain/MemoryGraphView';
+import { MemoryEditModal } from '@/components/secondbrain/MemoryEditModal';
 import { MemoryListPanel } from '@/components/secondbrain/MemoryListPanel';
 import { GraphErrorBoundary } from '@/components/secondbrain/GraphErrorBoundary';
 import {
@@ -273,7 +274,6 @@ export default function SecondBrainScreen() {
   const [listOpen, setListOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<MemoryEntry | null>(null);
-  const [editValue, setEditValue] = useState('');
   const [sheetHeight, setSheetHeight] = useState(340);
   const graphRef = useRef<MemoryGraphViewHandle>(null);
 
@@ -354,12 +354,6 @@ export default function SecondBrainScreen() {
 
   const openEdit = (entry: MemoryEntry) => {
     setEditing(entry);
-    setEditValue(entry.value);
-  };
-
-  const saveEdit = () => {
-    if (editing && editValue.trim()) updateEntry(editing.id, { value: editValue.trim() });
-    setEditing(null);
   };
 
   const confirmDelete = (entry: MemoryEntry) => {
@@ -481,39 +475,7 @@ export default function SecondBrainScreen() {
         }}
       />
 
-      <Modal visible={!!editing} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
-        <Pressable style={styles.editBackdrop} onPress={() => setEditing(null)}>
-          <Pressable style={styles.editCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.editHeader}>
-              <Text style={styles.editTitle}>Edit memory</Text>
-              <PressableScale onPress={() => setEditing(null)} hitSlop={8}>
-                <X size={18} color={c.textMuted} strokeWidth={2} />
-              </PressableScale>
-            </View>
-            <TextInput
-              style={styles.editInput}
-              value={editValue}
-              onChangeText={setEditValue}
-              multiline
-              autoFocus
-              placeholder="What should Aether remember?"
-              placeholderTextColor={c.textMuted}
-            />
-            <View style={styles.editActions}>
-              <PressableScale style={styles.editCancel} onPress={() => setEditing(null)}>
-                <Text style={styles.editCancelText}>Cancel</Text>
-              </PressableScale>
-              <PressableScale
-                style={[styles.editSave, !editValue.trim() && { opacity: 0.4 }]}
-                onPress={saveEdit}
-                haptic
-              >
-                <Text style={styles.editSaveText}>Save</Text>
-              </PressableScale>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <MemoryEditModal entry={editing} onClose={() => setEditing(null)} />
     </View>
   );
 }
@@ -679,32 +641,4 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   secondaryActionText: { color: c.text, fontSize: fontSize.sm2, fontFamily: fonts.sansSemibold },
   dangerAction: { borderColor: c.danger, backgroundColor: c.dangerBg },
 
-  editBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: spacing.xl },
-  editCard: {
-    width: '100%',
-    backgroundColor: c.bgCard,
-    borderColor: c.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-  },
-  editHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  editTitle: { color: c.text, ...typography.sectionTitle },
-  editInput: {
-    backgroundColor: c.bg,
-    borderColor: c.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    color: c.text,
-    fontSize: fontSize.base,
-    fontFamily: fonts.sans,
-    minHeight: 72,
-    textAlignVertical: 'top',
-  },
-  editActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, justifyContent: 'flex-end' },
-  editCancel: { paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.md, borderWidth: 1, borderColor: c.border },
-  editCancelText: { color: c.textMuted, fontSize: fontSize.sm2, fontFamily: fonts.sansSemibold },
-  editSave: { paddingHorizontal: spacing.lg, paddingVertical: 9, borderRadius: radius.md, backgroundColor: c.violet },
-  editSaveText: { color: c.white, ...typography.label },
 });
