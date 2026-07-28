@@ -74,14 +74,16 @@ describe('toGraphData', () => {
     expect(nodes.find((n) => n.id === 'goal')!.recent).toBe(true);
   });
 
-  it('collapses entries that share a key into one node', () => {
+  it('keeps both entries when two categories share a key, without duplicate node ids', () => {
     const entries = [
       entry({ key: 'x', category: 'identity', id: 'a' }),
       entry({ key: 'x', category: 'goals', id: 'b' }),
     ];
     const { nodes } = toGraphData(entries, []);
-    expect(nodes).toHaveLength(1);
-    expect(nodes[0].id).toBe('x');
+    expect(nodes).toHaveLength(2);
+    expect(nodes.some((n) => n.id === 'x')).toBe(true);
+    expect(new Set(nodes.map((n) => n.id)).size).toBe(2);
+    expect(new Set(nodes.map((n) => n.entryId))).toEqual(new Set(['a', 'b']));
   });
 
   it('adds grounded discussed-together links for memories saved from the same conversation', () => {

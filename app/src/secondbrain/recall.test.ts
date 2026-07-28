@@ -45,10 +45,10 @@ describe('distinctiveTokens', () => {
   it('drops stopwords, generic words, short tokens, and numbers', () => {
     expect(distinctiveTokens('I need help with my project')).toEqual([]);
     expect(distinctiveTokens('Hi')).toEqual([]);
-    expect(distinctiveTokens('thanks, that was good')).toEqual(['thanks']);
+    expect(distinctiveTokens('thanks, that was good')).toEqual(['thank']);
   });
   it('keeps real content words', () => {
-    expect(distinctiveTokens('explain how black holes evaporate')).toEqual(['explain', 'black', 'holes', 'evaporate']);
+    expect(distinctiveTokens('explain how black holes evaporate')).toEqual(['explain', 'black', 'hole', 'evaporate']);
   });
 });
 

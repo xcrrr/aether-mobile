@@ -173,11 +173,11 @@ describe('validateEntry', () => {
 
 describe('extractionPolicy', () => {
   it('gives E4B the baseline policy', () => {
-    expect(extractionPolicy('gemma4-e4b')).toEqual({ minConfidence: 0.7, maxFacts: 5, maxLinks: 3 });
+    expect(extractionPolicy('gemma4-e4b')).toEqual({ minConfidence: 0.7, maxFacts: 7, maxLinks: 4 });
   });
   it('is stricter for E2B and for unknown models', () => {
-    expect(extractionPolicy('gemma4-e2b')).toEqual({ minConfidence: 0.8, maxFacts: 3, maxLinks: 2 });
-    expect(extractionPolicy(null)).toEqual({ minConfidence: 0.8, maxFacts: 3, maxLinks: 2 });
+    expect(extractionPolicy('gemma4-e2b')).toEqual({ minConfidence: 0.8, maxFacts: 4, maxLinks: 3 });
+    expect(extractionPolicy(null)).toEqual({ minConfidence: 0.8, maxFacts: 4, maxLinks: 3 });
   });
 });
 
@@ -322,7 +322,7 @@ describe('extractFromConversation', () => {
     expect(await extractFromConversation(convo, 'c1')).toBe(0);
   });
 
-  it('E2B saves at most 3 facts and requires 0.8 confidence', async () => {
+  it('E2B saves at most 4 facts and requires 0.8 confidence', async () => {
     useModelStore.setState({ activeModelId: 'gemma4-e2b' });
     const chat = [userMsg('i love climbing and i live in Warsaw and i am a lawyer and my dog is named Rex and i play chess')];
     mockExtract.mockResolvedValue(JSON.stringify({
@@ -335,8 +335,10 @@ describe('extractFromConversation', () => {
       ],
       links: [],
     }));
-    expect(await extractFromConversation(chat, 'c1')).toBe(3);
-    expect(MemoryStore.getAllEntries()).toHaveLength(3);
+    expect(await extractFromConversation(chat, 'c1')).toBe(4);
+    expect(MemoryStore.getAllEntries()).toHaveLength(4);
+    // The fifth candidate is dropped by the 0.8 confidence gate, not by the cap.
+    expect(MemoryStore.getAllEntries().map((e) => e.key)).not.toContain('game');
   });
 
   it('no-ops on null inference or unparseable output', async () => {

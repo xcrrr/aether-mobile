@@ -71,10 +71,54 @@ export function profileCategories(text: string): MemoryCategory[] | null {
   return null;
 }
 
-export function distinctiveTokens(text: string): string[] {
+/** `running` -> `run`, `stopped` -> `stop`. Only for a doubled final consonant. */
+function undouble(s: string): string {
+  return /([bdfgklmnprt])\1$/.test(s) ? s.slice(0, -1) : s;
+}
+
+/**
+ * Light morphological normalisation, applied to both sides of every comparison.
+ *
+ * Matching was exact-token, so "I want to climb this weekend" did not recall a
+ * note saying "loves climbing", and "my projects" missed "project". Those are
+ * real matches the user would expect Core to make, and they were being lost to
+ * a plural or a verb ending.
+ *
+ * The rules are deliberately shallow. Because both the message and the note are
+ * stemmed the same way, an imperfect stem still matches itself; the only real
+ * risk is two different words collapsing to one stem, so nothing here touches a
+ * short word, and `-ing`/`-ed` need a long one.
+ */
+export function stemToken(t: string): string {
+  if (t.length > 4 && t.endsWith('ies')) return `${t.slice(0, -3)}y`;
+  if (t.length > 4 && /(ses|xes|zes|ches|shes)$/.test(t)) return t.slice(0, -2);
+  if (t.length > 3 && t.endsWith('s') && !t.endsWith('ss')) return t.slice(0, -1);
+  if (t.length > 5 && t.endsWith('ing')) return undouble(t.slice(0, -3));
+  if (t.length > 4 && t.endsWith('ed')) return undouble(t.slice(0, -2));
+  return t;
+}
+
+function surfaceTokens(text: string): string[] {
   return normalizeForGrounding(text)
     .split(' ')
     .filter((t) => t.length >= 3 && !STOPWORDS.has(t) && !GENERIC.has(t) && !/^\d+$/.test(t));
+}
+
+export function distinctiveTokens(text: string): string[] {
+  return surfaceTokens(text).map(stemToken);
+}
+
+/**
+ * Stem to the word as it was actually written, so the recall disclosure can name
+ * the note's own wording ("matched: climbing") rather than its stem.
+ */
+function surfaceMap(text: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const t of surfaceTokens(text)) {
+    const stem = stemToken(t);
+    if (!map.has(stem)) map.set(stem, t);
+  }
+  return map;
 }
 
 export interface RecallPolicy {
@@ -209,12 +253,14 @@ export function selectRecall(messages: Message[], input: RecallInput): RecallRes
     if (current.size || previous.size) {
       for (const entry of input.entries) {
         const tokens = entryTokens(entry);
+        const surface = surfaceMap(`${entry.key.replace(/_/g, ' ')} ${entry.value}`);
         let score = 0;
         let currentHits = 0;
         const matched: string[] = [];
+        const name = (t: string) => surface.get(t) ?? t;
         for (const t of tokens) {
-          if (current.has(t)) { score += 1; currentHits += 1; matched.push(t); }
-          else if (previous.has(t)) { score += 0.5; matched.push(t); }
+          if (current.has(t)) { score += 1; currentHits += 1; matched.push(name(t)); }
+          else if (previous.has(t)) { score += 0.5; matched.push(name(t)); }
         }
         // The current message must win: previous-turn echoes boost ranking but
         // can never qualify a memory on their own.

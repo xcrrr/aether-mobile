@@ -298,11 +298,21 @@ export function toGraphData(
       z: 0,
     };
     const prev = byId.get(node.id);
-    if (!prev || node.importance >= prev.importance) {
-      byId.set(node.id, { ...node, recent: node.recent || !!prev?.recent });
-    } else if (node.recent) {
-      prev.recent = true;
+    if (!prev) {
+      byId.set(node.id, node);
+      continue;
     }
+    // The store only enforces one entry per (category, key), so the same key can
+    // legitimately hold two different facts in two different categories. Folding
+    // them into one node here made a real memory disappear from Core. The weaker
+    // one keeps its own node under a disambiguated id; extracted edges reference
+    // keys, so those stay on the primary, and the displaced node still joins its
+    // category cluster.
+    const stronger = node.importance >= prev.importance ? node : prev;
+    const weaker = stronger === node ? prev : node;
+    byId.set(node.id, { ...stronger, recent: stronger.recent || weaker.recent });
+    const displacedId = `${weaker.id}#${weaker.entryId}`;
+    byId.set(displacedId, { ...weaker, id: displacedId });
   }
 
   const nodes = [...byId.values()];

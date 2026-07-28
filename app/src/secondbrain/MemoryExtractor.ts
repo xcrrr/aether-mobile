@@ -1,9 +1,10 @@
 import { Message } from '@/types';
 import * as Llama from '@/llm/engine';
 import { buildGemmaPrompt } from '@/llm/prompt';
-import { MemoryCategory, MEMORY_CATEGORIES } from './types';
+import { MemoryCategory, MemoryEntry, MEMORY_CATEGORIES } from './types';
 import { MemoryStore } from './MemoryStore';
 import { groundingScore } from './grounding';
+import { distinctiveTokens } from './recall';
 import { useModelStore } from '@/state/useModelStore';
 
 // Extract after the very first user message — the Second Brain should start
@@ -46,8 +47,8 @@ export interface ExtractionPolicy {
   maxLinks: number;
 }
 export function extractionPolicy(activeModelId: string | null): ExtractionPolicy {
-  if (activeModelId === 'gemma4-e4b') return { minConfidence: 0.7, maxFacts: 5, maxLinks: 3 };
-  return { minConfidence: 0.8, maxFacts: 3, maxLinks: 2 };
+  if (activeModelId === 'gemma4-e4b') return { minConfidence: 0.7, maxFacts: 7, maxLinks: 4 };
+  return { minConfidence: 0.8, maxFacts: 4, maxLinks: 3 };
 }
 
 /** True only when the user has said something worth analysing. Drops
@@ -127,24 +128,78 @@ function userTextOf(messages: Message[]): string {
     .join('\n');
 }
 
-// Cap the known-facts list so the extraction prompt stays well inside the context
-// window (each fact line is short; the transcript already eats most of the budget).
-const MAX_KNOWN_FACTS = 50;
+// The known-facts block is budgeted in CHARACTERS, not in a fact count. It shares
+// a 4096-token window with a 4000-char transcript and a 380-token completion, so
+// the only thing that matters is how much text it adds. A flat fifty facts was
+// wrong in both directions: fifty long values overran the window, while fifty
+// short ones left most of the available room unused.
+const MAX_KNOWN_FACT_CHARS = 4000;
+/** These lines are a dedup reference, not the stored note, so long values trim. */
+const MAX_KNOWN_FACT_VALUE_CHARS = 110;
 
-/** A compact list of facts already saved, so the model reuses keys and skips repeats. */
-function buildKnownFacts(): string {
+function knownFactLine(e: MemoryEntry): string {
+  const value = e.value.length > MAX_KNOWN_FACT_VALUE_CHARS
+    ? `${e.value.slice(0, MAX_KNOWN_FACT_VALUE_CHARS - 1).trimEnd()}…`
+    : e.value;
+  return `- [${e.category}] ${e.key}: ${value}`;
+}
+
+/**
+ * The facts the model must not emit again, so it reuses keys instead of saving a
+ * second copy under a new one.
+ *
+ * Selection is relevance-first: facts the current conversation actually touches,
+ * then whatever was seen most recently. This used to be `entries.slice(0, 50)`,
+ * which is insertion order — so past fifty memories the model was shown the
+ * OLDEST fifty and never the ones being discussed, which is precisely the moment
+ * it re-emits a known fact under a fresh key. Stale facts rank last but are still
+ * listed; omitting them would invite the model to save them again as new.
+ *
+ * The chosen facts are then rendered grouped by category and sorted by key, so
+ * the block reads the same way every turn regardless of what ranked it in.
+ */
+function buildKnownFacts(messages: Message[]): string {
   const entries = MemoryStore.getAllEntries();
   if (!entries.length) return '(nothing yet)';
-  return entries
-    .slice(0, MAX_KNOWN_FACTS)
-    .map((e) => `- [${e.category}] ${e.key}: ${e.value}`)
-    .join('\n');
+
+  const topic = new Set(distinctiveTokens(userTextOf(messages)));
+  const ranked = entries
+    .map((e) => {
+      const tokens = new Set(distinctiveTokens(`${e.key.replace(/_/g, ' ')} ${e.value}`));
+      let hits = 0;
+      for (const t of tokens) if (topic.has(t)) hits += 1;
+      return { e, hits };
+    })
+    .sort((a, b) =>
+      b.hits - a.hits ||
+      Number(!!a.e.stale) - Number(!!b.e.stale) ||
+      b.e.lastSeenAt - a.e.lastSeenAt,
+    );
+
+  const chosen: MemoryEntry[] = [];
+  let chars = 0;
+  for (const { e } of ranked) {
+    const cost = knownFactLine(e).length + 1;
+    if (chars + cost > MAX_KNOWN_FACT_CHARS && chosen.length) break;
+    chosen.push(e);
+    chars += cost;
+  }
+
+  const order = new Map(MEMORY_CATEGORIES.map((c, i) => [c, i] as const));
+  chosen.sort((a, b) =>
+    (order.get(a.category) ?? 99) - (order.get(b.category) ?? 99) ||
+    (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+  );
+  return chosen.map(knownFactLine).join('\n');
 }
 
 function buildPrompt(messages: Message[]): string {
+  // Function replacements, not string ones: `$&`, `` $` `` and `$'` are
+  // substitution patterns in a string replacement, and both blocks spliced in
+  // here are user-controlled text.
   const instruction = PROMPT_TEMPLATE
-    .replace('{KNOWN_FACTS}', buildKnownFacts())
-    .replace('{CONVERSATION_TEXT}', buildTranscript(messages));
+    .replace('{KNOWN_FACTS}', () => buildKnownFacts(messages))
+    .replace('{CONVERSATION_TEXT}', () => buildTranscript(messages));
   // Wrap in Gemma turn markers so the model answers the instruction (and emits
   // a closing turn the STOP tokens catch) rather than continuing the text.
   return buildGemmaPrompt('', [
@@ -197,6 +252,11 @@ export interface ParsedLink { fromKey: string; toKey: string; relation: string; 
 
 const RELATION_RE = /^[a-z][a-z0-9_]{1,30}$/;
 
+/** The one place a model-emitted fact key becomes a stored key. */
+function normalizeKey(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, '_');
+}
+
 /** Normalise a model relation to snake_case; null when it can't be a sane label. */
 function sanitizeRelation(raw: string): string | null {
   const r = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -217,7 +277,13 @@ export function parseLinks(raw: string): ParsedLink[] {
     if (!link || typeof link.from_key !== 'string' || typeof link.to_key !== 'string' || typeof link.relation !== 'string') continue;
     const relation = sanitizeRelation(link.relation);
     if (!relation) continue;
-    out.push({ fromKey: link.from_key, toKey: link.to_key, relation });
+    // Endpoints are normalised exactly as `validateEntry` normalises a fact key.
+    // Without this a link written as "Business Name" could never match the stored
+    // `business_name`, so every link the model capitalised was silently dropped.
+    const fromKey = normalizeKey(link.from_key);
+    const toKey = normalizeKey(link.to_key);
+    if (!fromKey || !toKey || fromKey === toKey) continue;
+    out.push({ fromKey, toKey, relation });
   }
   return out;
 }
@@ -252,7 +318,7 @@ export function validateEntry(obj: unknown): ValidEntry | null {
 
   return {
     category: category as MemoryCategory,
-    key: key.trim().toLowerCase().replace(/\s+/g, '_'),
+    key: normalizeKey(key),
     value: value.trim().slice(0, 200),
     confidence,
     quote: quote.trim().slice(0, 300),
@@ -397,6 +463,10 @@ async function runExtraction(
   let applied = 0;
   const appliedKeys: string[] = [];
   const appliedTargets = new Set<string>();
+  // Model-emitted key -> the key it was actually stored under. `canonicalKeyFor`
+  // and deletion authority can both rename a key on the way in, and the links in
+  // the same response still refer to the name the model chose.
+  const storedKeyFor = new Map<string, string>();
   const newestUserMessageAt = Math.max(...userMessages.map((message) => message.createdAt));
   for (const entry of grounded.slice(0, policy.maxFacts)) {
     // A user-corrected extraction category remains authoritative. Match the
@@ -461,15 +531,19 @@ async function runExtraction(
       reason: CATEGORY_REASON[effectiveEntry.category],
     });
     appliedKeys.push(key);
+    storedKeyFor.set(entry.key, key);
     applied += 1;
   }
 
   const links = parseLinks(response).slice(0, policy.maxLinks);
   if (links.length) {
     const keys = new Set(MemoryStore.getAllEntries().map((e) => e.key));
+    const resolve = (k: string) => storedKeyFor.get(k) ?? k;
     for (const l of links) {
-      if (keys.has(l.fromKey) && keys.has(l.toKey)) {
-        MemoryStore.addEdge({ fromKey: l.fromKey, toKey: l.toKey, relation: l.relation });
+      const fromKey = resolve(l.fromKey);
+      const toKey = resolve(l.toKey);
+      if (fromKey !== toKey && keys.has(fromKey) && keys.has(toKey)) {
+        MemoryStore.addEdge({ fromKey, toKey, relation: l.relation });
       }
     }
   }

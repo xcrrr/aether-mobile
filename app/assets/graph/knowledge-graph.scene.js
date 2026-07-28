@@ -668,39 +668,43 @@
     selectedRing.scale.set(s, s, s);
   }
 
-  function getLabelSprite(n) {
-    if (labelSprites[n.id]) return labelSprites[n.id];
+  // Texture + on-screen metrics for a label, cached by text and colour. Split
+  // from sprite creation so a candidate can be measured and collision-tested
+  // before anything is added to the scene.
+  function labelInfo(n) {
     var key = n.label + '|' + n.color;
-    var tex = labelCache[key];
-    var screenW = 0;
-    if (!tex) {
-      var dpr = 2;
-      var padX = 10;
-      var padY = 6;
-      var fontSize = 16;
-      var cv = document.createElement('canvas');
-      var ctx = cv.getContext('2d');
-      ctx.font = '500 ' + fontSize + 'px "Instrument Sans", "Roboto", Arial, sans-serif';
-      screenW = Math.ceil(ctx.measureText(n.label).width) + padX * 2;
-      var w = Math.ceil(screenW * dpr);
-      var h = Math.ceil(26 * dpr);
-      cv.width = w;
-      cv.height = h;
-      ctx.scale(dpr, dpr);
-      ctx.font = '500 ' + fontSize + 'px "Instrument Sans", "Roboto", Arial, sans-serif';
-      ctx.fillStyle = 'rgba(22,22,24,0.62)';
-      roundRect(ctx, 0.5, 0.5, w / dpr - 1, h / dpr - 1, 7);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-      ctx.stroke();
-      ctx.fillStyle = TEXT;
-      ctx.textBaseline = 'middle';
-      ctx.fillText(n.label, padX, h / dpr / 2 + 1);
-      tex = new THREE.CanvasTexture(cv);
-      tex.minFilter = THREE.LinearFilter;
-      labelCache[key] = { tex: tex, screenW: screenW, screenH: h / dpr };
-    }
-    var info = labelCache[key];
+    var cached = labelCache[key];
+    if (cached) return cached;
+    var dpr = 2;
+    var padX = 10;
+    var fontSize = 16;
+    var cv = document.createElement('canvas');
+    var ctx = cv.getContext('2d');
+    ctx.font = '500 ' + fontSize + 'px "Instrument Sans", "Roboto", Arial, sans-serif';
+    var screenW = Math.ceil(ctx.measureText(n.label).width) + padX * 2;
+    var w = Math.ceil(screenW * dpr);
+    var h = Math.ceil(26 * dpr);
+    cv.width = w;
+    cv.height = h;
+    ctx.scale(dpr, dpr);
+    ctx.font = '500 ' + fontSize + 'px "Instrument Sans", "Roboto", Arial, sans-serif';
+    ctx.fillStyle = 'rgba(22,22,24,0.62)';
+    roundRect(ctx, 0.5, 0.5, w / dpr - 1, h / dpr - 1, 7);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.stroke();
+    ctx.fillStyle = TEXT;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, padX, h / dpr / 2 + 1);
+    var tex = new THREE.CanvasTexture(cv);
+    tex.minFilter = THREE.LinearFilter;
+    var info = { tex: tex, screenW: screenW, screenH: h / dpr };
+    labelCache[key] = info;
+    return info;
+  }
+
+  function getLabelSprite(n, info) {
+    if (labelSprites[n.id]) return labelSprites[n.id];
     var mat = new THREE.SpriteMaterial({ map: info.tex, transparent: true, depthWrite: false, opacity: 0, fog: false });
     var sp = new THREE.Sprite(mat);
     sp.scale.set(info.screenW * 0.09, info.screenH * 0.09, 1);
@@ -732,39 +736,53 @@
     return p;
   }
 
+  // How many labels the scene is allowed to draw. This used to be a flat 7 at
+  // the default whole-globe framing, so a twenty-memory graph rendered twenty
+  // spheres but named only seven of them and read as a seven-memory brain. The
+  // budget now tracks the graph's own size; the real limiter is the collision
+  // test below, which drops only labels that have nowhere to sit.
+  function labelBudget(zoomRatio) {
+    if (selectedKey) return 28;
+    if (zoomRatio > 0.82) return clamp(nodes.length, 16, 60);
+    if (zoomRatio > 0.5) return clamp(nodes.length, 24, 80);
+    return Math.max(80, nodes.length);
+  }
+
   function updateLabels() {
     labelDirty = false;
     var zoomRatio = defaultRadius ? cam.radius / defaultRadius : 1;
-    var maxLabels = selectedKey ? 18 : zoomRatio > 0.82 ? 7 : zoomRatio > 0.5 ? 18 : 42;
-    var candidates = nodes.slice().sort(function (a, b) { return nodePriority(b) - nodePriority(a); }).slice(0, Math.min(nodes.length, maxLabels * 4));
+    var maxLabels = labelBudget(zoomRatio);
+    var candidates = nodes.slice().sort(function (a, b) { return nodePriority(b) - nodePriority(a); }).slice(0, Math.min(nodes.length, maxLabels * 3));
     var used = [];
     var visibleIds = {};
+    var shown = 0;
     var pos = new THREE.Vector3();
 
     // Labels render at a constant on-screen size regardless of zoom, so they
     // stay small and readable instead of dwarfing the nodes.
     var worldPerPx = (2 * Math.max(1, cam.radius) * Math.tan(camera.fov * Math.PI / 360)) / Math.max(1, H);
 
-    for (var i = 0; i < candidates.length && Object.keys(visibleIds).length < maxLabels; i++) {
+    for (var i = 0; i < candidates.length && shown < maxLabels; i++) {
       var n = candidates[i];
-      if (!selectedKey && zoomRatio > 0.82 && nodePriority(n) < 95) continue;
       var nodeR = displayScale(n);
       pos.set(n.x || 0, (n.y || 0) + nodeR + 21 * worldPerPx, n.z || 0);
       var screen = worldToScreen(pos);
       if (!screen || screen.x < -60 || screen.x > W + 60 || screen.y < -40 || screen.y > H + 40) continue;
-      var sp = getLabelSprite(n);
-      var labelScale = worldPerPx * 0.78;
-      if (n.id === selectedKey) labelScale *= 1.1;
-      sp.scale.set(sp.userData.screenW * labelScale, sp.userData.screenH * labelScale, 1);
+      var info = labelInfo(n);
       var rect = {
-        x: screen.x - sp.userData.screenW / 2,
-        y: screen.y - sp.userData.screenH / 2,
-        w: sp.userData.screenW,
-        h: sp.userData.screenH,
+        x: screen.x - info.screenW / 2,
+        y: screen.y - info.screenH / 2,
+        w: info.screenW,
+        h: info.screenH,
       };
       if (n.id !== selectedKey && collides(rect, used)) continue;
       used.push(rect);
       visibleIds[n.id] = true;
+      shown += 1;
+      var sp = getLabelSprite(n, info);
+      var labelScale = worldPerPx * 0.78;
+      if (n.id === selectedKey) labelScale *= 1.1;
+      sp.scale.set(info.screenW * labelScale, info.screenH * labelScale, 1);
       sp.position.copy(pos);
       sp.material.opacity = n.id === selectedKey ? 1 : directNeighbors[n.id] ? 0.88 : 0.66;
     }
