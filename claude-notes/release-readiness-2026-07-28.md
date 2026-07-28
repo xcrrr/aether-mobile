@@ -93,8 +93,19 @@ Research, **Task** — with a live animated demo for each. Task is hidden from t
 **Core was absent entirely**: the feature Adam rates equal to Research, and one of the two he
 considers differentiating, had no presence on the public site at all.
 
+Task's slot is now Core, with a new `CoreDemo`. The demo is deliberately honest about a real
+constraint: Core has no in-chat surface, because extraction is silent and a saved memory is only
+ever shown on the Core screen. Inventing an in-chat "saved!" card would have been the easy
+version and a lie, so the recording crossfades from an ordinary chat exchange into Core and
+mirrors the real `DetailSheet` — category label and colour lifted from `graphData.ts`
+(`health` / `Health / Fitness` / `#789B8D`, verified against `inferVisualCategory`), the "why this
+was saved" evidence quote, and the Edit and Delete actions.
+
 `ResearchDemo` was also depicting the old sources rendering — horizontal rule, bold `**Sources**`,
-plain list — which no longer exists in the app.
+plain list — which no longer exists in the app. It now shows the live source-reading card and
+numbered source cards with inline markers, and depicts the over-fetched parallel wave rather than
+reading one source at a time. `StatusTurn` and the `hr`/`sources` block kinds went with it: dead
+code shaped like the bug.
 
 `app/demos-preview/page.tsx` shipped to production as a static route with no `noindex`, no robots
 rule and no environment gate, hidden only by being absent from navigation. Now gated three ways:
@@ -131,6 +142,17 @@ in `MemoryExtractor.test.ts` gained `isBusy` because the module now calls it.
 
 This is still not device-verified, and the timing constants are guesses that a real device
 should correct.
+
+## The hero feature had two names
+
+Found while reviewing the site work. The sidebar, onboarding, the notice pill and the whole
+website say **Core**. The screen they navigate to titled itself **Second Brain**, its delete
+confirmation said "removed from your Second Brain", and the empty graph said "Your Second Brain
+will grow". A user taps Core and lands on a screen called something else.
+
+Fixed for the three user-visible strings. File and component names are unchanged — renaming
+`SecondBrainScreen.tsx` and its directory is churn with no user-visible effect, and the internal
+name is a reasonable description of what the module does.
 
 ## Documentation corrected against the code
 
@@ -175,7 +197,14 @@ fixture set measuring whether extraction proposes the right facts.
 ## State
 
 `npm test` 47 suites / 606 tests green. `npm run typecheck` clean. `npm run preflight:beta` shows
-2 BLOCKED, 1 SKIPPED, everything else passing. Website lint, typecheck and build green.
+2 BLOCKED, 1 SKIPPED, everything else passing. Website ESLint, `tsc --noEmit` and `next build`
+green, re-run independently rather than taken on report; the `demos-preview` gate was confirmed
+by reading the prerendered artifact, which is a 404 with no demo markup, and the emitted
+`robots.txt`, which disallows the route.
+
+Twelve commits on `mvp-release-prep`, not merged and not pushed.
 
 No Android build has been attempted, so every native-facing change in this note — signing,
-permissions, the manifest — is reasoned from source and unproven.
+permissions, the manifest — is reasoned from source and unproven. The new website surfaces have
+also never been looked at on a screen; `CoreDemo` is an animation whose quality is a judgement
+that needs eyes, in both themes.
