@@ -41,7 +41,9 @@ Android SQLite `CursorWindow` = 2 MB per row. Never store image base64 in conver
 
 ### Context window / N_CTX
 LiteRT is initialized with a 4096-token window. Silent `extract()→null` usually means the engine is busy or the prompt is too large.
-- Research sources: capped at 1100 chars each, max 3 sources
+- Research sources: capped at 1100 chars each, 3 delivered to the prompt. `SEARCH_CANDIDATES = 8`
+  is search width, not prompt width — candidates are over-fetched in parallel waves until 3 have
+  real content, so a dead page costs no source. Only the 3 winners reach the model.
 - Extraction transcript: trimmed to 4000 chars total
 - N_CTX maths: keep prompts + completion well under 4096 tokens
 
@@ -53,8 +55,14 @@ LiteRT is initialized with a 4096-token window. Silent `extract()→null` usuall
 
 ## Build commands
 ```bash
-# Set Java (required)
-export JAVA_HOME=/home/xcrr1/android-studio-panda3-linux/android-studio/jbr
+# Set Java (required) — point at the JDK on THIS machine. Android Studio ships
+# one at <android-studio>/jbr. Not every device in this repo has the same path.
+export JAVA_HOME=/path/to/android-studio/jbr
+
+# Release signing: copy android/keystore.properties.example to
+# android/keystore.properties and fill it in, or the release APK is
+# debug-signed and Gradle warns. Neither the properties file nor the .jks is
+# ever committed.
 
 # Real device APK (arm64)
 cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
@@ -68,8 +76,10 @@ cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 
 ## Tests
 ```bash
-npm test          # Jest (43 suites / 538 tests verified 2026-07-14)
-npm run typecheck # tsc --noEmit strict
+npm test              # Jest (47 suites / 606 tests verified 2026-07-28)
+npm run typecheck     # tsc --noEmit strict
+npm run preflight:beta    # release checks; BLOCKED items are non-fatal
+npm run preflight:public  # same, but BLOCKED items fail the run
 ```
 
 ## File layout
@@ -82,6 +92,7 @@ src/files/                  FileProcessor, PDF/docx extractors
 src/webresearch/            DuckDuckGo→fetch→cite pipeline (safety.ts is the security chokepoint)
 src/secondbrain/            Memory extraction + store
 src/models/                 Model registry + ModelManager (download/verify/delete .litertlm files)
+src/release/                MVP scope flags (TASK_UI_ENABLED)
 src/state/                  Zustand stores (useChatStore, useModelStore, useProfileStore)
 src/hooks/                  useInference, useVoice, useAttachment
 src/components/             UI components
@@ -90,11 +101,22 @@ plugins/                    withAetherAndroid (Expo config plugin)
 patches/                    patch-package patches for voice + downloader
 ```
 
+## Shipped MVP scope
+Chat, Core, Research, images/files, voice. Task and Library are hidden behind
+`TASK_UI_ENABLED` in `src/release/features.ts` (currently `false`). The agent kernel in
+`src/agent/` is untouched and still typechecks and tests on every run — the flag controls
+visibility only. This is a deliberate, documented exception to rule 3 below; delete it in
+one direction or the other once Task has been device-verified.
+Decision and touch points: `../claude-notes/mvp-scope-cut-2026-07-27.md`.
+
 ## Known issues / next work
 - Voice still unverified on all real devices — surface real error from `Voice.start()` throw
 - Vision is LiteRT-session dependent: if the native ladder falls back text-only, surface that honestly.
-- Second Brain auto-extraction often preempted; manual "Analyze now" button is the reliable path
-- Reinit self-heal after hard crash exists (`reinit()`) — monitor for stability
+- Second Brain auto-extraction often preempted; manual "Analyze now" button is the reliable path.
+  Fixing it means changing how the single LiteRT session arbitrates, not a local tweak.
+- No fixture set measures whether extraction proposes the *right* facts. Every Core gate is
+  mechanical, so no prompt or policy change can currently be shown to be an improvement.
+- Nothing since the 2026-07-07 APK is device-verified. Run `../docs/aether-device-beta-checklist.md`.
 
 ## Coding rules (strict)
 1. No comments unless WHY is non-obvious
@@ -102,7 +124,11 @@ patches/                    patch-package patches for voice + downloader
 3. No feature flags, no backwards-compat shims
 4. Don't add features beyond what's asked
 5. Security: web text always sanitized via `safety.ts` before hitting any prompt (prompt-injection guard)
-6. Patches go in `patches/` via patch-package; add to `postinstall` in package.json
+6. Patches go in `patches/` via patch-package; add to `postinstall` in package.json.
+   **Never run `patch-package` after a Gradle build.** It captures everything under
+   `node_modules/*/android/build/`, which is how both patches reached ~5 MB and 50k+ lines
+   for a one-line change each. If you must regenerate, do it against a clean `node_modules`
+   and check the diff contains only the file you meant to touch.
 
 ## Design rules (visual quality — current top priority)
 

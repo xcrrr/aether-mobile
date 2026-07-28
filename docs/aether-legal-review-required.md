@@ -12,19 +12,25 @@ This document lists unresolved legal/product questions before Aether can be rele
 - Final Privacy Notice wording.
 - Whether separate public Terms and Privacy Policy URLs will be hosted on the website.
 - Final retention/deletion commitments for conversations, Core memory, agent task records, uploaded/attached local files, model files, logs, and reset behavior.
-- Whether beta access is free, invite-only, paid, waitlisted, time-limited, or otherwise conditioned.
-- Age/minor policy, including whether parental/guardian consent is required for any users.
+- Age/minor policy, including whether parental/guardian consent is required for any users. Note the Play account holder must be an adult; this is a real constraint, not a formality.
 - Medical/legal/financial/safety disclaimer wording appropriate to the product and target jurisdictions.
 - Google Play Data Safety declaration or equivalent disclosure for any distribution channel.
-- Distribution plan: direct APK, GitHub Releases, Play internal testing, closed testing, or another channel.
-- Android release signing plan. Current release build config uses the debug signing config.
-- Whether Android manifest permissions `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, and `SYSTEM_ALERT_WINDOW` are necessary and should remain.
+- Whether the in-app Closed Beta gate is still the right shape now that the plan is a paid Play purchase alongside a free GitHub build. The gate currently applies identically to both channels.
 - Required disclosures for Hugging Face model downloads and Google AI Edge LiteRT runtime.
 - Required disclosures for DuckDuckGo HTML search and fetched third-party websites in Research.
 - Required disclosures for Android speech recognition providers, including Google/Samsung/device recognizers.
 - Whether website beta signup will connect to an email provider; if yes, provider, retention, opt-out, and privacy wording.
 - Whether crash reporting, analytics, support ticketing, or remote config will be added before beta.
 - Final model/license notices for `.litertlm` model files and LiteRT dependencies.
+
+## Resolved (2026-07-28)
+
+Kept here rather than deleted so the audit trail survives.
+
+- **Distribution plan.** Free unrestricted build on GitHub Releases, plus a paid one-time purchase on Google Play at roughly 99–149 PLN with Google as merchant of record. Freemium was rejected: an APK has no enforceable paywall, and the only gateable features were Task and Research. Google as merchant of record also resolves the VAT and consumer-law exposure.
+- **Whether beta access is conditioned.** Follows from the above — the GitHub build is unconditioned, the Play build is paid.
+- **Android release signing.** `android/app/build.gradle` now reads credentials from `android/keystore.properties`, which is gitignored along with `*.jks`. See `android/keystore.properties.example`. The keystore itself has not been created yet; until it exists, release builds are debug-signed and Gradle prints a warning. `npm run preflight:public` fails while that is the case.
+- **Unused manifest permissions.** `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` are removed via `tools:node="remove"` in `plugins/withAetherAndroid.js`. All three arrived through library manifest merge, never from Aether's own config. minSdkVersion is 29, so the storage pair was already inert under scoped storage; models download to app-private `documentDirectory` and attachments arrive as SAF content URIs. Nothing in the app draws overlays. Not yet confirmed against a real merged manifest — that needs a Gradle build.
 
 ## Current Draft In-App Documents
 

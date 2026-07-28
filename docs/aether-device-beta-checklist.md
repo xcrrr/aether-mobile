@@ -33,7 +33,6 @@ Use a clean Android test device or clear app data before starting. Record device
 - Confirm Online Research Disclosure appears before web activity starts.
 - Decline it and confirm no Research answer is generated.
 - Submit Research again, accept disclosure, and confirm web search/source reading starts.
-- Engage the Task pill before accepting disclosure on a clean install; decline it and confirm the task still runs local-only with web research blocked (see `aether-local-agent-device-verification.md` test 6).
 
 ## Permissions
 
@@ -43,6 +42,13 @@ Use a clean Android test device or clear app data before starting. Record device
 - Choose Library attachment and confirm an explanation appears before photo permission.
 - Choose Files and confirm an explanation appears before the picker opens.
 - Start a model download on Android 13+ and confirm notification explanation appears before notification permission.
+
+## Scope Cut Verification
+
+- Open the composer's mode menu and confirm no Task row appears; Research is the only mode offered.
+- Confirm the sidebar has no Library entry.
+- Trigger a deep link to /library and confirm it redirects away rather than showing a dead screen.
+- Complete onboarding through phase 3 and confirm the heading reads "One mode, used on purpose" describing Research alone, with no Task capability card.
 
 ## Core App Flows
 
@@ -54,8 +60,36 @@ Use a clean Android test device or clear app data before starting. Record device
 - Attach a PDF/text/docx file and confirm extracted text is handled or a friendly error appears.
 - Confirm conversations persist after app restart.
 - Delete a conversation and verify it disappears from Recents.
+
+## Core
+
 - Use Core/Second Brain and confirm saved notes can be viewed/cleared.
-- Run a Task with "Ask first" off (default) and on, and verify approvals/questions behave as expected (full script: `aether-local-agent-device-verification.md`).
+- Save roughly twenty memories, open Core, and confirm roughly that many named labels are readable at the default whole-globe framing (the earlier bug showed only six).
+- Save two memories that share the same key in different categories and confirm both appear as separate nodes.
+- Save a note about "climbing" and confirm a later message saying "climb" recalls it.
+
+## Research
+
+- Submit a research query and confirm the answer is grounded in three sources, not one or two.
+- Watch the live card while the query runs and confirm it shows each source's domain, title, and whether it was read or failed.
+- Confirm the finished answer carries inline [n] markers that match the numbered source cards beneath it.
+- Tap a source card and confirm it opens that source.
+- Switch on airplane mode, submit a research query, and confirm an offline message appears instead of a prompt to rephrase.
+- Submit a deliberately obscure nonsense query and confirm a no-results message appears.
+- Repeat every check above in both light and dark theme; this is the single most important visual check in this document.
+
+## Sampling Comparison
+
+- Ask a handful of factual and reasoning questions against the shipped sampling defaults (temperature 0.7, topK 40, topP 0.9) and record the answers.
+- Edit the three constants at the top of `LiteRtService.ts` to the prior defaults (temperature 1.0, topK 64, topP 0.95), rebuild, and ask the identical questions.
+- Compare the two answer sets and flag any reply that drifts from the question or invents unsupported detail.
+
+## Navigation And Scroll
+
+- Open Settings from the drawer, use the system back gesture, and confirm it returns to the last chat with no gray or blank frame.
+- Open Core from the drawer, use the system back gesture, and confirm the same clean return to the last chat.
+- Scroll up in a long conversation, send a new message, and confirm the view jumps to the newest turn.
+- Scroll up during active streaming and confirm the view stays where scrolled rather than snapping back to the bottom.
 
 ## Release Configuration
 
@@ -64,4 +98,3 @@ Use a clean Android test device or clear app data before starting. Record device
 - Confirm no startup permission prompt appears before user-initiated actions.
 - Confirm the APK versionName/versionCode match release notes.
 - Confirm release signing choice is intentional and documented.
-
