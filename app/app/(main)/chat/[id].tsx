@@ -10,6 +10,7 @@ import { LegalDocumentModal } from '@/components/legal/LegalDocumentModal';
 import { acceptLegalDocument } from '@/legal/acceptance';
 import { getLegalDocument } from '@/legal/documents';
 import { getResearchDisclosureAction } from '@/legal/researchDisclosure';
+import { TASK_UI_ENABLED } from '@/release/features';
 import { useChatStore } from '@/state/useChatStore';
 import { useModelStore } from '@/state/useModelStore';
 import { useProfileStore } from '@/state/useProfileStore';
@@ -220,9 +221,9 @@ export default function ChatScreen() {
             onResearch={(text) => runOnlineWithDisclosure('research', text)}
             researchMode={researchMode}
             onToggleResearch={() => { setResearchMode((v) => !v); setActMode(false); }}
-            onAct={(text, attachment) => runOnlineWithDisclosure('act', text, attachment)}
-            actMode={actMode}
-            onToggleAct={() => { setActMode((v) => !v); setResearchMode(false); }}
+            onAct={TASK_UI_ENABLED ? (text, attachment) => runOnlineWithDisclosure('act', text, attachment) : undefined}
+            actMode={TASK_UI_ENABLED && actMode}
+            onToggleAct={TASK_UI_ENABLED ? () => { setActMode((v) => !v); setResearchMode(false); } : undefined}
             disabled={!modelReady || loading || !!error || !!ramWarning}
             supportsVision={supportsVision}
             att={att}

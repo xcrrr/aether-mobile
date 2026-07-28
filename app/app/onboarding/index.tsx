@@ -14,6 +14,7 @@ import { PressableScale } from '@/components/ds/PressableScale';
 import { CoreGrowthVisual } from '@/components/onboarding/CoreGrowthVisual';
 import { LOGO_PURPLE, LOGO_WHITE } from '@/components/ds/Logo';
 import { getLegalDocument, type LegalDocument } from '@/legal/documents';
+import { TASK_UI_ENABLED } from '@/release/features';
 import { spacing, radius, fonts, Palette, fontSize } from '@/theme';
 import { useColors, useIsDark } from '@/theme/useColors';
 
@@ -320,18 +321,26 @@ export default function Onboarding() {
             <Pressable onPress={() => setPhase(4)}><Text style={s.skip}>Skip</Text></Pressable>
           </View>
           <Animated.View style={[s.listPage, animStyle]}>
-            <Text style={s.pageTitle}>Two modes, used on purpose.</Text>
-            <Text style={s.pageSub}>Regular chat stays on this device. These two step outside it, only when you choose to.</Text>
+            <Text style={s.pageTitle}>
+              {TASK_UI_ENABLED ? 'Two modes, used on purpose.' : 'One mode, used on purpose.'}
+            </Text>
+            <Text style={s.pageSub}>
+              {TASK_UI_ENABLED
+                ? 'Regular chat stays on this device. These two step outside it, only when you choose to.'
+                : 'Regular chat stays on this device. Research steps outside it, only when you choose to.'}
+            </Text>
             <View style={{ gap: spacing.md, marginTop: spacing.lg }}>
               <CapabilityCard
                 label="Research"
                 body="Reads public web sources for a grounded, cited answer. You turn it on per message — regular chat never does this on its own."
               />
-              <CapabilityCard
-                label="Task"
-                badge="Beta"
-                body="Takes on bigger, multi-step requests and can act with your approval. Still learning — review what it does before relying on it."
-              />
+              {TASK_UI_ENABLED && (
+                <CapabilityCard
+                  label="Task"
+                  badge="Beta"
+                  body="Takes on bigger, multi-step requests and can act with your approval. Still learning — review what it does before relying on it."
+                />
+              )}
             </View>
           </Animated.View>
           <View style={s.navWrap}>

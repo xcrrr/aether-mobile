@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { PressableScale } from '@/components/ds/PressableScale';
 import { useLibraryStore } from '@/state/useLibraryStore';
+import { TASK_UI_ENABLED } from '@/release/features';
 import { typeLabel } from '@/library/artifact';
 import { AgentArtifact } from '@/agent/types';
 import { spacing, Palette, typography } from '@/theme';
@@ -24,6 +25,8 @@ export default function LibraryIndex() {
     () => [...items].sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt)),
     [items],
   );
+
+  if (!TASK_UI_ENABLED) return <Redirect href="/(main)" />;
 
   const renderItem = ({ item }: { item: AgentArtifact }) => (
     <PressableScale style={styles.row} onPress={() => router.push(`/(main)/library/${item.id}`)} scaleTo={0.99}>

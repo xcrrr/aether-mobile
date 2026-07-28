@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Download, Trash2 } from 'lucide-react-native';
 import { PressableScale } from '@/components/ds/PressableScale';
 import { ArtifactReader } from '@/components/library/ArtifactReader';
 import { useLibraryStore } from '@/state/useLibraryStore';
 import { useExportStore } from '@/state/useExportStore';
+import { TASK_UI_ENABLED } from '@/release/features';
 import { typeLabel } from '@/library/artifact';
 import { spacing, Palette, typography } from '@/theme';
 import { useColors } from '@/theme/useColors';
@@ -24,6 +25,8 @@ export default function LibraryDetail() {
   const exportPhase = useExportStore((s) => s.exports[id ?? '']?.phase);
   const exportUri = useExportStore((s) => s.exports[id ?? '']?.uri);
   const exportBusy = exportPhase === 'preparing' || exportPhase === 'saving';
+
+  if (!TASK_UI_ENABLED) return <Redirect href="/(main)" />;
 
   if (!artifact) {
     return (

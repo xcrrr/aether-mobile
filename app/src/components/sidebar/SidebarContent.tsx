@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import { useChatStore } from '@/state/useChatStore';
 import { useModelStore } from '@/state/useModelStore';
 import { useLibraryStore } from '@/state/useLibraryStore';
+import { TASK_UI_ENABLED } from '@/release/features';
 import { ConversationRow } from './ConversationRow';
 import { radius, spacing, fonts, Palette, fontSize, typography } from '@/theme';
 import { useColors } from '@/theme/useColors';
@@ -77,17 +78,19 @@ export function SidebarContent(props: DrawerContentComponentProps) {
           </PressableScale>
         </View>
 
-        {/* Library */}
-        <View style={styles.sectionTight}>
-          <PressableScale style={styles.brainBtn} onPress={() => { close(); router.push('/(main)/library'); }} scaleTo={0.98}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.brainLabel}>Library</Text>
-              <Text style={styles.brainMeta}>Kept Task outputs</Text>
-            </View>
-            {libraryCount > 0 && <Text style={styles.countPill}>{libraryCount}</Text>}
-            <ChevronRight size={18} color={c.textMuted} strokeWidth={2} />
-          </PressableScale>
-        </View>
+        {/* Library — only meaningful while Task can produce artifacts. */}
+        {TASK_UI_ENABLED && (
+          <View style={styles.sectionTight}>
+            <PressableScale style={styles.brainBtn} onPress={() => { close(); router.push('/(main)/library'); }} scaleTo={0.98}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.brainLabel}>Library</Text>
+                <Text style={styles.brainMeta}>Kept Task outputs</Text>
+              </View>
+              {libraryCount > 0 && <Text style={styles.countPill}>{libraryCount}</Text>}
+              <ChevronRight size={18} color={c.textMuted} strokeWidth={2} />
+            </PressableScale>
+          </View>
+        )}
 
         {/* chats */}
         <View style={styles.section}>
