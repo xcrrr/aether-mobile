@@ -1,5 +1,5 @@
 'use client';
-import { c, radius, sans, serif, type } from './tokens';
+import { c, radius, sans, type } from './tokens';
 import {
   IconArrowUp, IconFileText, IconPlus, IconStopSquare, IconX,
 } from './icons';
@@ -8,14 +8,9 @@ import {
 
 export type Block =
   | { kind: 'p'; text: string }
-  | { kind: 'li'; text: string }
-  | { kind: 'hr' }
-  | { kind: 'sources'; items: string[] };
+  | { kind: 'li'; text: string };
 
-export const blockLen = (b: Block): number =>
-  b.kind === 'p' || b.kind === 'li' ? b.text.length
-  : b.kind === 'hr' ? 4
-  : b.items.join('').length;
+export const blockLen = (b: Block): number => b.text.length;
 
 export const blocksLen = (blocks: Block[]): number =>
   blocks.reduce((n, b) => n + blockLen(b), 0);
@@ -36,25 +31,6 @@ function Inline({ text }: { text: string }) {
 
 function BlockView({ block, revealed }: { block: Block; revealed: number }) {
   if (revealed <= 0) return null;
-  if (block.kind === 'hr') {
-    return <div style={{ height: 1, background: c.border, margin: '10px 0' }} />;
-  }
-  if (block.kind === 'sources') {
-    return (
-      <div style={{ padding: '6px 0' }}>
-        {block.items.map((item, i) => {
-          const used = block.items.slice(0, i).reduce((sum, prev) => sum + prev.length, 0);
-          const slice = Math.max(0, Math.min(item.length, revealed - used));
-          if (slice <= 0) return null;
-          return (
-            <div key={i} style={{ ...type.assistantBody, color: c.text }}>
-              {i + 1}. <span style={{ color: c.violet }}>{item.slice(0, slice)}</span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
   const text = block.text.slice(0, revealed);
   if (block.kind === 'li') {
     return (
@@ -91,18 +67,6 @@ export function AssistantTurn({ blocks, revealed, children }: {
         return <BlockView key={i} block={b} revealed={slice} />;
       })}
       {children}
-    </div>
-  );
-}
-
-/** In-place status while Research works — the app streams `_status_` italics. */
-export function StatusTurn({ text }: { text: string }) {
-  return (
-    <div style={{ marginBottom: 32, animation: 'demoRise 300ms var(--ease) both' }}>
-      <div style={{ ...type.name, color: c.textMuted, marginBottom: 6 }}>Aether</div>
-      <div style={{ fontFamily: serif, fontStyle: 'italic', fontSize: 16, lineHeight: '25px', color: c.text }}>
-        {text}
-      </div>
     </div>
   );
 }

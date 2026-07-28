@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChatDemo, FilesDemo, ResearchDemo, SeeDemo, TaskDemo } from '@/components/demos';
+import { ChatDemo, CoreDemo, FilesDemo, ResearchDemo, SeeDemo } from '@/components/demos';
 import { Reveal } from '@/components/ui/Reveal';
 
 const FEATURES = [
@@ -35,11 +35,11 @@ const FEATURES = [
     Demo: ResearchDemo,
   },
   {
-    title: 'Task',
-    hint: 'Hand off a larger request and get a finished artifact.',
-    body: 'For bigger asks, Task mode keeps the work structured and brings back something concrete: a plan, draft, or next useful piece.',
-    points: ['Visible task progress', 'Artifact-style results', 'Designed for larger requests'],
-    Demo: TaskDemo,
+    title: 'Core',
+    hint: 'Useful details, kept across every conversation.',
+    body: 'Mention something concrete — a goal, a project, someone you work with — and Aether can keep it, grounded in the exact words you used rather than a guess. It lives in Core, held only on this device, where you can see what it kept, correct it, or remove it.',
+    points: ['On-device only', 'Grounded in what you said', 'Browse, edit, or delete'],
+    Demo: CoreDemo,
   },
 ] as const;
 
