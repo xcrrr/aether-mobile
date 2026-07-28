@@ -46,10 +46,22 @@ const emitter = LiteRt ? new NativeEventEmitter(LiteRt) : null;
 export const isAvailable = (): boolean => !!LiteRt;
 
 export const MAX_TOKENS = 4096;
-// Gemma's official sampling (matches Google's AI Edge Gallery).
-const TOP_K = 64;
-const TOP_P = 0.95;
-const TEMPERATURE = 1.0;
+/**
+ * Sampling for assistant work, not for open-ended text.
+ *
+ * Gemma's published defaults are topK 64 / topP 0.95 / temperature 1.0, and that
+ * is what the AI Edge Gallery demo uses. Those are creative-generation settings:
+ * on a 2B–4B model answering questions they show up as drift, invented detail
+ * and self-contradiction — the behaviour that reads to a user as the model being
+ * stupid. Tightening the tail is the single highest-leverage quality change
+ * available on-device, because the weights cannot be improved from here.
+ *
+ * Research and Core extraction pass their own lower temperatures explicitly and
+ * are unaffected by this.
+ */
+const TOP_K = 40;
+const TOP_P = 0.9;
+const TEMPERATURE = 0.7;
 
 let currentPath: string | null = null;
 let activeCompletion: Promise<unknown> | null = null;

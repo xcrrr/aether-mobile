@@ -201,9 +201,29 @@ export function stripSpecialTokens(text: string): string {
   return out.replace(/\s+$/, '');
 }
 
-/** Rough char-budget trim (~4 chars/token), always keeping the newest messages. */
-export function trimToContext(messages: Message[], nCtx: number): Message[] {
-  const budget = nCtx * 4 * 0.6; // leave room for the reply
+/**
+ * Gemma's tokenizer averages nearer 3.6 characters per token on ordinary prose,
+ * and worse on URLs, code and snake_case keys. The old estimate of 4 was
+ * optimistic in exactly the direction that hurts: an over-estimate lets the
+ * prompt exceed the native window, and what the engine drops there is not
+ * negotiable.
+ */
+const CHARS_PER_TOKEN = 3.6;
+/** Share of the window left for the reply. */
+const REPLY_RESERVE = 0.4;
+
+/**
+ * Trim history to what actually fits, newest first.
+ *
+ * `systemChars` matters: the system prompt carries the persona *and* the Core
+ * notes block, and it is sent alongside this history rather than inside it. It
+ * was previously not counted at all, so a long conversation with a full Core
+ * block could push the real prompt past the window — which is the mechanism
+ * behind an assistant that quietly gets worse the longer a chat runs.
+ */
+export function trimToContext(messages: Message[], nCtx: number, systemChars = 0): Message[] {
+  const windowChars = nCtx * CHARS_PER_TOKEN;
+  const budget = Math.max(windowChars * 0.2, windowChars * (1 - REPLY_RESERVE) - systemChars);
   let total = 0;
   const kept: Message[] = [];
   for (let i = messages.length - 1; i >= 0; i--) {
