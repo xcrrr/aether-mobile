@@ -7,7 +7,7 @@ import { selectRecall } from './recall';
 import { buildMemorySystemPrompt } from './MemoryInjector';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-jest.mock('@/llm/engine', () => ({ extract: jest.fn() }));
+jest.mock('@/llm/engine', () => ({ extract: jest.fn(), isBusy: jest.fn(() => false) }));
 const mockExtract = Llama.extract as jest.MockedFunction<typeof Llama.extract>;
 
 function reset() {

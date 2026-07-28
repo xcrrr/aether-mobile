@@ -10,13 +10,75 @@ import { useModelStore } from '@/state/useModelStore';
 // Extract after the very first user message — the Second Brain should start
 // learning immediately, not wait for a second turn.
 const MIN_USER_MESSAGES = 1;
-// Keep this small: auto-extraction runs after each reply and is preempted the
+// Keep this small: auto-extraction runs after each reply and is drained the
 // moment the user sends their next message. A short budget lets it finish in the
 // gap (a truncated JSON array parses to nothing). Facts are short, so this is
 // plenty for a handful of them.
 const MAX_EXTRACT_TOKENS = 380;
 const EXTRACT_TEMPERATURE = 0.1;
 const manualExtractions = new Map<string, Promise<number>>();
+
+/**
+ * Auto-extraction yields the shared LiteRT session instead of interrupting a
+ * reply, so a user who keeps typing could starve it indefinitely — which is why
+ * memories reliably appeared only after tapping "Analyze now".
+ *
+ * The fix is not to let a background job preempt a visible reply. It is to stop
+ * throwing the work away: a starved auto-run waits for the session to go idle
+ * and tries again, a bounded number of times. Newer messages for the same
+ * conversation supersede an older pending run, and a manual analysis cancels it
+ * outright.
+ */
+const RETRY_DELAY_MS = 1500;
+const MAX_RETRY_ATTEMPTS = 20;
+type PendingExtraction = {
+  messages: Message[];
+  opts: { consentToken?: string };
+  attempts: number;
+  timer: ReturnType<typeof setTimeout>;
+};
+const pendingExtractions = new Map<string, PendingExtraction>();
+
+function cancelPending(conversationId: string): void {
+  const pending = pendingExtractions.get(conversationId);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pendingExtractions.delete(conversationId);
+}
+
+function deferExtraction(
+  messages: Message[],
+  conversationId: string,
+  opts: { consentToken?: string },
+  attempts: number,
+): void {
+  if (attempts >= MAX_RETRY_ATTEMPTS) return;
+  const timer = setTimeout(() => {
+    pendingExtractions.delete(conversationId);
+    void attemptAutoExtraction(messages, conversationId, opts, attempts + 1);
+  }, RETRY_DELAY_MS);
+  pendingExtractions.set(conversationId, { messages, opts, attempts, timer });
+}
+
+async function attemptAutoExtraction(
+  messages: Message[],
+  conversationId: string,
+  opts: { consentToken?: string },
+  attempts = 0,
+): Promise<number> {
+  cancelPending(conversationId);
+  if (Llama.isBusy()) {
+    deferExtraction(messages, conversationId, opts, attempts);
+    return 0;
+  }
+  const learned = await runExtraction(messages, conversationId, opts);
+  // Nothing learned while the session is busy means this run was drained by a
+  // reply that started underneath it, not that the conversation held no facts.
+  if (learned === 0 && Llama.isBusy()) {
+    deferExtraction(messages, conversationId, opts, attempts);
+  }
+  return learned;
+}
 
 // Don't even run inference on trivial exchanges (greetings, one-word replies).
 // This is what stops the brain "fetching on every message" — a plain "hi" never
@@ -402,9 +464,10 @@ function deletionAuthorityFor(entry: ValidEntry) {
  * messages, or it is dropped. Assistant text can never ground a fact, so
  * hallucinations cannot become memories no matter what the model outputs.
  *
- * Best-effort. Auto-runs fire-and-forget after each reply (they yield the shared
- * context if it is busy). Pass `{ force: true }` for a manual "Analyze now" — it
- * preempts any in-flight best-effort completion so it never silently no-ops.
+ * Best-effort. Auto-runs fire-and-forget after each reply; they yield the shared
+ * context if it is busy and retry once it is idle rather than dropping the work
+ * (see attemptAutoExtraction). Pass `{ force: true }` for a manual "Analyze now"
+ * — it preempts any in-flight best-effort completion so it never silently no-ops.
  * No-ops when the Second Brain is disabled, the exchange is trivial, or no model
  * is loaded.
  */
@@ -560,7 +623,11 @@ export function extractFromConversation(
   conversationId: string,
   opts: { force?: boolean; consentToken?: string } = {},
 ): Promise<number> {
-  if (!opts.force) return runExtraction(messages, conversationId, opts);
+  if (!opts.force) return attemptAutoExtraction(messages, conversationId, opts);
+
+  // A manual analysis supersedes anything waiting for an idle session: it
+  // preempts the shared context and covers the same conversation.
+  cancelPending(conversationId);
 
   const active = manualExtractions.get(conversationId);
   if (active) return active;
