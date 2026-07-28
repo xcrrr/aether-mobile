@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { Redirect, router, useFocusEffect } from 'expo-router';
 import { Button } from '@/components/ds/Button';
 import { Logo } from '@/components/ds/Logo';
 import { ProgressBar } from '@/components/common/ProgressBar';
@@ -34,27 +34,26 @@ export default function MainIndex() {
     };
   }, [hydrate, reattachDownloads]);
 
-  // Index is the drawer's initial route, so it stays mounted and every in-app
-  // back action returns here. Re-run the forward-to-chat redirect on every focus
-  // (not once on mount) so landing back on this route never leaves a blank screen.
+  // Index is the drawer's initial route, so every back action — including the
+  // system gesture out of Settings or Core — lands here. Returning to an existing
+  // chat is resolved during render below, not in an effect: an effect leaves one
+  // painted frame of empty screen first, which is the gray screen users hit on
+  // back. Only the case that has no chat to return to needs async work.
+  const existingChatId = current?.id ?? index.find((meta) => installed[meta.modelId])?.id;
+  const needsNewChat = hydrated && modelReady && !!activeModelId && !existingChatId;
+
   useFocusEffect(
     useCallback(() => {
-      if (!hydrated || !modelReady || !activeModelId) return;
+      if (!needsNewChat || !activeModelId) return;
       let cancelled = false;
       void (async () => {
-        const existing = current?.id ?? index.find((meta) => installed[meta.modelId])?.id;
-        if (cancelled) return;
-        if (existing) {
-          router.replace(`/(main)/chat/${existing}`);
-          return;
-        }
         const id = await newChat(activeModelId);
         if (!cancelled) router.replace(`/(main)/chat/${id}`);
       })();
       return () => {
         cancelled = true;
       };
-    }, [activeModelId, current?.id, hydrated, index, installed, modelReady, newChat]),
+    }, [activeModelId, needsNewChat, newChat]),
   );
 
   const start = async () => {
@@ -69,7 +68,20 @@ export default function MainIndex() {
   }, [a]);
   const enter = { opacity: a, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] };
 
-  if (!hydrated || modelReady) return <View style={styles.c} />;
+  // Synchronous hand-off: back-navigation never paints an empty screen.
+  if (hydrated && modelReady && existingChatId) {
+    return <Redirect href={`/(main)/chat/${existingChatId}`} />;
+  }
+
+  // Still hydrating, or a chat is being created — show the brand, never a bare
+  // rectangle. This is the state the old blank <View> was silently rendering.
+  if (!hydrated || modelReady) {
+    return (
+      <View style={styles.c}>
+        <Logo size={56} tone={isDark ? 'white' : 'violet'} style={styles.logo} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.c}>
