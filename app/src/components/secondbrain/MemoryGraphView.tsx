@@ -168,7 +168,7 @@ export const MemoryGraphView = forwardRef<MemoryGraphViewHandle, Props>(function
 
       {!error && ready && isEmpty && (
         <View style={styles.overlay} pointerEvents="none">
-          <Text style={styles.emptyTitle}>Your Second Brain will grow as Aether learns what matters to you.</Text>
+          <Text style={styles.emptyTitle}>Core will grow as Aether learns what matters to you.</Text>
           <Text style={styles.emptyHint}>Useful memories, projects, people, and ideas will appear here as connected context.</Text>
         </View>
       )}

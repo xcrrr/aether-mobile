@@ -9,8 +9,8 @@ import { useColors } from '@/theme/useColors';
 const VISIBLE_MS = 6500;
 
 /**
- * Floating, tappable pill shown after a reply when the Second Brain just learned
- * something: "N saved to your Second Brain ›". Tapping deep-links into the 3D
+ * Floating, tappable pill shown after a reply when Core just learned
+ * something: "N memories saved to Core". Tapping deep-links into the 3D
  * graph, where the new facts glow. Auto-dismisses after a few seconds. Re-fires
  * its entrance animation on every new save (tracked via `nonce`).
  */

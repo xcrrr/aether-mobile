@@ -359,7 +359,7 @@ export default function SecondBrainScreen() {
   const confirmDelete = (entry: MemoryEntry) => {
     Alert.alert(
       'Delete this memory?',
-      `"${entry.value}" will be removed from your Second Brain, along with its connections.`,
+      `"${entry.value}" will be removed from Core, along with its connections.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -404,7 +404,7 @@ export default function SecondBrainScreen() {
           <ChevronLeft size={24} color={OVER_TEXT} strokeWidth={1.8} />
         </PressableScale>
         <View style={styles.titleWrap} pointerEvents="none">
-          <Text style={styles.title}>Second Brain</Text>
+          <Text style={styles.title}>Core</Text>
           <Text style={styles.subtitle}>Your connected context</Text>
         </View>
         <PressableScale onPress={() => setSearchOpen(true)} hitSlop={10} style={styles.iconBtn}>
