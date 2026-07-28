@@ -42,7 +42,18 @@ export function createExecutors(): Record<string, ToolExecutor> {
   return {
     web_research: async (args, _ctx, onProgress) => {
       const { runResearch } = require('@/webresearch/ResearchEngine') as typeof import('@/webresearch/ResearchEngine');
-      const result = await runResearch(args.query, onProgress, []);
+      // The agent's progress channel is a plain status line, so the structured
+      // research progress is flattened into one here.
+      const result = await runResearch(
+        args.query,
+        (p) => onProgress(
+          p.phase === 'searching' ? 'Searching the web'
+            : p.phase === 'reading' ? `Reading sources ${p.read}/${p.target}`
+              : p.phase === 'writing' ? `Writing answer from ${p.target} source(s)`
+                : 'Finishing up',
+        ),
+        [],
+      );
       if (!result.sources.length) {
         return { ok: false, summary: 'no usable sources found', detail: '' };
       }

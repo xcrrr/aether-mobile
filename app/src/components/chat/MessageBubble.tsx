@@ -9,6 +9,9 @@ import { extractQuestion, finalizeAssistantText, segmentMessage, AetherQuestion 
 import { useChatStore } from '@/state/useChatStore';
 import { useAgentStore } from '@/state/useAgentStore';
 import { AgentLiveCard, AgentReceiptCard } from './AgentTaskCard';
+import { ResearchLiveCard, ResearchSources } from './ResearchCard';
+import { useResearchStore } from '@/state/useResearchStore';
+import { formatResearchMarkdown } from '@/webresearch/format';
 import { QuestionCard } from './QuestionCard';
 import { CopyBlock } from './CopyBlock';
 import { TypingIndicator } from './TypingIndicator';
@@ -126,7 +129,13 @@ export function MessageBubble({ message, isLast = false, onOptionSelect }: {
   const isGenerating = useChatStore((s) => s.isGenerating);
   const isUser = message.role === 'user';
   const stripped = stripSpecialTokens(message.content);
-  const copy = useCopy(stripped);
+  // Copying a research answer must carry its sources; on screen they are cards,
+  // so the numbered list only exists on the clipboard.
+  const copy = useCopy(
+    message.research
+      ? formatResearchMarkdown({ answer: stripped, sources: message.research.sources })
+      : stripped,
+  );
 
   const hasAttachments = !!message.attachments?.length;
 
@@ -156,6 +165,13 @@ export function MessageBubble({ message, isLast = false, onOptionSelect }: {
   // progress, approvals, and questions in place of the typing indicator.
   const liveTask = useAgentStore((s) => s.liveTask);
   const convoId = useChatStore((s) => s.current?.id ?? '');
+  const researchConvo = useResearchStore((s) => s.conversationId);
+
+  // Research in flight owns this message: the card shows which pages are being
+  // opened. Once the answer starts streaming it takes over the body, and the
+  // card stays above it so the sources remain visible while it writes.
+  const liveResearch = pending && !!researchConvo && researchConvo === convoId;
+
   if (pending && liveTask && liveTask.conversationId === convoId) {
     return (
       <View style={styles.assistantRow}>
@@ -169,7 +185,16 @@ export function MessageBubble({ message, isLast = false, onOptionSelect }: {
   return (
     <View style={styles.assistantRow}>
       <Text style={styles.name}>Aether</Text>
-      {pending && !view.prose && (empty || view.holding) ? (
+      {liveResearch ? (
+        <View>
+          <ResearchLiveCard />
+          {!!view.prose && (
+            <View style={styles.researchProse}>
+              <MarkdownView content={view.prose} />
+            </View>
+          )}
+        </View>
+      ) : pending && !view.prose && (empty || view.holding) ? (
         <TypingIndicator />
       ) : empty && !view.holding ? (
         <View>
@@ -210,6 +235,7 @@ export function MessageBubble({ message, isLast = false, onOptionSelect }: {
             />
           )}
           {message.stopped && <Text style={styles.stopped}>(stopped)</Text>}
+          {message.research && <ResearchSources research={message.research} />}
           {message.agentReceipt && message.agentTaskId && (
             <AgentReceiptCard receipt={message.agentReceipt} taskId={message.agentTaskId} />
           )}
@@ -220,6 +246,7 @@ export function MessageBubble({ message, isLast = false, onOptionSelect }: {
   );
 }
 const makeStyles = (c: Palette) => StyleSheet.create({
+  researchProse: { marginTop: spacing.md },
   row: { marginBottom: spacing.xl, flexDirection: 'row' },
   right: { justifyContent: 'flex-end' },
   // flex:1 gives the column a definite width so the bubble's `maxWidth` resolves.

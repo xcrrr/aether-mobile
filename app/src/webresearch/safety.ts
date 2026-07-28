@@ -10,10 +10,26 @@
 /** Hard caps — keep memory and prompt size bounded on untrusted input. */
 export const MAX_HTML_BYTES = 1_500_000;
 export const MAX_CONTENT_CHARS = 2000;
+/** Search endpoint: one request, fail fast — a slow search stalls everything. */
 export const FETCH_TIMEOUT_MS = 5000;
+/**
+ * Page reads get longer than the search does. Sources are fetched in parallel so
+ * the wall-clock cost is one timeout, not one per source, and five seconds was
+ * dropping slow-but-good pages on mobile data as if they were dead.
+ */
+export const PAGE_TIMEOUT_MS = 9000;
 // Fewer sources -> shorter prompt -> much faster prefill on a CPU model. Three
 // good sources are plenty for a grounded answer and keep research snappy.
 export const MAX_SOURCES = 3;
+/**
+ * How many search results to keep as candidates. `MAX_SOURCES` is the number of
+ * sources DELIVERED, not the number tried: fetches fail routinely (bot blocks,
+ * timeouts, JavaScript-only pages), and without a reserve to draw on every
+ * failure permanently cost the answer a source. Only the sources that actually
+ * succeed reach the prompt, so this costs network time on failure, never model
+ * time.
+ */
+export const SEARCH_CANDIDATES = 8;
 
 /** A plain desktop UA so sites serve their normal HTML (no app fingerprint). */
 export const USER_AGENT =

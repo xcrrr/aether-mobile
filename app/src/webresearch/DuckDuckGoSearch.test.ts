@@ -64,7 +64,8 @@ describe('searchDuckDuckGo', () => {
     const fetchMock = jest.fn(async (_url: string, _opts?: unknown) => ({ ok: true, text: async () => PAGE }));
     global.fetch = fetchMock as unknown as typeof fetch;
 
-    const results = await searchDuckDuckGo('cats', 5);
+    const { results, status } = await searchDuckDuckGo('cats', 5);
+    expect(status).toBe('ok');
 
     const [url, opts] = fetchMock.mock.calls[0];
     expect(url).toContain('https://html.duckduckgo.com/html/?q=cats');
@@ -72,9 +73,28 @@ describe('searchDuckDuckGo', () => {
     expect(results[0].url).toBe('https://en.wikipedia.org/wiki/Cat');
   });
 
-  it('returns [] when the request fails (never throws)', async () => {
+  it('reports offline when the request throws (never throws itself)', async () => {
     global.fetch = (jest.fn(async () => { throw new Error('network down'); })) as unknown as typeof fetch;
-    await expect(searchDuckDuckGo('cats', 5)).resolves.toEqual([]);
+    await expect(searchDuckDuckGo('cats', 5)).resolves.toEqual({ results: [], status: 'offline' });
+  });
+
+  it('reports blocked — not no-results — when the endpoint refuses', async () => {
+    global.fetch = (jest.fn(async () => ({ ok: false, status: 429, text: async () => '' }))) as unknown as typeof fetch;
+    await expect(searchDuckDuckGo('cats', 5)).resolves.toEqual({ results: [], status: 'blocked' });
+  });
+
+  it('retries an empty result set once with a simplified query', async () => {
+    const fetchMock = jest.fn(async (url: string) => ({
+      ok: true,
+      text: async () => (String(url).includes('%3F') ? '' : PAGE),
+    }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const res = await searchDuckDuckGo('what exactly do cats eat, really?', 5);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(res.status).toBe('ok');
+    expect(res.results[0].url).toBe('https://en.wikipedia.org/wiki/Cat');
   });
 
   it('url-encodes the query', async () => {

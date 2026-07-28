@@ -6,7 +6,7 @@
  * `/l/?uddg=<encoded url>` redirect — we unwrap it to the real destination and
  * pass it through the SSRF/scheme safety gate before keeping it.
  */
-import { SearchResult } from './types';
+import { SearchResponse, SearchResult } from './types';
 import { decodeEntities } from './html';
 import { isSafeFetchUrl, sanitizeModelText, USER_AGENT, FETCH_TIMEOUT_MS } from './safety';
 
@@ -72,10 +72,21 @@ export function parseSearchHtml(html: string, maxResults: number): SearchResult[
 }
 
 /**
- * Search DuckDuckGo. Never throws — returns [] on any network/parse failure so
- * the research flow degrades gracefully.
+ * A shorter, plainer form of a query, used for one retry when the first attempt
+ * finds nothing. Long natural-language questions and quoted phrases are the most
+ * common reason DuckDuckGo returns an empty result list.
  */
-export async function searchDuckDuckGo(query: string, maxResults = 5): Promise<SearchResult[]> {
+export function simplifyQuery(query: string): string {
+  const words = query
+    .replace(/["'“”‘’]/g, ' ')
+    .replace(/[?!.,;:]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.slice(0, 10).join(' ');
+}
+
+/** One search request. Never throws; the status says why the list is empty. */
+async function searchOnce(query: string, maxResults: number): Promise<SearchResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -84,12 +95,30 @@ export async function searchDuckDuckGo(query: string, maxResults = 5): Promise<S
       headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
       signal: controller.signal,
     });
-    if (!res.ok) return [];
+    // A non-OK status is the endpoint refusing us (rate limit, bot challenge) —
+    // never the user's phrasing, and it must not be reported as one.
+    if (!res.ok) return { results: [], status: 'blocked' };
     const body = await res.text();
-    return parseSearchHtml(body, maxResults);
+    const results = parseSearchHtml(body, maxResults);
+    return { results, status: results.length ? 'ok' : 'no-results' };
   } catch {
-    return [];
+    return { results: [], status: 'offline' };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Search DuckDuckGo. Never throws. An empty result list from a working endpoint
+ * is retried once with a simplified query before it is reported as no-results,
+ * because a long conversational question is the usual cause.
+ */
+export async function searchDuckDuckGo(query: string, maxResults = 5): Promise<SearchResponse> {
+  const first = await searchOnce(query, maxResults);
+  if (first.status !== 'no-results') return first;
+
+  const simplified = simplifyQuery(query);
+  if (!simplified || simplified === query.trim()) return first;
+  const retry = await searchOnce(simplified, maxResults);
+  return retry.status === 'ok' ? retry : first;
 }

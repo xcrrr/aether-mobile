@@ -9,7 +9,7 @@
 import { FetchedSource } from './types';
 import { cleanHtml, extractTitle } from './html';
 import {
-  isSafeFetchUrl, clampChars, MAX_CONTENT_CHARS, MAX_HTML_BYTES, FETCH_TIMEOUT_MS, USER_AGENT,
+  isSafeFetchUrl, clampChars, MAX_CONTENT_CHARS, MAX_HTML_BYTES, PAGE_TIMEOUT_MS, USER_AGENT,
 } from './safety';
 
 function empty(url: string): FetchedSource {
@@ -21,7 +21,7 @@ export async function fetchAndClean(url: string): Promise<FetchedSource> {
   if (!isSafeFetchUrl(url)) return empty(url);
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: 'GET',

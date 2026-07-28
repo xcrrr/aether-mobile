@@ -52,7 +52,15 @@ export interface Message {
   /** Structured research handoff, set only on a Research-mode reply. Lets a later
    *  Task follow-up in the same conversation ("make a document about why he died")
    *  see what was actually found instead of re-deriving it from rendered markdown. */
-  research?: { query: string; answer: string; sources: { title: string; url: string }[] };
+  research?: {
+    query: string;
+    /** The standalone query actually searched, when a follow-up was rewritten. */
+    searchedQuery?: string;
+    answer: string;
+    /** `cited` is false for a source the answer never referenced; absent on
+     *  messages saved before inline citations were rendered. */
+    sources: { title: string; url: string; cited?: boolean }[];
+  };
 }
 
 export interface Conversation {

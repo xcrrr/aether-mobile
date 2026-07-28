@@ -7,7 +7,7 @@ import { FileAttachment } from '@/types';
 import { ExtractionQueue } from '@/secondbrain/ExtractionQueue';
 import { useBrainNotice } from '@/state/useBrainNotice';
 import { AppState } from 'react-native';
-import { formatResearchMarkdown } from '@/webresearch/format';
+import { useResearchStore } from '@/state/useResearchStore';
 
 export interface RAMWarning { available: number; required: number; }
 
@@ -164,7 +164,7 @@ export function useInference(modelId: string | undefined) {
     // Bound history to the engine's actual configured window (MAX_TOKENS) — without
     // this, a long-running chat sends its entire unbounded transcript every turn and
     // silently exceeds the native context once it grows past it.
-    const trimmed = trimToContext(messages, Llama.MAX_TOKENS);
+    const trimmed = trimToContext(messages, Llama.MAX_TOKENS, system.length);
     await Llama.generate(
       system,
       trimmed,
@@ -194,27 +194,40 @@ export function useInference(modelId: string | undefined) {
     // Capture prior turns BEFORE adding the new query so research can resolve
     // follow-up references and stay on-topic.
     const history = useChatStore.getState().current?.messages ?? [];
+    const conversationId = useChatStore.getState().current?.id ?? '';
     await chat.appendUser(text);
     chat.startAssistant();
     const setContent = useChatStore.getState().setAssistantContent;
+    const researchStore = useResearchStore.getState();
+    researchStore.start(conversationId);
     try {
       const { runResearch } = require('@/webresearch/ResearchEngine') as typeof import('@/webresearch/ResearchEngine');
       const result = await runResearch(
         text,
-        (status) => setContent(`_${status}_`),
+        // Progress is structured state for the live card, never text written
+        // into the message body — the body is the answer and nothing else.
+        (progress) => useResearchStore.getState().set(progress),
         history,
         (answer) => setContent(answer),
       );
+      const cited = new Set(result.citations.map((c) => c.index));
       useChatStore.getState().setAssistantResearch({
         query: result.query,
+        searchedQuery: result.searchedQuery,
         answer: result.answer,
-        sources: result.sources.map((s) => ({ title: s.title || s.url, url: s.url })),
+        sources: result.sources.map((s, i) => ({
+          title: s.title || s.url,
+          url: s.url,
+          cited: cited.size === 0 ? true : cited.has(i + 1),
+        })),
       });
-      setContent(formatResearchMarkdown(result));
+      // The answer alone. Sources render as cards from `Message.research`.
+      setContent(result.answer);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'research failed';
-      setContent(`_Research could not finish. Check the connection and try again._\n\n_${msg}_`);
+      setContent(`Research could not finish. Check the connection and try again.\n\n_${msg}_`);
     } finally {
+      useResearchStore.getState().clear();
       await useChatStore.getState().finishAssistant();
     }
   }, [chat]);

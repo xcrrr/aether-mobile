@@ -6,13 +6,21 @@
  * Second Brain uses, so research can never run a completion concurrently with a
  * chat reply (the single-context concurrency invariant holds).
  */
-import { Citation, FetchedSource, ResearchResult, SearchResult } from './types';
+import {
+  Citation,
+  FetchedSource,
+  ProgressSource,
+  ResearchProgress,
+  ResearchResult,
+  SearchResult,
+  SearchStatus,
+} from './types';
 import { Message } from '@/types';
 import { searchDuckDuckGo } from './DuckDuckGoSearch';
 import { fetchAndClean } from './ContentFetcher';
 import { buildGemmaPrompt, stripSpecialTokens } from '@/llm/prompt';
 import * as Llama from '@/llm/engine';
-import { sanitizeModelText, clampChars, MAX_SOURCES } from './safety';
+import { sanitizeModelText, clampChars, MAX_SOURCES, SEARCH_CANDIDATES } from './safety';
 
 /** Recent turns folded into research so follow-ups keep their context. */
 const HISTORY_TURNS = 6;
@@ -26,10 +34,19 @@ function buildTranscript(history: Message[]): string {
     .join('\n');
 }
 
+/** A rewritten query the model clearly did not follow the instruction for. */
+function isUsableQuery(rewritten: string, original: string): boolean {
+  if (rewritten.length < 2 || rewritten.length > 200) return false;
+  // Small models sometimes answer or comment instead of rewriting.
+  if (/^(sure|okay|ok|here|i |the user|as an ai)\b/i.test(rewritten)) return false;
+  if (rewritten.toLowerCase() === original.trim().toLowerCase()) return false;
+  return true;
+}
+
 /**
  * Turn a possibly context-dependent question ("are you sure he died?") into a
  * standalone web search query using the conversation. Falls back to the raw
- * query if the model is unavailable or returns nothing useful.
+ * query if the model is unavailable or returns something unusable.
  */
 export async function contextualizeQuery(query: string, history: Message[]): Promise<string> {
   const transcript = buildTranscript(history);
@@ -48,7 +65,7 @@ export async function contextualizeQuery(query: string, history: Message[]): Pro
     .split('\n')[0]
     .replace(/^["']+|["']+$/g, '')
     .trim();
-  return rewritten || query;
+  return isUsableQuery(rewritten, query) ? rewritten : query;
 }
 
 // Capping the answer length is the single biggest research speed-up: token
@@ -62,9 +79,23 @@ const ANSWER_TEMPERATURE = 0.3;
  *  and shortens prefill. */
 const PROMPT_CONTENT_CHARS = 1100;
 
-const NO_SOURCES_MSG =
-  "I couldn't find usable sources for that query. Try rephrasing it, or check " +
-  'your internet connection.';
+const MSG_NO_RESULTS =
+  "I searched the web but nothing came back for that. Try naming the specific thing " +
+  "you're after, or a different wording.";
+const MSG_BLOCKED =
+  'The search engine turned the request away this time — that is on its end, not your ' +
+  'question. Waiting a moment and asking again usually works.';
+const MSG_OFFLINE =
+  "I couldn't reach the web. Check the connection and try again.";
+const MSG_ALL_DEAD =
+  'I found search results for that, but none of the pages would open — they were ' +
+  'unreachable, blocked, or had nothing readable on them.';
+
+function noSourcesMessage(status: SearchStatus, hadCandidates: boolean): string {
+  if (status === 'offline') return MSG_OFFLINE;
+  if (status === 'blocked') return MSG_BLOCKED;
+  return hadCandidates ? MSG_ALL_DEAD : MSG_NO_RESULTS;
+}
 
 /** Build the grounded-answer prompt. All web-derived text is sanitised first. */
 export function buildResearchPrompt(query: string, sources: FetchedSource[], history: Message[] = []): string {
@@ -86,9 +117,11 @@ export function buildResearchPrompt(query: string, sources: FetchedSource[], his
     'You are a research assistant. Using ONLY the sources below, write a clear, ' +
     'well-structured answer to the question. Format it with markdown: use ## ' +
     'headings for sections, **bold** for key terms, and bullet lists where ' +
-    'helpful. Do NOT write citation numbers like [1] in your text. Lead with the ' +
-    'direct answer, then add detail. If the sources do not contain the answer, ' +
-    'say so plainly.\n\n' +
+    'helpful. Lead with the direct answer, then add detail. If the sources do not ' +
+    'contain the answer, say so plainly.\n\n' +
+    'Cite your sources inline. Put the source number in square brackets at the end ' +
+    `of each sentence it supports, like [1] or [2]. Only use numbers 1 to ${sources.length}. ` +
+    'Never cite a source you did not use, and never invent a number.\n\n' +
     contextBlock +
     `Question: ${sanitizeModelText(query)}\n\n` +
     `Sources:\n${blocks}\n\n` +
@@ -98,10 +131,17 @@ export function buildResearchPrompt(query: string, sources: FetchedSource[], his
   return buildGemmaPrompt('', [{ id: 'research', role: 'user', content: instruction, createdAt: 0 }]);
 }
 
-/** Remove inline [n] / [n, m] citation markers and tidy the surrounding spacing. */
-export function stripCitationMarkers(text: string): string {
+/**
+ * Remove citation markers that point at a source that does not exist. The model
+ * is asked to cite 1..n and mostly does, but an invented [7] against three
+ * sources would render as a reference the user cannot follow.
+ */
+export function dropUnknownCitations(text: string, sourceCount: number): string {
   return text
-    .replace(/\s*\[\d+(?:\s*,\s*\d+)*\]/g, '')
+    .replace(/\[(\d+)\]/g, (marker, n: string) => {
+      const index = Number(n);
+      return index >= 1 && index <= sourceCount ? marker : '';
+    })
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/ +([.,;:!?])/g, '$1');
 }
@@ -120,66 +160,130 @@ export function extractCitations(answer: string, sources: FetchedSource[]): Cita
     .map((index) => ({ index, url: sources[index - 1].url, title: sources[index - 1].title }));
 }
 
+/** How many candidates to read at once. One more than needed absorbs the usual
+ *  failure rate without waiting for a second round trip. */
+const WAVE = MAX_SOURCES + 2;
+
+/**
+ * Read candidates until `target` of them yield real content.
+ *
+ * `MAX_SOURCES` is a delivery target, not a fetch count. Fetching exactly three
+ * and filtering the failures — which is what this used to do — meant any dead
+ * page permanently cost the answer a source, so a routine bot-block produced a
+ * two-source or one-source answer with no attempt to recover.
+ */
+async function gatherSources(
+  candidates: SearchResult[],
+  target: number,
+  onSource: (source: ProgressSource) => void,
+): Promise<FetchedSource[]> {
+  const kept: FetchedSource[] = [];
+  for (let i = 0; i < candidates.length && kept.length < target;) {
+    const wave = candidates.slice(i, i + WAVE);
+    i += wave.length;
+    for (const hit of wave) onSource({ url: hit.url, title: hit.title, state: 'reading' });
+    const results = await Promise.all(
+      wave.map(async (hit) => {
+        const fetched = await fetchAndClean(hit.url);
+        const alive = fetched.content !== '';
+        onSource({
+          url: hit.url,
+          title: fetched.title || hit.title,
+          state: alive ? 'read' : 'failed',
+        });
+        return alive ? { ...fetched, title: fetched.title || hit.title } : null;
+      }),
+    );
+    for (const r of results) {
+      if (r && kept.length < target) kept.push(r);
+    }
+  }
+  return kept;
+}
+
 export async function runResearch(
   query: string,
-  onProgress: (status: string) => void,
+  onProgress: (progress: ResearchProgress) => void,
   history: Message[] = [],
   onAnswer?: (text: string) => void,
 ): Promise<ResearchResult> {
   // Resolve follow-ups ("are you sure he died?") into a standalone query so the
   // web search actually finds the right thing.
-  const searchQuery = history.length ? await contextualizeQuery(query, history) : query;
+  const searchedQuery = history.length ? await contextualizeQuery(query, history) : query;
 
-  onProgress('Searching the web');
-  const hits: SearchResult[] = await searchDuckDuckGo(searchQuery, MAX_SOURCES);
+  const progress: ResearchProgress = {
+    phase: 'searching',
+    searchedQuery,
+    sources: [],
+    read: 0,
+    target: MAX_SOURCES,
+  };
+  const emit = () => onProgress({ ...progress, sources: [...progress.sources] });
+  emit();
 
-  // Report each source the moment its fetch+clean actually resolves, so the
-  // The status counts up in real time. The numbers are real reads, never
-  // faked or pre-incremented.
-  const total = hits.length;
-  let read = 0;
-  onProgress(total ? `Reading sources 0/${total}` : 'No sources found');
-  const fetched = await Promise.all(
-    hits.map((h) =>
-      fetchAndClean(h.url).then((r) => {
-        read += 1;
-        onProgress(`Reading sources ${read}/${total}`);
-        return r;
-      }),
-    ),
-  );
-  const sources = fetched.filter((s) => s.content !== '');
+  const { results: hits, status } = await searchDuckDuckGo(searchedQuery, SEARCH_CANDIDATES);
+
+  progress.phase = 'reading';
+  emit();
+
+  // Every source is reported the moment its own fetch resolves, so the UI shows
+  // real reads in real time. Nothing is pre-incremented or faked.
+  const sources = await gatherSources(hits, MAX_SOURCES, (source) => {
+    const at = progress.sources.findIndex((s) => s.url === source.url);
+    if (at >= 0) progress.sources[at] = source;
+    else progress.sources.push(source);
+    progress.read = progress.sources.filter((s) => s.state === 'read').length;
+    emit();
+  });
 
   if (sources.length === 0) {
-    return { query, sources: [], answer: NO_SOURCES_MSG, citations: [] };
+    progress.phase = 'done';
+    emit();
+    return {
+      query,
+      searchedQuery,
+      sources: [],
+      answer: noSourcesMessage(status, hits.length > 0),
+      citations: [],
+      searchStatus: status,
+    };
   }
 
-  onProgress(`Writing answer from ${sources.length} source${sources.length === 1 ? '' : 's'}`);
+  progress.phase = 'writing';
+  progress.target = sources.length;
+  emit();
+
   const prompt = buildResearchPrompt(query, sources, history);
   // Stream the answer into the bubble as it's written so the user sees progress
-  // immediately instead of a blank wait. The final formatted markdown (citations
-  // stripped, Sources list appended) replaces it once generation completes.
+  // immediately instead of a blank wait.
   let streamed = '';
   const raw = await Llama.extract(prompt, {
     maxTokens: ANSWER_MAX_TOKENS,
     temperature: ANSWER_TEMPERATURE,
     preempt: true,
-    onToken: onAnswer ? (t) => { streamed += t; onAnswer(stripSpecialTokens(streamed).trim()); } : undefined,
+    // Unknown markers are dropped while streaming too, so a bad [9] never
+    // appears and then silently vanishes when generation finishes.
+    onToken: onAnswer
+      ? (t) => {
+        streamed += t;
+        onAnswer(dropUnknownCitations(stripSpecialTokens(streamed).trim(), sources.length));
+      }
+      : undefined,
     label: 'research-answer',
   });
+
+  progress.phase = 'done';
+  emit();
 
   if (!raw) {
     // Model unavailable/busy; still return the sources we gathered.
     const fallback =
       "I gathered sources but couldn't generate an answer (the model is busy or " +
       'not loaded). The sources are listed below.';
-    return { query, sources, answer: fallback, citations: [] };
+    return { query, searchedQuery, sources, answer: fallback, citations: [], searchStatus: status };
   }
 
-  const clean = stripSpecialTokens(raw).trim();
+  const clean = dropUnknownCitations(stripSpecialTokens(raw).trim(), sources.length);
   const citations = extractCitations(clean, sources);
-  // Strip the inline [n] markers from what the user sees; the numbered Sources
-  // list below the answer already maps everything.
-  const answer = stripCitationMarkers(clean);
-  return { query, sources, answer, citations };
+  return { query, searchedQuery, sources, answer: clean, citations, searchStatus: status };
 }

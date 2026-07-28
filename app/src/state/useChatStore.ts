@@ -31,7 +31,7 @@ interface ChatState {
   /** Record which Core notes were provided as context for the in-progress reply. */
   setAssistantRecall: (items: { key: string; why: string }[]) => void;
   /** Record the structured research handoff for the in-progress reply (Research mode). */
-  setAssistantResearch: (research: { query: string; answer: string; sources: { title: string; url: string }[] }) => void;
+  setAssistantResearch: (research: NonNullable<Message['research']>) => void;
   /** Mark the in-progress assistant message as an agent task result. */
   setAssistantAgent: (taskId: string, receipt?: AgentReceipt) => void;
   finishAssistant: () => Promise<void>;
