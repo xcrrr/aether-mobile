@@ -102,6 +102,36 @@ route metadata sets `noindex, nofollow`; a new `app/robots.ts` disallows it; and
 build without `NEXT_PUBLIC_ENABLE_DEMO_PREVIEW=1` calls `notFound()`. The `TaskDemo` component was
 deliberately left in place — Codex uses that page for inspection.
 
+## Core auto-extraction no longer throws starved work away
+
+This was deferred twice as "an architecture change to how the single LiteRT session
+arbitrates". That framing was right about one fix and wrong about the problem.
+
+Auto-extraction calls `Llama.extract` with `preempt: false`, and `extract` returns `null` the
+instant `activeCompletion` is set. A user who sends the next message quickly both starves the
+run that had not started and drains the one that had, because `generate()` calls
+`drainActive()`. Either way the extraction was discarded with no retry and no record, which is
+why memories only reliably appeared after tapping "Analyze now".
+
+Letting a background job preempt a visible reply *would* be the architecture change, and it is
+still the wrong trade. But not dropping the work is a separate, much smaller thing: a starved
+auto-run now waits for the session to go idle and tries again, bounded at 20 attempts spaced
+1.5s. Newer messages for the same conversation supersede an older pending run, and a manual
+analysis cancels it outright, so the two paths cannot race or double-apply.
+
+The one subtlety worth remembering: `runExtraction` returns 0 for several unrelated reasons, so
+"retry when it returned nothing" would loop on genuinely empty conversations. The discriminator
+is whether the session is busy at the moment it returned — busy means something drained it,
+idle means the conversation really held no facts.
+
+Verified with a throwaway spec covering all four behaviours (retry on starvation, bounded
+give-up with no leaked timers, no retry on a genuine empty result, manual analysis cancelling a
+pending run). Deleted afterwards under the standing no-proactive-tests rule. One existing mock
+in `MemoryExtractor.test.ts` gained `isBusy` because the module now calls it.
+
+This is still not device-verified, and the timing constants are guesses that a real device
+should correct.
+
 ## Documentation corrected against the code
 
 `app/CLAUDE.md` had drifted. Its build command exported a `JAVA_HOME` under `/home/xcrr1`, a user
