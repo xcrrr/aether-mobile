@@ -42,6 +42,45 @@ function withDeduplicatePermissions(config) {
 }
 
 /**
+ * Permissions Aether does not use, stripped from the merged manifest.
+ *
+ * All three arrive through library manifest merge, never from our own config,
+ * so deleting them from the generated manifest is not enough — the merger puts
+ * them back. `tools:node="remove"` is the only durable removal.
+ *
+ *  - READ/WRITE_EXTERNAL_STORAGE: minSdkVersion is 29, so WRITE is a no-op
+ *    under scoped storage and READ is unnecessary — models download to
+ *    documentDirectory (app-private) and attachments arrive as SAF content
+ *    URIs from the pickers.
+ *  - SYSTEM_ALERT_WINDOW: React Native's dev-overlay permission. Nothing in
+ *    the app draws over other apps, and it reads as alarming in the permission
+ *    list of an app whose whole claim is privacy.
+ */
+const STRIPPED_PERMISSIONS = [
+  'android.permission.READ_EXTERNAL_STORAGE',
+  'android.permission.WRITE_EXTERNAL_STORAGE',
+  'android.permission.SYSTEM_ALERT_WINDOW',
+];
+
+function withStrippedPermissions(config) {
+  return withAndroidManifest(config, (cfg) => {
+    const manifest = cfg.modResults.manifest;
+    manifest.$ = manifest.$ ?? {};
+    manifest.$['xmlns:tools'] = manifest.$['xmlns:tools'] ?? 'http://schemas.android.com/tools';
+
+    const kept = (manifest['uses-permission'] ?? []).filter(
+      (p) => !STRIPPED_PERMISSIONS.includes(p.$?.['android:name']),
+    );
+    manifest['uses-permission'] = kept.concat(
+      STRIPPED_PERMISSIONS.map((name) => ({
+        $: { 'android:name': name, 'tools:node': 'remove' },
+      })),
+    );
+    return cfg;
+  });
+}
+
+/**
  * Declare the speech-recognition intent in <queries> so the on-device
  * recognizer is visible under Android 11+ package-visibility filtering.
  * Without it @react-native-voice/voice can't resolve a RecognitionService and
@@ -88,6 +127,10 @@ function withSpeechRecognitionQuery(config) {
   });
 }
 
+// withStrippedPermissions runs last so the dedup pass cannot drop the
+// tools:node="remove" markers it adds.
 module.exports = function withAetherAndroid(config) {
-  return withSpeechRecognitionQuery(withDeduplicatePermissions(withAetherGradle(config)));
+  return withStrippedPermissions(
+    withSpeechRecognitionQuery(withDeduplicatePermissions(withAetherGradle(config))),
+  );
 };

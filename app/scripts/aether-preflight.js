@@ -34,6 +34,22 @@ function skipped(detail) {
   return { status: 'SKIPPED', detail };
 }
 
+/**
+ * Known-incomplete work that must be finished before the app is distributed to
+ * anyone outside this machine, but which is expected to be outstanding while
+ * the beta is still being built. A plain run reports these and exits 0; a run
+ * with `--public` treats every one of them as a hard blocker.
+ *
+ * This distinction exists because the preflight previously reported "no
+ * blockers" for a build that was debug-signed and carried unreviewed draft
+ * legal documents. Passing preflight has to mean something.
+ */
+function blocked(detail) {
+  return { status: 'BLOCKED', detail };
+}
+
+const publicRelease = process.argv.includes('--public');
+
 function exists(rel) {
   return fs.existsSync(path.join(root, rel));
 }
@@ -116,6 +132,59 @@ check('types: strict TypeScript', () => {
     : fail(commandOutput(res).trim().split('\n').slice(-12).join('\n') || 'TypeScript command failed without output');
 });
 
+check('config: version consistency', () => {
+  const config = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8')).expo;
+  const gradle = fs.readFileSync(path.join(root, 'android', 'app', 'build.gradle'), 'utf8');
+  const gradleVersion = gradle.match(/versionName "([^"]+)"/)?.[1];
+  return config.version === gradleVersion
+    ? pass(`app.json and build.gradle agree on ${gradleVersion}`)
+    : fail(`app.json says ${config.version}, build.gradle says ${gradleVersion}`);
+});
+
+check('android: release signing', () => {
+  const gradle = fs.readFileSync(path.join(root, 'android', 'app', 'build.gradle'), 'utf8');
+  if (!gradle.includes('keystore.properties')) {
+    return fail('build.gradle no longer reads keystore.properties — release signing wiring was removed');
+  }
+  return exists('android/keystore.properties')
+    ? pass('android/keystore.properties present; release builds are release-signed')
+    : blocked('No android/keystore.properties — release APKs are DEBUG-SIGNED. See android/keystore.properties.example');
+});
+
+check('android: permission surface', () => {
+  const manifest = fs.readFileSync(
+    path.join(root, 'android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8',
+  );
+  const mustBeRemoved = ['READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'SYSTEM_ALERT_WINDOW'];
+  const granted = mustBeRemoved.filter((name) => {
+    const line = manifest.split('\n').find((l) => l.includes(`android.permission.${name}`));
+    return line && !line.includes('tools:node="remove"');
+  });
+  return granted.length
+    ? fail(`Permissions requested that Aether does not use: ${granted.join(', ')}`)
+    : pass('No unused permissions requested');
+});
+
+check('legal: documents are review-complete', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'legal', 'documents.ts'), 'utf8');
+  const drafts = (source.match(/version: '[^']*-draft[^']*'/g) ?? []).length;
+  const unreviewed = (source.match(/status: 'draft-review-required'/g) ?? []).length;
+  if (!drafts && !unreviewed) return pass('No draft legal documents remain');
+  return blocked(
+    `${drafts} document version(s) still marked draft and ${unreviewed} still status 'draft-review-required'. `
+    + 'See docs/aether-legal-review-required.md',
+  );
+});
+
+check('release: MVP scope flag', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'release', 'features.ts'), 'utf8');
+  const match = source.match(/export const TASK_UI_ENABLED = (true|false)/);
+  if (!match) return fail('TASK_UI_ENABLED not found in src/release/features.ts');
+  return match[1] === 'false'
+    ? pass('TASK_UI_ENABLED=false — Task and Library are hidden, matching the MVP scope')
+    : blocked('TASK_UI_ENABLED=true — Task is exposed, which is outside the agreed MVP scope');
+});
+
 check('android: Gradle wrapper', () => {
   return exists('android/gradlew') || exists('android/gradlew.bat')
     ? pass('Gradle wrapper present')
@@ -135,9 +204,25 @@ for (const result of results) {
 }
 
 const failed = results.filter((result) => result.status === 'FAIL');
+const pending = results.filter((result) => result.status === 'BLOCKED');
+
+if (pending.length) {
+  console.log('\nOutstanding before public distribution:');
+  for (const result of pending) console.log(`  - ${result.name}: ${result.detail}`);
+}
+
 if (failed.length) {
   console.error(`\n${failed.length} blocker(s) found.`);
   process.exit(1);
 }
 
-console.log('\nNo preflight blockers found. SKIPPED checks still need manual follow-up where noted.');
+if (publicRelease && pending.length) {
+  console.error(`\n${pending.length} item(s) block public distribution. Re-run without --public for a development check.`);
+  process.exit(1);
+}
+
+console.log(
+  pending.length
+    ? '\nNo development blockers. The items above still block public distribution — re-run with --public to gate on them.'
+    : '\nNo preflight blockers found. SKIPPED checks still need manual follow-up where noted.',
+);

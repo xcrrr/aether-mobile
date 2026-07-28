@@ -95,6 +95,24 @@ android {
         versionCode 4
         versionName "2.1.0"
     }
+    // Release signing is read from android/keystore.properties, which is
+    // gitignored and never committed. Copy keystore.properties.example, fill it
+    // in, and put the .jks beside it. Without that file the release build still
+    // works but is debug-signed — usable for local testing, not for
+    // distribution, and the build prints a warning saying so.
+    def keystorePropertiesFile = rootProject.file('keystore.properties')
+    def keystoreProperties = new Properties()
+    def hasReleaseKeystore = false
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+        def storeFileName = keystoreProperties['storeFile']
+        if (storeFileName && rootProject.file(storeFileName).exists()) {
+            hasReleaseKeystore = true
+        } else {
+            logger.warn("WARNING: keystore.properties exists but storeFile '${storeFileName}' was not found.")
+        }
+    }
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -102,15 +120,26 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (hasReleaseKeystore) {
+            release {
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            if (hasReleaseKeystore) {
+                signingConfig signingConfigs.release
+            } else {
+                logger.warn("WARNING: no android/keystore.properties — the release APK will be DEBUG-SIGNED and must not be distributed.")
+                signingConfig signingConfigs.debug
+            }
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

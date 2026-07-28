@@ -46,6 +46,12 @@ android/app/.cxx/
 android/.kotlin/
 android/local.properties
 
+# release signing — credentials, never commit (see android/keystore.properties.example)
+android/keystore.properties
+*.jks
+*.keystore
+!android/app/debug.keystore
+
 # downloaded models (never commit GGUF blobs) + logs
 *.gguf
 *.log

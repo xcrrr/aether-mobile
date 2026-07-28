@@ -9,6 +9,7 @@
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "preflight:beta": "node scripts/aether-preflight.js",
+    "preflight:public": "node scripts/aether-preflight.js --public",
     "ios": "expo run:ios",
     "postinstall": "patch-package"
   },
@@ -66,6 +67,7 @@
     "patch-package": "^8.0.1",
     "react-test-renderer": "18.3.1",
     "three": "^0.159.0",
+    "three-forcegraph": "^1.43.4",
     "three-spritetext": "^1.10.0",
     "typescript": "~5.8.3"
   }
