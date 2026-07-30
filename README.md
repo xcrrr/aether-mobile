@@ -58,7 +58,7 @@ Use Android speech recognition to dictate a message into the chat composer. Reco
 
 Task (a local, multi-step agent) and Library (its saved outputs) exist in the source tree — `src/agent/`, 20 files, with its own test suite — but are not reachable anywhere in the app. A single flag, `TASK_UI_ENABLED` in `app/src/release/features.ts`, controls their visibility and is currently `false`.
 
-This is a scope decision for the first beta, not an unfinished stub: Task was judged the least convincing surface in real use, and shipping it in a first public beta would mean the weakest feature is the one new users judge the app by. The code stays in place and keeps compiling under strict TypeScript and the full test suite; the flag only hides it from the UI.
+This is a scope decision for the first beta, not an unfinished stub. Task is the surface with the least real-device verification behind it, and this release focuses on the two features that define Aether — Core and Research. The code stays in place and keeps compiling under strict TypeScript and the full test suite; the flag only hides it from the UI.
 
 ## Product Principles
 

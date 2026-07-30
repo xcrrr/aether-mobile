@@ -5,15 +5,13 @@ Task (the local agent) is no longer reachable anywhere in the app. Nothing was d
 
 ## Why
 
-Not a quality judgement on the kernel. Task is the one surface Adam finds unconvincing in
-real use, and it is also the surface with the most device-unverified behaviour. Shipping it
-in a first public beta means the weakest feature is the one new users judge the app by.
-Hiding it lets Core and Research — the two features that actually differentiate Aether —
-carry the release on their own.
+Not a quality judgement on the kernel. Task is the surface with the most device-unverified
+behaviour, and a first beta is judged by whatever is least finished in it. Holding it back
+lets Core and Research — the two features that differentiate Aether — carry the release on
+their own, and gives Task the device verification it has not had yet.
 
-The second reason is narrower and matters for pricing: Task and Research were the only
-plausible paid-tier gates, and gating the feature Adam himself calls ineffective is not a
-business model.
+The second reason is narrower: a feature still awaiting verification is not a sound basis
+for a paid tier.
 
 ## How it was done
 

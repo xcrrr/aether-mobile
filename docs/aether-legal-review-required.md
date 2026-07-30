@@ -12,7 +12,7 @@ This document lists unresolved legal/product questions before Aether can be rele
 - Final Privacy Notice wording.
 - Whether separate public Terms and Privacy Policy URLs will be hosted on the website.
 - Final retention/deletion commitments for conversations, Core memory, agent task records, uploaded/attached local files, model files, logs, and reset behavior.
-- Age/minor policy, including whether parental/guardian consent is required for any users. Note the Play account holder must be an adult; this is a real constraint, not a formality.
+- Age policy, including whether parental/guardian consent is required for any users, and confirmation that the store account holder meets the platform's eligibility requirements.
 - Medical/legal/financial/safety disclaimer wording appropriate to the product and target jurisdictions.
 - Google Play Data Safety declaration or equivalent disclosure for any distribution channel.
 - Whether the in-app Closed Beta gate is still the right shape now that the plan is a paid Play purchase alongside a free GitHub build. The gate currently applies identically to both channels.
@@ -27,8 +27,8 @@ This document lists unresolved legal/product questions before Aether can be rele
 
 Kept here rather than deleted so the audit trail survives.
 
-- **Distribution plan.** Free unrestricted build on GitHub Releases, plus a paid one-time purchase on Google Play at roughly 99–149 PLN with Google as merchant of record. Freemium was rejected: an APK has no enforceable paywall, and the only gateable features were Task and Research. Google as merchant of record also resolves the VAT and consumer-law exposure.
-- **Whether beta access is conditioned.** Follows from the above — the GitHub build is unconditioned, the Play build is paid.
+- **Distribution plan.** A free, unrestricted build on GitHub Releases, alongside a paid one-time purchase on Google Play with Google as merchant of record. Pricing is recorded outside this repository. Using the store as merchant of record is what resolves the VAT and consumer-law exposure.
+- **Whether beta access is conditioned.** Follows from the above — the GitHub build is unconditioned, the store build is paid.
 - **Android release signing.** `android/app/build.gradle` now reads credentials from `android/keystore.properties`, which is gitignored along with `*.jks`. See `android/keystore.properties.example`. The keystore itself has not been created yet; until it exists, release builds are debug-signed and Gradle prints a warning. `npm run preflight:public` fails while that is the case.
 - **Unused manifest permissions.** `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` are removed via `tools:node="remove"` in `plugins/withAetherAndroid.js`. All three arrived through library manifest merge, never from Aether's own config. minSdkVersion is 29, so the storage pair was already inert under scoped storage; models download to app-private `documentDirectory` and attachments arrive as SAF content URIs. Nothing in the app draws overlays. Not yet confirmed against a real merged manifest — that needs a Gradle build.
 
