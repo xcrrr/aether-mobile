@@ -7,6 +7,14 @@ First release-signed build, and the first APK since `2.1.0` (built 2026-07-02 fr
 
 Android, arm64-v8a only, `minSdkVersion` 29.
 
+- APK: `Aether-2.2.0.apk`, 71.9 MiB (75,387,163 bytes)
+- `versionName` 2.2.0, `versionCode` 5, package `com.aether.app`
+- SHA-256: `771c67d73841d11715df22935612ee50b210fefd2b85f6c725f944e6b3dec49e`
+- Signed with APK Signature Scheme v2; signer `CN=Aether, O=Aether, C=PL`
+
+The previous build shipped four architectures. Filtering to arm64-v8a alone removed about 63 MB
+of libraries for devices Aether does not support, roughly halving the download.
+
 ### Scope
 
 The shipped app is **Chat, Core, Research, images and files, and voice**.

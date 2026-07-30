@@ -193,10 +193,21 @@ check('android: Gradle wrapper', () => {
 });
 
 check('android: Java toolchain availability', () => {
-  const res = spawnSync('java', ['-version'], { stdio: 'pipe', encoding: 'utf8' });
-  return res.status === 0
-    ? pass('java is available')
-    : skipped('java is not available on PATH; APK build not attempted');
+  // JAVA_HOME is what Gradle actually uses, and a JDK installed outside the
+  // system package manager is often not on PATH at all.
+  const candidates = [
+    process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'java') : null,
+    path.join(process.env.HOME ?? '', 'toolchain', 'jdk', 'bin', 'java'),
+    'java',
+  ].filter(Boolean);
+  for (const bin of candidates) {
+    const res = spawnSync(bin, ['-version'], { stdio: 'pipe', encoding: 'utf8' });
+    if (res.status === 0) {
+      const version = (commandOutput(res).match(/version "([^"]+)"/) ?? [])[1] ?? 'unknown';
+      return pass(`java ${version} (${bin})`);
+    }
+  }
+  return skipped('no JDK found via JAVA_HOME or PATH; APK build not attempted');
 });
 
 console.log('\nAether closed beta preflight\n');
