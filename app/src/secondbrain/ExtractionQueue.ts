@@ -1,11 +1,20 @@
+export interface ExtractionDrainResult {
+  count: number;
+  /** The shared model became busy before this attempt could complete. */
+  retry: boolean;
+}
+
 export interface ExtractionQueueOptions {
   isBusy: () => boolean;
   /** Whether a newly completed conversation may be queued for extraction. */
   canQueue?: () => boolean;
   /** Changes whenever queueing consent is withdrawn or restored. */
   queueToken?: () => unknown;
-  /** Run extraction for a conversation; resolves the number of facts applied. */
-  extract: (conversationId: string, queueToken: unknown) => Promise<number>;
+  /** Run extraction for a conversation. A retryable result stays queued until idle. */
+  extract: (
+    conversationId: string,
+    queueToken: unknown,
+  ) => Promise<number | ExtractionDrainResult>;
   /** Called after a successful drain with the number of facts learned/updated. */
   onResult?: (conversationId: string, count: number) => void;
   pollMs?: number;
@@ -65,8 +74,15 @@ export class ExtractionQueue {
       this.dirty.delete(id);
       if (!this.opts.canQueue() || queuedToken !== this.opts.queueToken()) return;
       try {
-        const count = await this.opts.extract(id, queuedToken);
+        const result = await this.opts.extract(id, queuedToken);
         if (!this.opts.canQueue() || queuedToken !== this.opts.queueToken()) return;
+        const { count, retry } = typeof result === 'number'
+          ? { count: result, retry: false }
+          : result;
+        if (retry) {
+          if (!this.dirty.has(id)) this.dirty.set(id, queuedToken);
+          return;
+        }
         this.opts.onResult(id, count);
       } catch {
         // A newer reply for the same conversation may have been queued while

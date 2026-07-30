@@ -8,6 +8,7 @@ import { ExtractionQueue } from '@/secondbrain/ExtractionQueue';
 import { useBrainNotice } from '@/state/useBrainNotice';
 import { AppState } from 'react-native';
 import { useResearchStore } from '@/state/useResearchStore';
+import { loadConversation } from '@/storage/conversations';
 
 export interface RAMWarning { available: number; required: number; }
 
@@ -18,7 +19,7 @@ function getLlama(): LlamaModule {
 }
 
 const extractionQueue = new ExtractionQueue({
-  isBusy: () => getLlama().isBusy(),
+  isBusy: () => getLlama().isBusy() || useChatStore.getState().isGenerating,
   canQueue: () => {
     const { MemoryStore } = require('@/secondbrain/MemoryStore') as typeof import('@/secondbrain/MemoryStore');
     return MemoryStore.isEnabled();
@@ -29,27 +30,26 @@ const extractionQueue = new ExtractionQueue({
   },
   extract: async (conversationId, queueToken) => {
     const { extractFromConversation, messagesForConsent } = require('@/secondbrain/MemoryExtractor') as typeof import('@/secondbrain/MemoryExtractor');
-    const convo = useChatStore.getState().current;
-    const messages = convo && convo.id === conversationId ? convo.messages : [];
-    if (!messages.length) return 0;
+    const active = useChatStore.getState().current;
+    const convo = active?.id === conversationId ? active : await loadConversation(conversationId);
+    const messages = convo?.messages ?? [];
+    if (!messages.length) return { count: 0, retry: false };
     const consentToken = String(queueToken);
-    return extractFromConversation(
+    if (getLlama().isBusy()) return { count: 0, retry: true };
+    const count = await extractFromConversation(
       messagesForConsent(messages, consentToken),
       conversationId,
       { consentToken },
     );
+    return { count, retry: count === 0 && getLlama().isBusy() };
   },
   // Surface a "N saved to your Second Brain" pill whenever a chat yields facts.
   onResult: (_id, count) => useBrainNotice.getState().show(count),
 });
 
-function queueMemoryExtraction(): void {
-  const convo = useChatStore.getState().current;
-  if (!convo) return;
-  extractionQueue.markDirty(convo.id);
-  // Try to drain immediately so analysis happens right after the reply, not on
-  // the next poll tick. Yields to the next chat send if the context is busy.
-  extractionQueue.flush();
+function queueMemoryExtraction(conversationId: string | null | undefined): void {
+  if (!conversationId) return;
+  extractionQueue.markDirty(conversationId);
 }
 
 export function useInference(modelId: string | undefined) {
@@ -123,6 +123,7 @@ export function useInference(modelId: string | undefined) {
     // Resolve cold persistence first, then freeze consent and recall inputs for
     // this reply. A later toggle applies to the next send, never mid-prompt.
     const core = await captureCoreSendSnapshot(MemoryStore);
+    const conversationId = useChatStore.getState().current?.id;
     await chat.appendUser(
       text,
       attachment ? [attachment] : undefined,
@@ -156,6 +157,10 @@ export function useInference(modelId: string | undefined) {
       });
     }
     chat.startAssistant();
+    // Queue from the immutable originating chat before generation starts. The
+    // queue waits while the visible reply is running, then loads this chat by id;
+    // navigation or title generation can no longer redirect or drop the work.
+    queueMemoryExtraction(conversationId);
     const recallDisclosure = recallDisclosureItems(recall);
     if (recallDisclosure.length) {
       useChatStore.getState().setAssistantRecall(recallDisclosure);
@@ -170,11 +175,10 @@ export function useInference(modelId: string | undefined) {
       trimmed,
       (token) => useChatStore.getState().appendToken(token),
       () => {
-        // Auto-name the chat first (context is free right after the reply), then
-        // queue best-effort memory extraction.
+        // Auto-name the chat after the reply. Core work is already queued against
+        // the originating conversation and waits for the shared session to idle.
         void useChatStore.getState().finishAssistant().then(async () => {
           await useChatStore.getState().ensureTitle();
-          queueMemoryExtraction();
         });
       },
       (e) => {
@@ -191,12 +195,16 @@ export function useInference(modelId: string | undefined) {
    * surfaced as a normal message, never thrown.
    */
   const research = useCallback(async (text: string) => {
+    const { MemoryStore } = require('@/secondbrain/MemoryStore') as typeof import('@/secondbrain/MemoryStore');
+    const { captureCoreSendSnapshot } = require('@/secondbrain/CoreSendSnapshot') as typeof import('@/secondbrain/CoreSendSnapshot');
+    const core = await captureCoreSendSnapshot(MemoryStore);
     // Capture prior turns BEFORE adding the new query so research can resolve
     // follow-up references and stay on-topic.
     const history = useChatStore.getState().current?.messages ?? [];
     const conversationId = useChatStore.getState().current?.id ?? '';
-    await chat.appendUser(text);
+    await chat.appendUser(text, undefined, core.consentToken);
     chat.startAssistant();
+    queueMemoryExtraction(conversationId);
     const setContent = useChatStore.getState().setAssistantContent;
     const researchStore = useResearchStore.getState();
     researchStore.start(conversationId);

@@ -53,4 +53,12 @@ describe('Core send snapshot', () => {
       consentToken: 'enabled-session',
     });
   });
+
+  it('fails closed when hydration finishes without becoming ready', async () => {
+    const core = source({ hydrated: false, enabled: true });
+    const pending = captureCoreSendSnapshot(core.api);
+    core.finishHydration();
+
+    await expect(pending).resolves.toEqual({ enabled: false, entries: [] });
+  });
 });

@@ -76,7 +76,7 @@ cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 
 ## Tests
 ```bash
-npm test              # Jest (47 suites / 606 tests verified 2026-07-28)
+npm test              # Jest (49 suites / 641 tests verified 2026-07-28)
 npm run typecheck     # tsc --noEmit strict
 npm run preflight:beta    # release checks; BLOCKED items are non-fatal
 npm run preflight:public  # same, but BLOCKED items fail the run
@@ -112,8 +112,9 @@ Decision and touch points: `../claude-notes/mvp-scope-cut-2026-07-27.md`.
 ## Known issues / next work
 - Voice still unverified on all real devices — surface real error from `Voice.start()` throw
 - Vision is LiteRT-session dependent: if the native ladder falls back text-only, surface that honestly.
-- Second Brain auto-extraction often preempted; manual "Analyze now" button is the reliable path.
-  Fixing it means changing how the single LiteRT session arbitrates, not a local tweak.
+- Core automatic extraction now stays queued against the originating conversation
+  until the shared LiteRT session is idle. Verify navigation, stopped/error replies,
+  Research collection, and saved-note notices on a real device.
 - No fixture set measures whether extraction proposes the *right* facts. Every Core gate is
   mechanical, so no prompt or policy change can currently be shown to be an improvement.
 - Nothing since the 2026-07-07 APK is device-verified. Run `../docs/aether-device-beta-checklist.md`.

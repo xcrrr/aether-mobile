@@ -18,68 +18,6 @@ const MAX_EXTRACT_TOKENS = 380;
 const EXTRACT_TEMPERATURE = 0.1;
 const manualExtractions = new Map<string, Promise<number>>();
 
-/**
- * Auto-extraction yields the shared LiteRT session instead of interrupting a
- * reply, so a user who keeps typing could starve it indefinitely — which is why
- * memories reliably appeared only after tapping "Analyze now".
- *
- * The fix is not to let a background job preempt a visible reply. It is to stop
- * throwing the work away: a starved auto-run waits for the session to go idle
- * and tries again, a bounded number of times. Newer messages for the same
- * conversation supersede an older pending run, and a manual analysis cancels it
- * outright.
- */
-const RETRY_DELAY_MS = 1500;
-const MAX_RETRY_ATTEMPTS = 20;
-type PendingExtraction = {
-  messages: Message[];
-  opts: { consentToken?: string };
-  attempts: number;
-  timer: ReturnType<typeof setTimeout>;
-};
-const pendingExtractions = new Map<string, PendingExtraction>();
-
-function cancelPending(conversationId: string): void {
-  const pending = pendingExtractions.get(conversationId);
-  if (!pending) return;
-  clearTimeout(pending.timer);
-  pendingExtractions.delete(conversationId);
-}
-
-function deferExtraction(
-  messages: Message[],
-  conversationId: string,
-  opts: { consentToken?: string },
-  attempts: number,
-): void {
-  if (attempts >= MAX_RETRY_ATTEMPTS) return;
-  const timer = setTimeout(() => {
-    pendingExtractions.delete(conversationId);
-    void attemptAutoExtraction(messages, conversationId, opts, attempts + 1);
-  }, RETRY_DELAY_MS);
-  pendingExtractions.set(conversationId, { messages, opts, attempts, timer });
-}
-
-async function attemptAutoExtraction(
-  messages: Message[],
-  conversationId: string,
-  opts: { consentToken?: string },
-  attempts = 0,
-): Promise<number> {
-  cancelPending(conversationId);
-  if (Llama.isBusy()) {
-    deferExtraction(messages, conversationId, opts, attempts);
-    return 0;
-  }
-  const learned = await runExtraction(messages, conversationId, opts);
-  // Nothing learned while the session is busy means this run was drained by a
-  // reply that started underneath it, not that the conversation held no facts.
-  if (learned === 0 && Llama.isBusy()) {
-    deferExtraction(messages, conversationId, opts, attempts);
-  }
-  return learned;
-}
-
 // Don't even run inference on trivial exchanges (greetings, one-word replies).
 // This is what stops the brain "fetching on every message" — a plain "hi" never
 // reaches the model, so nothing churns and nothing junk gets saved.
@@ -128,7 +66,7 @@ function hasSubstance(userMessages: Message[]): boolean {
 // Keep the transcript well inside the model context so the extraction completion
 // never silently overflows (which would return no result → nothing saved).
 const MAX_TRANSCRIPT_CHARS = 4000;
-const MAX_MESSAGE_CHARS = 600;
+const MAX_MESSAGE_CHARS = 1200;
 
 const PROMPT_TEMPLATE =
   'You are a memory-extraction engine for a personal AI assistant. From the ' +
@@ -173,20 +111,32 @@ export function buildTranscript(messages: Message[], maxChars = MAX_TRANSCRIPT_C
   let total = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    const body = m.content.trim().slice(0, MAX_MESSAGE_CHARS);
-    const line = `${m.role === 'user' ? 'User' : 'Assistant'}: ${body}`;
-    if (total + line.length > maxChars && lines.length > 0) break;
+    const prefix = `${m.role === 'user' ? 'User' : 'Assistant'}: `;
+    let line = `${prefix}${clipMessage(m.content)}`;
+    if (total + line.length > maxChars) {
+      if (lines.length > 0) break;
+      line = `${prefix}${clipMessage(m.content, Math.max(0, maxChars - prefix.length))}`;
+    }
     lines.unshift(line);
     total += line.length + 1;
   }
   return lines.join('\n');
 }
 
-/** The user's side of the transcript — the ONLY text a fact may be grounded in. */
+function clipMessage(text: string, maxChars = MAX_MESSAGE_CHARS): string {
+  const value = text.trim();
+  if (value.length <= maxChars) return value;
+  if (maxChars <= 3) return value.slice(0, maxChars);
+  const head = Math.ceil((maxChars - 3) * 0.58);
+  const tail = maxChars - 3 - head;
+  return `${value.slice(0, head).trimEnd()}...${value.slice(-tail).trimStart()}`;
+}
+
+/** The user's side of the transcript, used only to rank known facts. */
 function userTextOf(messages: Message[]): string {
   return messages
     .filter((m) => m.role === 'user')
-    .map((m) => m.content.trim().slice(0, MAX_MESSAGE_CHARS))
+    .map((m) => clipMessage(m.content))
     .join('\n');
 }
 
@@ -316,7 +266,11 @@ const RELATION_RE = /^[a-z][a-z0-9_]{1,30}$/;
 
 /** The one place a model-emitted fact key becomes a stored key. */
 function normalizeKey(raw: string): string {
-  return raw.trim().toLowerCase().replace(/\s+/g, '_');
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 /** Normalise a model relation to snake_case; null when it can't be a sane label. */
@@ -377,10 +331,12 @@ export function validateEntry(obj: unknown): ValidEntry | null {
     1,
     Math.max(0, typeof rawConfidence === 'number' && !Number.isNaN(rawConfidence) ? rawConfidence : 0),
   );
+  const normalizedKey = normalizeKey(key);
+  if (!normalizedKey) return null;
 
   return {
     category: category as MemoryCategory,
-    key: normalizeKey(key),
+    key: normalizedKey,
     value: value.trim().slice(0, 200),
     confidence,
     quote: quote.trim().slice(0, 300),
@@ -401,14 +357,57 @@ const CATEGORY_REASON: Record<MemoryCategory, string> = {
 
 const GENERIC_KEY_PARTS = new Set([
   'current', 'main', 'new', 'old', 'preferred', 'primary', 'latest',
-  'date', 'schedule', 'status', 'detail', 'info', 'value',
+  'detail', 'info', 'value',
 ]);
+
+const KEY_QUALIFIER_GROUP: Record<string, string> = {
+  date: 'temporal',
+  schedule: 'temporal',
+  time: 'temporal',
+  day: 'temporal',
+  training: 'activity',
+  routine: 'activity',
+  workout: 'activity',
+  practice: 'activity',
+};
 
 function keyAnchors(key: string): string[] {
   return key
     .split(/[^a-z0-9]+/i)
     .map((part) => part.toLowerCase())
-    .filter((part) => part.length >= 4 && !GENERIC_KEY_PARTS.has(part));
+    .filter((part) =>
+      part.length >= 4 &&
+      !GENERIC_KEY_PARTS.has(part) &&
+      !KEY_QUALIFIER_GROUP[part],
+    );
+}
+
+function keyQualifierGroups(key: string): Set<string> {
+  return new Set(
+    key
+      .split(/[^a-z0-9]+/i)
+      .map((part) => KEY_QUALIFIER_GROUP[part.toLowerCase()])
+      .filter((group): group is string => !!group),
+  );
+}
+
+function sameKeySubject(a: string, b: string): boolean {
+  const left = keyAnchors(a);
+  const right = keyAnchors(b);
+  if (!left.length || !right.length) return false;
+  if (
+    left.length !== right.length ||
+    !left.every((anchor) => right.includes(anchor))
+  ) return false;
+  const leftGroups = keyQualifierGroups(a);
+  const rightGroups = keyQualifierGroups(b);
+  if (!leftGroups.size && !rightGroups.size) return true;
+  return [...leftGroups].some((group) => rightGroups.has(group));
+}
+
+function relatedKeySubject(a: string, b: string): boolean {
+  const right = new Set(keyAnchors(b));
+  return keyAnchors(a).some((anchor) => right.has(anchor));
 }
 
 /**
@@ -422,29 +421,25 @@ function canonicalKeyFor(entry: ValidEntry): string {
     ...MemoryStore.getAllEntries()
       .filter((fact) => fact.category === entry.category)
       .map((fact) => fact.key),
-    ...MemoryStore.getDeletions()
-      .filter((deletion) =>
-        deletion.category === entry.category || deletion.categoryAliases?.includes(entry.category),
-      )
-      .map((deletion) => deletion.key),
   ]);
   if (candidateKeys.has(entry.key)) {
     return entry.key;
   }
-  const anchors = new Set(keyAnchors(entry.key));
-  if (!anchors.size) return entry.key;
-  const matches = [...candidateKeys].filter((key) =>
-    keyAnchors(key).some((anchor) => anchors.has(anchor)),
-  );
+  const matches = [...candidateKeys].filter((key) => sameKeySubject(entry.key, key));
   return matches.length === 1 ? matches[0] : entry.key;
 }
 
-function matchingDeletionsFor(entry: ValidEntry) {
-  const anchors = new Set(keyAnchors(entry.key));
-  if (!anchors.size) return [];
+function canonicalDeletionsFor(entry: ValidEntry) {
   return MemoryStore.getDeletions().filter((deletion) =>
     (deletion.category === entry.category || deletion.categoryAliases?.includes(entry.category)) &&
-    keyAnchors(deletion.key).some((anchor) => anchors.has(anchor)),
+    relatedKeySubject(entry.key, deletion.key),
+  );
+}
+
+function relatedDeletionsFor(entry: ValidEntry) {
+  return MemoryStore.getDeletions().filter((deletion) =>
+    (deletion.category === entry.category || deletion.categoryAliases?.includes(entry.category)) &&
+    relatedKeySubject(entry.key, deletion.key),
   );
 }
 
@@ -452,8 +447,38 @@ function deletionAuthorityFor(entry: ValidEntry) {
   const exact = MemoryStore.deletionFor(entry.category, entry.key);
   if (exact) return exact;
 
-  const matches = matchingDeletionsFor(entry);
-  return matches.length === 1 ? matches[0] : undefined;
+  // A single related tombstone can safely carry a user's correction across a
+  // model key rename. If several deleted facts share the topic, do not guess
+  // which one the model meant; the newer statement may be a distinct fact.
+  const matches = canonicalDeletionsFor(entry);
+  return matches.length === 1 && sameKeySubject(entry.key, matches[0].key)
+    ? matches[0]
+    : undefined;
+}
+
+interface EvidenceMatch {
+  messageId: string;
+  observedAt: number;
+  score: number;
+}
+
+function evidenceMatch(quote: string, userMessages: Message[]): EvidenceMatch | null {
+  let best: EvidenceMatch | null = null;
+  for (const message of userMessages) {
+    // Ground against the original message, not the head/tail prompt excerpt.
+    // Otherwise the inserted ellipsis could make words from opposite sides of
+    // a long omitted span appear contiguous and admit a fabricated quote.
+    const score = groundingScore(quote, message.content);
+    if (score <= 0) continue;
+    if (!best || score > best.score || (score === best.score && message.createdAt >= best.observedAt)) {
+      best = {
+        messageId: message.id,
+        observedAt: message.createdAt,
+        score,
+      };
+    }
+  }
+  return best;
 }
 
 /**
@@ -464,10 +489,9 @@ function deletionAuthorityFor(entry: ValidEntry) {
  * messages, or it is dropped. Assistant text can never ground a fact, so
  * hallucinations cannot become memories no matter what the model outputs.
  *
- * Best-effort. Auto-runs fire-and-forget after each reply; they yield the shared
- * context if it is busy and retry once it is idle rather than dropping the work
- * (see attemptAutoExtraction). Pass `{ force: true }` for a manual "Analyze now"
- * — it preempts any in-flight best-effort completion so it never silently no-ops.
+ * Best-effort. Automatic runs are owned by ExtractionQueue, which keeps work
+ * pending until the shared session is idle. Pass `{ force: true }` for a manual
+ * analysis — it preempts any in-flight best-effort completion.
  * No-ops when the Second Brain is disabled, the exchange is trivial, or no model
  * is loaded.
  */
@@ -507,19 +531,17 @@ async function runExtraction(
   if (!rawEntries) return 0;
 
   const policy = extractionPolicy(useModelStore.getState().activeModelId);
-  const userText = userTextOf(messages);
-
-  const grounded: (ValidEntry & { effectiveConfidence: number })[] = [];
+  const grounded: (ValidEntry & EvidenceMatch & { effectiveConfidence: number })[] = [];
   for (const raw of rawEntries) {
     const entry = validateEntry(raw);
     if (!entry) continue;
-    const ground = groundingScore(entry.quote, userText);
-    if (ground <= 0) continue;
+    const evidence = evidenceMatch(entry.quote, userMessages);
+    if (!evidence) continue;
     // The gate is the weaker of the model's confidence and the mechanical
     // grounding — a confident claim with shaky evidence still doesn't save.
-    const effectiveConfidence = Math.min(entry.confidence, ground);
+    const effectiveConfidence = Math.min(entry.confidence, evidence.score);
     if (effectiveConfidence < policy.minConfidence) continue;
-    grounded.push({ ...entry, effectiveConfidence });
+    grounded.push({ ...entry, ...evidence, effectiveConfidence });
   }
   grounded.sort((a, b) => b.effectiveConfidence - a.effectiveConfidence);
 
@@ -530,7 +552,6 @@ async function runExtraction(
   // and deletion authority can both rename a key on the way in, and the links in
   // the same response still refer to the name the model chose.
   const storedKeyFor = new Map<string, string>();
-  const newestUserMessageAt = Math.max(...userMessages.map((message) => message.createdAt));
   for (const entry of grounded.slice(0, policy.maxFacts)) {
     // A user-corrected extraction category remains authoritative. Match the
     // stable key across categories so replay cannot recreate the old category,
@@ -555,7 +576,7 @@ async function runExtraction(
     // selected as the canonical note. Their correction metadata still makes
     // an older former-category replay stale without suppressing a genuinely
     // new ambiguous concept that only overlaps ordinary deletions.
-    const matchingDeletionTimes = matchingDeletionsFor(entry)
+    const matchingDeletionTimes = relatedDeletionsFor(entry)
       .filter((deletion) =>
         deletion.categoryCorrectedAt !== undefined &&
         deletion.categoryAliases?.includes(entry.category),
@@ -569,18 +590,18 @@ async function runExtraction(
     // still learn a genuine subsequent change without freezing the note.
     if (
       saved?.sourceConversationId === 'manual' &&
-      newestUserMessageAt <= saved.updatedAt
+      entry.observedAt <= saved.updatedAt
     ) continue;
     if (
       categoryCorrection?.categoryCorrectedAt !== undefined &&
-      newestUserMessageAt <= categoryCorrection.categoryCorrectedAt
+      entry.observedAt <= categoryCorrection.categoryCorrectedAt
     ) continue;
-    if (deletedAt !== undefined && newestUserMessageAt <= deletedAt) continue;
+    if (deletedAt !== undefined && entry.observedAt <= deletedAt) continue;
     // Candidates are confidence-sorted. Apply only the strongest grounded
     // interpretation of one canonical note so a weaker stale alternate key
     // from the same response cannot immediately overwrite it.
     appliedTargets.add(target);
-    MemoryStore.addOrUpdateEntry({
+    const changed = MemoryStore.addOrUpdateEntry({
       category: effectiveEntry.category,
       key,
       value: entry.value,
@@ -591,10 +612,13 @@ async function runExtraction(
       } : {}),
       sourceConversationId: conversationId,
       evidence: entry.quote,
+      evidenceMessageId: entry.messageId,
+      observedAt: entry.observedAt,
       reason: CATEGORY_REASON[effectiveEntry.category],
     });
-    appliedKeys.push(key);
     storedKeyFor.set(entry.key, key);
+    if (!changed) continue;
+    appliedKeys.push(key);
     applied += 1;
   }
 
@@ -623,11 +647,7 @@ export function extractFromConversation(
   conversationId: string,
   opts: { force?: boolean; consentToken?: string } = {},
 ): Promise<number> {
-  if (!opts.force) return attemptAutoExtraction(messages, conversationId, opts);
-
-  // A manual analysis supersedes anything waiting for an idle session: it
-  // preempts the shared context and covers the same conversation.
-  cancelPending(conversationId);
+  if (!opts.force) return runExtraction(messages, conversationId, opts);
 
   const active = manualExtractions.get(conversationId);
   if (active) return active;

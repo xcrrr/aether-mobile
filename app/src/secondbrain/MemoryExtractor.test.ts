@@ -312,6 +312,46 @@ describe('extractFromConversation', () => {
     expect(MemoryStore.getAllEntries()).toHaveLength(0);
   });
 
+  it('does not combine separate user messages into fabricated evidence', async () => {
+    const chat = [
+      { ...userMsg('My sister lives in Paris.'), id: 'sister-location' },
+      { ...userMsg('I live in Warsaw.'), id: 'my-location' },
+    ];
+    mockExtract.mockResolvedValue(fact({
+      category: 'identity',
+      key: 'city',
+      value: 'Paris',
+      quote: 'I live in Paris',
+    }));
+
+    expect(await extractFromConversation(chat, 'c1', { force: true })).toBe(0);
+    expect(MemoryStore.getAllEntries()).toEqual([]);
+  });
+
+  it('does not reinforce a transcript replay, but accepts a genuinely new observation', async () => {
+    const first = [{ ...userMsg('I live in Warsaw.'), id: 'message-1', createdAt: 10 }];
+    mockExtract.mockResolvedValue(fact({
+      category: 'identity',
+      key: 'city',
+      value: 'Warsaw',
+      quote: 'I live in Warsaw.',
+    }));
+
+    expect(await extractFromConversation(first, 'c1', { force: true })).toBe(1);
+    expect(await extractFromConversation(first, 'c1', { force: true })).toBe(0);
+    expect(MemoryStore.getAllEntries()[0]).toMatchObject({
+      evidenceMessageId: 'message-1',
+      timesReinforced: 0,
+    });
+
+    const later = [{ ...first[0], id: 'message-2', createdAt: 20 }];
+    expect(await extractFromConversation(later, 'c2', { force: true })).toBe(1);
+    expect(MemoryStore.getAllEntries()[0]).toMatchObject({
+      evidenceMessageId: 'message-2',
+      timesReinforced: 1,
+    });
+  });
+
   it('drops a fact without a quote even when confidence is high', async () => {
     mockExtract.mockResolvedValue('{"facts":[{"category":"preferences","key":"hobby","value":"climbing","confidence":0.99}],"links":[]}');
     expect(await extractFromConversation(convo, 'c1')).toBe(0);
@@ -429,6 +469,97 @@ describe('extractFromConversation', () => {
     const prompt = buildMemorySystemPrompt(recall);
     expect(prompt).toContain('Marathon in December');
     expect(prompt).not.toContain('Marathon in October');
+  });
+
+  it('keeps distinct date and training facts for the same goal', async () => {
+    MemoryStore.addOrUpdateEntry({
+      category: 'goals',
+      key: 'marathon_date',
+      value: 'Marathon in October',
+      confidence: 0.9,
+      sourceConversationId: 'date-chat',
+    });
+    const chat = [{ ...userMsg('I do marathon training every Tuesday.'), id: 'training-message' }];
+    mockExtract.mockResolvedValue(JSON.stringify({
+      facts: [{
+        category: 'goals',
+        key: 'marathon_training',
+        value: 'Training every Tuesday',
+        confidence: 0.95,
+        quote: 'I do marathon training every Tuesday.',
+      }],
+      links: [],
+    }));
+
+    expect(await extractFromConversation(chat, 'training-chat', { force: true })).toBe(1);
+    expect(MemoryStore.getAllEntries().map((entry) => entry.key).sort()).toEqual([
+      'marathon_date',
+      'marathon_training',
+    ]);
+  });
+
+  it('does not map a new current-city fact onto a deleted birth-city note', async () => {
+    MemoryStore.addOrUpdateEntry({
+      category: 'identity',
+      key: 'birth_city',
+      value: 'Warsaw',
+      confidence: 0.9,
+      sourceConversationId: 'birth-chat',
+    });
+    MemoryStore.deleteEntry(MemoryStore.getAllEntries()[0].id);
+    const deletedAt = MemoryStore.getDeletions()[0].deletedAt;
+    const chat = [{
+      ...userMsg('I currently live in Warsaw.'),
+      id: 'current-city-message',
+      createdAt: deletedAt + 1,
+    }];
+    mockExtract.mockResolvedValue(JSON.stringify({
+      facts: [{
+        category: 'identity',
+        key: 'current_city',
+        value: 'Warsaw',
+        confidence: 0.95,
+        quote: 'I currently live in Warsaw.',
+      }],
+      links: [],
+    }));
+
+    expect(await extractFromConversation(chat, 'current-chat', { force: true })).toBe(1);
+    expect(MemoryStore.getAllEntries()).toEqual([
+      expect.objectContaining({ key: 'current_city', value: 'Warsaw' }),
+    ]);
+    expect(MemoryStore.getDeletions()).toEqual([
+      expect.objectContaining({ key: 'birth_city' }),
+    ]);
+  });
+
+  it('uses the evidence message time instead of an unrelated later turn for deletion authority', async () => {
+    MemoryStore.addOrUpdateEntry({
+      category: 'goals',
+      key: 'marathon_date',
+      value: 'Marathon in October',
+      confidence: 0.9,
+      sourceConversationId: 'old-chat',
+    });
+    MemoryStore.deleteEntry(MemoryStore.getAllEntries()[0].id);
+    const deletedAt = MemoryStore.getDeletions()[0].deletedAt;
+    const replay = [
+      { ...userMsg('My marathon is in October.'), id: 'old-fact', createdAt: deletedAt - 1 },
+      { ...userMsg('The weather is nice today.'), id: 'later-unrelated', createdAt: deletedAt + 1 },
+    ];
+    mockExtract.mockResolvedValue(JSON.stringify({
+      facts: [{
+        category: 'goals',
+        key: 'marathon_date',
+        value: 'Marathon in October',
+        confidence: 0.95,
+        quote: 'My marathon is in October.',
+      }],
+      links: [],
+    }));
+
+    expect(await extractFromConversation(replay, 'old-chat', { force: true })).toBe(0);
+    expect(MemoryStore.getAllEntries()).toEqual([]);
   });
 
   it('does not let re-analysis of an older conversation overwrite a manual correction', async () => {

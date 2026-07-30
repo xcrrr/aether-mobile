@@ -23,6 +23,7 @@ interface CoreSendSource {
  */
 export async function captureCoreSendSnapshot(source: CoreSendSource): Promise<CoreSendSnapshot> {
   if (!source.hasHydrated()) await source.ensureHydrated();
+  if (!source.hasHydrated()) return { enabled: false, entries: [] };
 
   const enabled = source.isEnabled();
   return {

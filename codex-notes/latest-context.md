@@ -1,6 +1,24 @@
 # Aether Latest Context
 
-Date saved: 2026-06-29
+Date saved: 2026-07-28
+
+## Core upgrade update — 2026-07-28
+
+Core's everyday-chat collection, evidence grounding, memory identity, recall,
+profile-summary limit, and bounded UI edge cases were upgraded on
+`mvp-release-prep`. Full app verification is green at 49 suites / 641 tests,
+strict TypeScript passes, and an Android build succeeded.
+
+Device-test artifact:
+`releases/Aether-2.1.0-core-upgrade-debug-signed.apk`
+
+This artifact is deliberately separate from `Aether-2.1.0-latest.apk`. It is
+debug-signed, not a public release. SHA-256:
+`4471fc8b4295c9769a01718c4964370d23a09d452709a0efa16f48775f1972d9`.
+
+The connected Galaxy S25 Ultra is visible to Linux only in MTP mode so far; ADB
+device verification still requires USB debugging authorization. Full handoff:
+`codex-notes/core-second-brain-upgrade-2026-07-28.md`.
 
 This is the cleaned Aether workspace from the June 2026 audit/update pass.
 

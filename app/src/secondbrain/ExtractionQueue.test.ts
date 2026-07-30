@@ -63,6 +63,29 @@ describe('ExtractionQueue', () => {
     q.stop();
   });
 
+  it('keeps a retryable result queued and reports only its final completion', async () => {
+    let runs = 0;
+    const results: Array<[string, number]> = [];
+    const q = new ExtractionQueue({
+      isBusy: () => false,
+      extract: async () => {
+        runs += 1;
+        return runs === 1
+          ? { count: 0, retry: true }
+          : { count: 2, retry: false };
+      },
+      onResult: (id, count) => results.push([id, count]),
+      pollMs: 5,
+    });
+
+    q.markDirty('c1');
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(runs).toBeGreaterThanOrEqual(2);
+    expect(results).toEqual([['c1', 2]]);
+    q.stop();
+  });
+
   it('dedupes repeated markDirty for the same id', async () => {
     const runs: string[] = [];
     const q = new ExtractionQueue({

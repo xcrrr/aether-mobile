@@ -81,6 +81,14 @@ export function MemoryListPanel({ open, onClose, onOpenEntry }: Props) {
   const [query, setQuery] = useState('');
   const [activeCats, setActiveCats] = useState<Set<MemoryCategory>>(new Set());
 
+  useEffect(() => {
+    const available = new Set(entries.map((entry) => entry.category));
+    setActiveCats((prev) => {
+      const next = new Set([...prev].filter((category) => available.has(category)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [entries]);
+
   const [addOpen, setAddOpen] = useState(false);
   const [addCat, setAddCat] = useState<MemoryCategory>('context');
   const [addKey, setAddKey] = useState('');

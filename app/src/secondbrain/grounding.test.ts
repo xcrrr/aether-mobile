@@ -18,9 +18,8 @@ describe('groundingScore', () => {
   it('is tolerant of case and punctuation differences', () => {
     expect(groundingScore('i run a BARBER shop, called Mitruk!', userText)).toBe(1);
   });
-  it('accepts minor paraphrase via token containment', () => {
-    const score = groundingScore('grow the barber shop on Instagram', userText);
-    expect(score).toBeGreaterThanOrEqual(0.8);
+  it('rejects reordered words that are not a verbatim user quote', () => {
+    expect(groundingScore('grow the barber shop on Instagram', userText)).toBe(0);
   });
   it('rejects text the user never said', () => {
     expect(groundingScore('I am a professional astronaut', userText)).toBe(0);
@@ -31,5 +30,9 @@ describe('groundingScore', () => {
   });
   it('rejects when user text is empty', () => {
     expect(groundingScore('I love climbing every week', '')).toBe(0);
+  });
+  it('does not assemble evidence from separate statements', () => {
+    const separateStatements = 'My sister lives in Paris.\nI live in Warsaw.';
+    expect(groundingScore('I live in Paris', separateStatements)).toBe(0);
   });
 });

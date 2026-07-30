@@ -1,5 +1,5 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Alert, Animated } from 'react-native';
 import { MemoryListPanel } from './MemoryListPanel';
 import { useMemoryStore } from '@/secondbrain/MemoryStore';
 import { MemoryEntry } from '@/secondbrain/types';
@@ -28,6 +28,11 @@ const entry: MemoryEntry = {
 
 describe('MemoryListPanel', () => {
   beforeEach(() => {
+    jest.spyOn(Animated, 'timing').mockReturnValue({
+      start: jest.fn(),
+      stop: jest.fn(),
+      reset: jest.fn(),
+    } as ReturnType<typeof Animated.timing>);
     useMemoryStore.setState((state) => ({
       memory: {
         ...state.memory,
@@ -98,5 +103,39 @@ describe('MemoryListPanel', () => {
       confidence: 1,
       sourceConversationId: 'manual',
     });
+  });
+
+  it('removes a selected category filter when that category no longer exists', async () => {
+    const goalEntry: MemoryEntry = {
+      ...entry,
+      id: 'memory-2',
+      category: 'goals',
+      key: 'current_goal',
+      value: 'Ship the beta',
+    };
+    useMemoryStore.setState((state) => ({
+      memory: {
+        ...state.memory,
+        entries: [entry, goalEntry],
+      },
+    }));
+    const screen = render(
+      <MemoryListPanel open onClose={jest.fn()} onOpenEntry={jest.fn()} />,
+    );
+
+    fireEvent.press(screen.getAllByText('preferences')[0]);
+    expect(screen.queryByText('Ship the beta')).toBeNull();
+
+    act(() => {
+      useMemoryStore.setState((state) => ({
+        memory: {
+          ...state.memory,
+          entries: [goalEntry],
+        },
+      }));
+    });
+
+    await waitFor(() => expect(screen.getByText('Ship the beta')).toBeTruthy());
+    expect(screen.queryByText('No entries match your search.')).toBeNull();
   });
 });

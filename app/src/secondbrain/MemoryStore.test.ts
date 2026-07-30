@@ -395,6 +395,29 @@ describe('MemoryStore', () => {
     expect(e.history).toBeUndefined();
   });
 
+  it('does not reinforce the same model observation more than once', () => {
+    const base = {
+      category: 'identity' as const,
+      key: 'city',
+      value: 'Warsaw',
+      confidence: 0.9,
+      sourceConversationId: 'c1',
+      evidence: 'I live in Warsaw',
+      observedAt: 10,
+    };
+    expect(MemoryStore.addOrUpdateEntry({ ...base, evidenceMessageId: 'message-1' })).toBe(true);
+    expect(MemoryStore.addOrUpdateEntry({ ...base, evidenceMessageId: 'message-1' })).toBe(false);
+    expect(MemoryStore.getAllEntries()[0].timesReinforced).toBe(0);
+
+    expect(MemoryStore.addOrUpdateEntry({
+      ...base,
+      sourceConversationId: 'c2',
+      evidenceMessageId: 'message-2',
+      observedAt: 20,
+    })).toBe(true);
+    expect(MemoryStore.getAllEntries()[0].timesReinforced).toBe(1);
+  });
+
   it('caps history at 5 revisions, newest first', () => {
     const base = { category: 'goals' as const, key: 'goal', sourceConversationId: 'c1' };
     for (let i = 0; i <= 7; i += 1) {
@@ -422,15 +445,12 @@ describe('MemoryStore', () => {
     expect(MemoryStore.getAllEntries()).toHaveLength(2);
   });
 
-  it('merges a re-keyed duplicate value within a category instead of saving it twice', () => {
-    // The model often re-emits the same fact under a different key on a later
-    // extraction. Same category + same (normalised) value = the same fact.
-    MemoryStore.addOrUpdateEntry({ category: 'identity', key: 'name', value: 'Adam', confidence: 0.8, sourceConversationId: 'c1' });
-    MemoryStore.addOrUpdateEntry({ category: 'identity', key: 'preferred_name', value: 'adam.', confidence: 0.9, sourceConversationId: 'c2' });
+  it('keeps semantically different facts even when their values match', () => {
+    MemoryStore.addOrUpdateEntry({ category: 'identity', key: 'birth_city', value: 'Warsaw', confidence: 0.8, sourceConversationId: 'c1' });
+    MemoryStore.addOrUpdateEntry({ category: 'identity', key: 'current_city', value: 'Warsaw', confidence: 0.9, sourceConversationId: 'c2' });
     const all = MemoryStore.getAllEntries();
-    expect(all).toHaveLength(1);
-    expect(all[0].key).toBe('name');           // original key is kept
-    expect(all[0].timesReinforced).toBe(1);     // counted as a reinforcement
+    expect(all).toHaveLength(2);
+    expect(all.map((entry) => entry.key).sort()).toEqual(['birth_city', 'current_city']);
   });
 
   it('does not merge identical values across different categories', () => {
@@ -455,6 +475,16 @@ describe('MemoryStore', () => {
     expect(MemoryStore.getAllEntries()).toHaveLength(0);
   });
 
+  it('rotates extraction consent when Core data is cleared or reset', () => {
+    const beforeClear = MemoryStore.extractionConsentToken();
+    MemoryStore.clearAll();
+    const afterClear = MemoryStore.extractionConsentToken();
+    expect(afterClear).not.toBe(beforeClear);
+
+    MemoryStore.resetLocalState();
+    expect(MemoryStore.extractionConsentToken()).not.toBe(afterClear);
+  });
+
   it('toggles enabled and records extraction stats', () => {
     MemoryStore.setEnabled(false);
     expect(MemoryStore.isEnabled()).toBe(false);
@@ -466,21 +496,21 @@ describe('MemoryStore', () => {
 });
 
 describe('dedupeEntries', () => {
-  it('collapses same-category duplicate values, keeping the strongest and folding counts', () => {
+  it('collapses duplicate normalized keys, keeping the strongest and folding counts', () => {
     const out = dedupeEntries([
       mkEntry({ id: 'a', category: 'identity', key: 'name', value: 'Adam', confidence: 0.7, timesReinforced: 0 }),
-      mkEntry({ id: 'b', category: 'identity', key: 'preferred_name', value: 'adam.', confidence: 0.95, timesReinforced: 2 }),
+      mkEntry({ id: 'b', category: 'identity', key: 'Name!', value: 'adam.', confidence: 0.95, timesReinforced: 2 }),
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0].key).toBe('preferred_name'); // stronger copy wins
+    expect(out[0].key).toBe('Name!'); // stronger copy wins
     expect(out[0].confidence).toBe(0.95);
     expect(out[0].timesReinforced).toBe(3);    // 0 + 2 + 1 merge
   });
   it('leaves distinct facts and cross-category matches untouched', () => {
     const out = dedupeEntries([
-      mkEntry({ id: 'a', category: 'identity', value: 'Warsaw' }),
-      mkEntry({ id: 'b', category: 'context', value: 'Warsaw' }),
-      mkEntry({ id: 'c', category: 'identity', value: 'Adam' }),
+      mkEntry({ id: 'a', category: 'identity', key: 'birth_city', value: 'Warsaw' }),
+      mkEntry({ id: 'b', category: 'context', key: 'current_city', value: 'Warsaw' }),
+      mkEntry({ id: 'c', category: 'identity', key: 'preferred_name', value: 'Adam' }),
     ]);
     expect(out).toHaveLength(3);
   });
@@ -593,5 +623,8 @@ describe('MemoryStore curation', () => {
     const st = useMemoryStore.getState().memory;
     expect(st.entries.map((e) => e.key)).toEqual(['b']);
     expect(st.edges).toHaveLength(0);
+    expect(st.deletions).toEqual([
+      expect.objectContaining({ category: 'identity', key: 'a' }),
+    ]);
   });
 });

@@ -115,6 +115,7 @@ function DetailSheet({
   links,
   nodeById,
   sourceTitle,
+  hasSourceConversation,
   onClose,
   onCategory,
   onOpenSource,
@@ -127,6 +128,7 @@ function DetailSheet({
   links: GraphLink[];
   nodeById: Map<string, GraphNode>;
   sourceTitle: string | null;
+  hasSourceConversation: boolean;
   onClose: () => void;
   onCategory: (category: MemoryVisualCategory) => void;
   onOpenSource: () => void;
@@ -239,7 +241,7 @@ function DetailSheet({
           <Pencil size={14} color={c.text} strokeWidth={2} />
           <Text style={styles.secondaryActionText}>Edit</Text>
         </PressableScale>
-        {entry.sourceConversationId !== 'manual' && (
+        {hasSourceConversation && (
           <PressableScale style={styles.secondaryAction} onPress={onOpenSource}>
             <ExternalLink size={14} color={c.text} strokeWidth={2} />
             <Text style={styles.secondaryActionText}>Open source</Text>
@@ -304,6 +306,10 @@ export default function SecondBrainScreen() {
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (listOpen) {
+        setListOpen(false);
+        return true;
+      }
       if (selectedKey) {
         setSelectedKey(null);
         setDetailVisible(false);
@@ -312,7 +318,7 @@ export default function SecondBrainScreen() {
       return false;
     });
     return () => subscription.remove();
-  }, [selectedKey]);
+  }, [listOpen, selectedKey]);
 
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -322,7 +328,7 @@ export default function SecondBrainScreen() {
         const text = `${node.title} ${node.id} ${node.categoryLabel} ${node.sourceCategory} ${node.semanticKeywords.join(' ')}`.toLowerCase();
         return text.includes(q);
       });
-    return list.slice(0, 40);
+    return list;
   }, [graphData.nodes, query]);
 
   const activeTopics = useMemo(
@@ -330,10 +336,11 @@ export default function SecondBrainScreen() {
     [graphData.nodes],
   );
 
-  const sourceTitle = useMemo(() => {
+  const sourceConversation = useMemo(() => {
     if (!selectedEntry || selectedEntry.sourceConversationId === 'manual') return null;
-    return chatIndex.find((meta) => meta.id === selectedEntry.sourceConversationId)?.title ?? null;
+    return chatIndex.find((meta) => meta.id === selectedEntry.sourceConversationId) ?? null;
   }, [chatIndex, selectedEntry]);
+  const sourceTitle = sourceConversation?.title ?? null;
 
   const handleCategory = (category: MemoryVisualCategory) => {
     if (!selectedEntry) return;
@@ -341,8 +348,8 @@ export default function SecondBrainScreen() {
   };
 
   const openSource = () => {
-    if (!selectedEntry || selectedEntry.sourceConversationId === 'manual') return;
-    router.push(`/(main)/chat/${selectedEntry.sourceConversationId}`);
+    if (!selectedEntry || !sourceConversation || selectedEntry.sourceConversationId !== sourceConversation.id) return;
+    router.push(`/(main)/chat/${sourceConversation.id}`);
   };
 
   const selectNode = (node: GraphNode) => {
@@ -400,17 +407,35 @@ export default function SecondBrainScreen() {
       </GraphErrorBoundary>
 
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]} pointerEvents="box-none">
-        <PressableScale onPress={returnToChat} hitSlop={10} style={styles.iconBtn}>
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="Return to chat"
+          onPress={returnToChat}
+          hitSlop={10}
+          style={styles.iconBtn}
+        >
           <ChevronLeft size={24} color={OVER_TEXT} strokeWidth={1.8} />
         </PressableScale>
         <View style={styles.titleWrap} pointerEvents="none">
           <Text style={styles.title}>Core</Text>
           <Text style={styles.subtitle}>Your connected context</Text>
         </View>
-        <PressableScale onPress={() => setSearchOpen(true)} hitSlop={10} style={styles.iconBtn}>
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="Search memories"
+          onPress={() => setSearchOpen(true)}
+          hitSlop={10}
+          style={styles.iconBtn}
+        >
           <Search size={21} color={OVER_TEXT} strokeWidth={2} />
         </PressableScale>
-        <PressableScale onPress={() => setListOpen(true)} hitSlop={10} style={styles.iconBtn}>
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="View all memories"
+          onPress={() => setListOpen(true)}
+          hitSlop={10}
+          style={styles.iconBtn}
+        >
           <List size={21} color={OVER_TEXT} strokeWidth={2} />
         </PressableScale>
       </View>
@@ -457,6 +482,7 @@ export default function SecondBrainScreen() {
           links={selectedLinks}
           nodeById={nodeById}
           sourceTitle={sourceTitle}
+          hasSourceConversation={sourceConversation !== null}
           onClose={() => { setDetailVisible(false); setSelectedKey(null); }}
           onCategory={handleCategory}
           onOpenSource={openSource}

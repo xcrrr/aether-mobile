@@ -27,36 +27,53 @@ function normValue(v: string): string {
 
 /** Keep manually entered labels aligned with the extractor's stable key format. */
 function normKey(key: string): string {
-  return key.trim().toLowerCase().replace(/\s+/g, '_');
+  return key
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 /**
- * Collapse duplicate facts already in the store: entries in the same category
- * with the same (normalised) value are the same fact saved more than once. Keeps
- * the strongest copy (most reinforced, then most confident), folds the rest into
- * its reinforcement count. Pure; run once on rehydration to clean legacy data.
+ * Collapse legacy violations of the real store identity: category + normalized
+ * key. Equal values under different keys can describe different facts
+ * (`birth_city` and `current_city` may both be Warsaw), so value alone is never
+ * deletion authority.
  */
 export function dedupeEntries(entries: MemoryEntry[]): MemoryEntry[] {
   const byFact = new Map<string, MemoryEntry>();
   for (const e of entries) {
-    const sig = `${e.category}\n${normValue(e.value)}`;
+    const sig = `${e.category}\n${normKey(e.key)}`;
     const prev = byFact.get(sig);
     if (!prev) {
       byFact.set(sig, { ...e });
       continue;
     }
-    const stronger =
-      e.timesReinforced > prev.timesReinforced ||
-      (e.timesReinforced === prev.timesReinforced && e.confidence > prev.confidence)
-        ? e : prev;
+    const sameValue = normValue(e.value) === normValue(prev.value);
+    const stronger = sameValue
+      ? (
+          e.timesReinforced > prev.timesReinforced ||
+          (e.timesReinforced === prev.timesReinforced && e.confidence > prev.confidence)
+            ? e : prev
+        )
+      : (
+          e.updatedAt > prev.updatedAt ||
+          (e.updatedAt === prev.updatedAt && e.sourceConversationId === 'manual')
+            ? e : prev
+        );
     const weaker = stronger === e ? prev : e;
-    const history = [...(stronger.history ?? []), ...(weaker.history ?? [])]
+    const superseded = sameValue
+      ? []
+      : [{ value: weaker.value, replacedAt: stronger.updatedAt }];
+    const history = [...superseded, ...(stronger.history ?? []), ...(weaker.history ?? [])]
       .sort((a, b) => b.replacedAt - a.replacedAt)
       .slice(0, MAX_HISTORY);
     byFact.set(sig, {
       ...stronger,
       confidence: Math.max(prev.confidence, e.confidence),
-      timesReinforced: prev.timesReinforced + e.timesReinforced + 1,
+      timesReinforced: sameValue
+        ? prev.timesReinforced + e.timesReinforced + 1
+        : stronger.timesReinforced,
       createdAt: Math.min(prev.createdAt, e.createdAt),
       updatedAt: Math.max(prev.updatedAt, e.updatedAt),
       lastSeenAt: Math.max(prev.lastSeenAt, e.lastSeenAt),
@@ -79,7 +96,7 @@ interface SecondBrainState {
    *  nodes in the graph. Transient (never persisted); cleared once viewed. */
   recentKeys: string[];
 
-  addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced' | 'lastSeenAt'>) => void;
+  addOrUpdateEntry: (entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'timesReinforced' | 'lastSeenAt'>) => boolean;
   updateEntry: (id: string, patch: { value?: string; category?: MemoryCategory; visualCategory?: MemoryVisualCategory }) => void;
   getEntriesByCategory: (category: MemoryCategory) => MemoryEntry[];
   getAllEntries: () => MemoryEntry[];
@@ -115,17 +132,17 @@ export const useMemoryStore = create<SecondBrainState>()(
             deletion.category !== entry.category || normKey(deletion.key) !== normKey(entry.key),
         );
         const entries = [...get().memory.entries];
-        let idx = entries.findIndex(
+        const idx = entries.findIndex(
           (e) => e.category === entry.category && normKey(e.key) === normKey(entry.key),
         );
-        // No key match? The model often re-emits the same fact under a fresh key.
-        // Same category + same value = the same fact → reinforce, don't duplicate.
-        if (idx < 0) {
-          const nv = normValue(entry.value);
-          idx = entries.findIndex((e) => e.category === entry.category && normValue(e.value) === nv);
-        }
         if (idx >= 0) {
           const prev = entries[idx];
+          if (
+            entry.evidenceMessageId !== undefined &&
+            entry.evidenceMessageId === prev.evidenceMessageId
+          ) {
+            return false;
+          }
           const changed = normValue(prev.value) !== normValue(entry.value);
           if (changed) {
             // The fact CHANGED: keep the old value in history and start over —
@@ -144,7 +161,9 @@ export const useMemoryStore = create<SecondBrainState>()(
               lastSeenAt: now,
               stale: false,
               timesReinforced: 0,
-              evidence: entry.evidence ?? prev.evidence,
+              evidence: entry.sourceConversationId === 'manual' ? undefined : entry.evidence ?? prev.evidence,
+              evidenceMessageId: entry.sourceConversationId === 'manual' ? undefined : entry.evidenceMessageId,
+              observedAt: entry.sourceConversationId === 'manual' ? undefined : entry.observedAt,
               reason: entry.reason ?? prev.reason,
               history,
             };
@@ -159,7 +178,13 @@ export const useMemoryStore = create<SecondBrainState>()(
               lastSeenAt: now,
               stale: false,
               timesReinforced: prev.timesReinforced + 1,
-              evidence: entry.evidence ?? prev.evidence,
+              evidence: entry.sourceConversationId === 'manual' ? undefined : entry.evidence ?? prev.evidence,
+              evidenceMessageId: entry.sourceConversationId === 'manual'
+                ? undefined
+                : entry.evidenceMessageId ?? prev.evidenceMessageId,
+              observedAt: entry.sourceConversationId === 'manual'
+                ? undefined
+                : entry.observedAt ?? prev.observedAt,
               reason: entry.reason ?? prev.reason,
             };
           }
@@ -174,6 +199,7 @@ export const useMemoryStore = create<SecondBrainState>()(
           });
         }
         set({ memory: { ...get().memory, entries, deletions } });
+        return true;
       },
 
       updateEntry: (id, patch) => {
@@ -245,6 +271,7 @@ export const useMemoryStore = create<SecondBrainState>()(
       },
 
       clearAll: () => {
+        extractionConsentToken = uuid();
         const memory = get().memory;
         const clearedAt = Date.now();
         const clearedKeys = new Set(
@@ -275,14 +302,31 @@ export const useMemoryStore = create<SecondBrainState>()(
           value: input.value,
           confidence: 1,
           sourceConversationId: 'manual',
+          reason: 'You added this memory yourself',
         });
       },
 
       purgeStale: () => {
-        const entries = get().memory.entries.filter((e) => !e.stale);
+        const memory = get().memory;
+        const purgedAt = Date.now();
+        const stale = memory.entries.filter((e) => e.stale);
+        const entries = memory.entries.filter((e) => !e.stale);
         const keys = new Set(entries.map((e) => e.key));
-        const edges = (get().memory.edges ?? []).filter((e) => keys.has(e.fromKey) && keys.has(e.toKey));
-        set({ memory: { ...get().memory, entries, edges } });
+        const edges = (memory.edges ?? []).filter((e) => keys.has(e.fromKey) && keys.has(e.toKey));
+        const purgedKeys = new Set(stale.map((entry) => `${entry.category}\n${entry.key}`));
+        const deletions = [
+          ...(memory.deletions ?? []).filter(
+            (deletion) => !purgedKeys.has(`${deletion.category}\n${deletion.key}`),
+          ),
+          ...stale.map((entry) => ({
+            category: entry.category,
+            categoryAliases: entry.categoryAliases,
+            categoryCorrectedAt: entry.categoryCorrectedAt,
+            key: entry.key,
+            deletedAt: purgedAt,
+          })),
+        ];
+        set({ memory: { ...memory, entries, edges, deletions } });
       },
 
       addEdge: (edge) => {
@@ -321,12 +365,15 @@ export const useMemoryStore = create<SecondBrainState>()(
 
       setRecentKeys: (keys) => set({ recentKeys: keys }),
       clearRecentKeys: () => set({ recentKeys: [] }),
-      resetLocalState: () => set({
-        memory: emptyMemory(),
-        enabled: true,
-        hydrated: true,
-        recentKeys: [],
-      }),
+      resetLocalState: () => {
+        extractionConsentToken = uuid();
+        set({
+          memory: emptyMemory(),
+          enabled: true,
+          hydrated: true,
+          recentKeys: [],
+        });
+      },
     }),
     {
       name: STORAGE_KEY,

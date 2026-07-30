@@ -117,7 +117,10 @@ export const MemoryGraphView = forwardRef<MemoryGraphViewHandle, Props>(function
   const onMessage = useCallback((e: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
-      if (msg.type === 'ready') setReady(true);
+      if (msg.type === 'ready') {
+        setError(null);
+        setReady(true);
+      }
       else if (msg.type === 'nodeTap' && msg.key) onNodeTap(msg.key);
       else if (msg.type === 'clearFocus') onClearFocus();
       else if (msg.type === 'error') setError(String(msg.error ?? 'scene error'));

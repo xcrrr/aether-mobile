@@ -40,17 +40,57 @@ const CONTINUATION = /\b(continue|continuing|pick up|left off|last time|as we di
  */
 const PROFILE_BROAD = /\b(who am i|do you know who i am|do (you|you all) (know|remember) me|what can (you|core) tell me about (me|myself)|what do(?:es)? (you|core) (know|remember) about me|what (have you|did you|has core|does core) (learned?|saved?|remembered?) about me|do (you|core) (know|remember) (anything |something )?about me|tell me about (me|myself)|describe me|what do(?:es)? (you|core) know about my (life|self))\b/i;
 
-/** A facet noun alone ("my project plan…") is a work request, not a memory
- *  question — the message must also ASK what is known/remembered. Allow up to
- *  3 filler words between "what" and the verb so real phrasing like "what
- *  PROJECTS am I working on" still counts as asking (not just the bare "what
- *  am I working on"). */
-const PROFILE_ASK = /\b(what\s+(?:\w+\s+){0,3}(?:are|is|were|am i)\b|what do you (know|remember)|do you (know|remember)|tell me|remind me|list)\b/i;
+/**
+ * A facet noun alone ("help with my job", "a language learning plan") is a
+ * request about that topic, not a request to disclose saved memory. The
+ * question must have a self-recall shape as well. Deliberately avoid a bare
+ * "tell me" / "do you know" gate: those made ordinary requests such as "tell
+ * me how to improve at my job" look like profile questions.
+ */
+const PROFILE_ASK =
+  /\b(?:what\s+(?:are|is|was|were)\s+my\b|what\s+(?:\w+\s+){0,3}am i\b|what\s+(?:do|did)\s+i\s+(?:do|have|know|speak)\b|what\s+do(?:es)?\s+(?:you|core)\s+(?:know|remember)\s+about\s+my\b|(?:what|which)\s+(?:\w+\s+){0,3}do\s+i\b|where\s+(?:(?:do|did)\s+i\s+live|am\s+i\s+(?:living|located|based|from)|is\s+my\s+(?:home|location))\b|who\s+(?:is|are|was|were)\s+my\b|do(?:es)?\s+(?:you|core)\s+(?:know|remember)\s+(?:(?:about\s+|anything\s+about\s+|something\s+about\s+)?my|where|what|which|who)\b|tell\s+me\s+(?:about\s+)?my\b|remind\s+me\s+(?:(?:about|of)\s+my|what|which|where|who)\b|list\s+my\b|describe\s+my\b)/i;
 
-const PROFILE_FACETS: Array<{ re: RegExp; categories: MemoryCategory[] }> = [
+interface ProfileFacet {
+  re: RegExp;
+  categories: MemoryCategory[];
+  /**
+   * Some facets share a broad storage category. Keep a job question from
+   * returning every saved identity fact (city, language, name, and so on).
+   */
+  entryRe?: RegExp;
+}
+
+const PROFILE_FACETS: ProfileFacet[] = [
   { re: /\b(?:my|and) (preferences?|interests?|hobbies|hobby|passions?)\b/i, categories: ['preferences'] },
   { re: /\b(?:my|and) (goals?|ambitions?)\b/i, categories: ['goals'] },
   { re: /\b(working on|(?:my|and) projects?)\b/i, categories: ['context', 'goals'] },
+  {
+    re: /\b(?:(?:my|and) (?:job(?!\s+(?:application|search|interview|offer|description|duties|tasks?|projects?|problems?|issues?))|occupation|profession|career|employer|workplace|work role)|what (?:(?:do|did) )?i do for work|where (?:do|did) i work)\b/i,
+    categories: ['identity'],
+    entryRe: /\b(job|occupation|profession|career|employer|employment|workplace|work role|roles?|works? (?:as|at|for)|employed)\b/i,
+  },
+  {
+    re: /\b(?:(?:my|and) (?:location|home|hometown|home city|city|country|address)|where (?:(?:(?:do|did) )?i live|am i (?:living|located|based|from)|is my (?:home|location)))\b/i,
+    categories: ['identity'],
+    entryRe: /\b(location|home|hometown|city|country|address|lives?|living|located|based|resides?|residence)\b/i,
+  },
+  {
+    re: /\b(?:(?:my|and) (?:languages?|native language|mother tongue)|(?:what|which) languages? (?:do )?i (?:speak|know|use))\b/i,
+    categories: ['identity'],
+    entryRe: /\b(language|native|mother tongue|speaks?|spoken|fluen(?:t|cy)|bilingual|multilingual)\b/i,
+  },
+  {
+    re: /\b(?:(?:my|and) (?:relationships?|partner|spouse|wife|husband|boyfriend|girlfriend|family|friends?|children|kids?|parents?|siblings?|brother|sister)|what relationships? do i have|who (?:is|are|was|were) my (?:partner|spouse|wife|husband|boyfriend|girlfriend|friends?|children|kids?|parents?|siblings?|brother|sister))\b/i,
+    categories: ['relationships'],
+  },
+  {
+    re: /\b(?:(?:my|and) (?:skills?|strengths?|expertise|abilities)|what (?:skills? do i have|am i good at|do i know))\b/i,
+    categories: ['knowledge'],
+  },
+  {
+    re: /\b(?:(?:my|and) (?:personality|traits?|character)|what kind of person am i|describe my personality)\b/i,
+    categories: ['personality'],
+  },
 ];
 
 /** Category order for a broad profile summary. Emotional and patterns notes are
@@ -59,16 +99,36 @@ const PROFILE_CATEGORY_ORDER: MemoryCategory[] = [
   'identity', 'preferences', 'goals', 'context', 'knowledge', 'relationships', 'personality',
 ];
 
-export function profileCategories(text: string): MemoryCategory[] | null {
+interface ProfileRoute {
+  categories: MemoryCategory[];
+  /** Omitted for a broad profile summary; all allowed categories may contribute. */
+  facets?: ProfileFacet[];
+}
+
+function profileRoute(text: string): ProfileRoute | null {
   if (PROFILE_ASK.test(text)) {
+    const facets: ProfileFacet[] = [];
     const matched = new Set<MemoryCategory>();
     for (const facet of PROFILE_FACETS) {
-      if (facet.re.test(text)) facet.categories.forEach((category) => matched.add(category));
+      if (!facet.re.test(text)) continue;
+      facets.push(facet);
+      facet.categories.forEach((category) => matched.add(category));
     }
-    if (matched.size) return [...matched];
+    if (matched.size) return { categories: [...matched], facets };
   }
-  if (PROFILE_BROAD.test(text)) return PROFILE_CATEGORY_ORDER;
+  if (PROFILE_BROAD.test(text)) return { categories: PROFILE_CATEGORY_ORDER };
   return null;
+}
+
+export function profileCategories(text: string): MemoryCategory[] | null {
+  return profileRoute(text)?.categories ?? null;
+}
+
+function profileEntryMatches(entry: MemoryEntry, route: ProfileRoute): boolean {
+  if (!route.facets) return true;
+  const text = `${entry.key.replace(/_/g, ' ')} ${entry.value}`;
+  return route.facets.some((facet) =>
+    facet.categories.includes(entry.category) && (!facet.entryRe || facet.entryRe.test(text)));
 }
 
 /** `running` -> `run`, `stopped` -> `stop`. Only for a doubled final consonant. */
@@ -138,6 +198,19 @@ export function recallPolicy(activeModelId: string | null | undefined): RecallPo
   return { maxTopical: 3, maxChars: 450, minScore: 1 };
 }
 
+/**
+ * A profile summary is an explicit request to enumerate saved knowledge, so it
+ * has a separate, larger envelope than ambient topical recall. Both models can
+ * return twenty concise facts; the smaller model retains a tighter character
+ * ceiling for long notes.
+ */
+function profileRecallPolicy(activeModelId: string | null | undefined): RecallPolicy {
+  if (activeModelId === 'gemma4-e4b') {
+    return { maxTopical: 24, maxChars: 4800, minScore: 1 };
+  }
+  return { maxTopical: 20, maxChars: 3000, minScore: 1 };
+}
+
 export interface RecallItem {
   entry: MemoryEntry;
   /** Human-readable selection reason, e.g. "matched: marathon, october". */
@@ -183,10 +256,39 @@ export interface RecallInput {
   activeModelId: string | null | undefined;
 }
 
+const MEMORY_CATEGORIES = new Set<MemoryCategory>([
+  'identity', 'personality', 'preferences', 'goals', 'knowledge',
+  'relationships', 'patterns', 'emotional', 'context',
+]);
+
+function isRecallableEntry(value: unknown): value is MemoryEntry {
+  if (!value || typeof value !== 'object') return false;
+  const entry = value as Partial<MemoryEntry>;
+  return (
+    typeof entry.id === 'string' &&
+    entry.id.length > 0 &&
+    typeof entry.key === 'string' &&
+    entry.key.trim().length > 0 &&
+    typeof entry.value === 'string' &&
+    entry.value.trim().length > 0 &&
+    typeof entry.category === 'string' &&
+    MEMORY_CATEGORIES.has(entry.category as MemoryCategory)
+  );
+}
+
+function rankNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 function entryTokens(e: MemoryEntry): Set<string> {
   const valueTokens = distinctiveTokens(e.value);
   const keyTokens = distinctiveTokens(e.key.replace(/_/g, ' '));
-  if (e.sourceConversationId !== 'manual' || !e.history?.length) {
+  const historyValues = Array.isArray(e.history)
+    ? e.history
+      .filter((revision) => revision && typeof revision.value === 'string')
+      .map((revision) => revision.value)
+    : [];
+  if (e.sourceConversationId !== 'manual' || !historyValues.length) {
     return new Set([...keyTokens, ...valueTokens]);
   }
 
@@ -195,7 +297,7 @@ function entryTokens(e: MemoryEntry): Set<string> {
   // (`october_marathon`), keep the key's current-value anchor (`marathon`) and
   // drop only its old-only fragment (`october`).
   const current = new Set(valueTokens);
-  const history = new Set(e.history.flatMap((revision) => distinctiveTokens(revision.value)));
+  const history = new Set(historyValues.flatMap(distinctiveTokens));
   const keyHasCurrentAnchor = keyTokens.some((token) => current.has(token));
   const stableKeyTokens = keyHasCurrentAnchor
     ? keyTokens.filter((token) => current.has(token) || !history.has(token))
@@ -219,8 +321,18 @@ function styleTier(entries: MemoryEntry[]): MemoryEntry[] {
       !e.stale &&
       COMMUNICATION_STYLE.test(`${e.key.replace(/_/g, ' ')} ${e.value}`),
     )
-    .sort((a, b) => b.timesReinforced - a.timesReinforced || b.confidence - a.confidence)
+    .sort((a, b) =>
+      rankNumber(b.timesReinforced) - rankNumber(a.timesReinforced) ||
+      rankNumber(b.confidence) - rankNumber(a.confidence))
     .slice(0, 2);
+}
+
+/**
+ * Values are capped to the same length the injector can expose. This keeps the
+ * budget meaningful even if a legacy/malformed store contains a huge string.
+ */
+function recallCost(entry: MemoryEntry): number {
+  return Math.min(entry.key.length, 120) + Math.min(entry.value.length, 200);
 }
 
 /**
@@ -238,56 +350,95 @@ export function selectRecall(messages: Message[], input: RecallInput): RecallRes
     const previousText = userTurns[userTurns.length - 2]?.content ?? '';
     const isNewConversation = userTurns.length <= 1;
 
-    const profileCats = profileCategories(currentText);
-    if (!input.entries.length) {
-      return profileCats ? { style: [], topical: [], profileQuery: true } : EMPTY_RECALL;
+    const profile = profileRoute(currentText);
+    const profileCats = profile?.categories ?? null;
+    const entries = Array.isArray(input.entries)
+      ? input.entries.filter(isRecallableEntry)
+      : [];
+    if (!entries.length) {
+      return profile ? { style: [], topical: [], profileQuery: true } : EMPTY_RECALL;
     }
 
-    const policy = recallPolicy(input.activeModelId);
+    const topicalPolicy = recallPolicy(input.activeModelId);
+    const selectionPolicy = profile
+      ? profileRecallPolicy(input.activeModelId)
+      : topicalPolicy;
     const current = new Set(distinctiveTokens(currentText));
     const previous = new Set(distinctiveTokens(previousText));
 
-    const style = styleTier(input.entries);
+    const style = styleTier(entries);
 
     const scored: Array<RecallItem & { score: number }> = [];
     if (current.size || previous.size) {
-      for (const entry of input.entries) {
-        const tokens = entryTokens(entry);
-        const surface = surfaceMap(`${entry.key.replace(/_/g, ' ')} ${entry.value}`);
-        let score = 0;
-        let currentHits = 0;
-        const matched: string[] = [];
-        const name = (t: string) => surface.get(t) ?? t;
-        for (const t of tokens) {
-          if (current.has(t)) { score += 1; currentHits += 1; matched.push(name(t)); }
-          else if (previous.has(t)) { score += 0.5; matched.push(name(t)); }
-        }
-        // The current message must win: previous-turn echoes boost ranking but
-        // can never qualify a memory on their own.
-        if (currentHits >= 1 && score >= thresholdFor(entry, policy)) {
-          scored.push({ entry, score, why: `matched: ${matched.join(', ')}` });
+      for (const entry of entries) {
+        try {
+          const tokens = entryTokens(entry);
+          const surface = surfaceMap(`${entry.key.replace(/_/g, ' ')} ${entry.value}`);
+          const evidenceText = typeof entry.evidence === 'string' ? entry.evidence : '';
+          const evidence = new Set(distinctiveTokens(evidenceText));
+          const evidenceSurface = surfaceMap(evidenceText);
+          let score = 0;
+          let currentHits = 0;
+          const matched: string[] = [];
+          const name = (t: string) => surface.get(t) ?? t;
+          for (const t of tokens) {
+            if (current.has(t)) { score += 1; currentHits += 1; matched.push(name(t)); }
+            else if (previous.has(t)) { score += 0.5; matched.push(name(t)); }
+          }
+          const evidenceMatches = [...evidence].filter((token) => current.has(token));
+          // Evidence may improve ordering after key/value relevance qualifies,
+          // but it cannot lower that relevance threshold.
+          if (currentHits >= 1 && score >= thresholdFor(entry, topicalPolicy)) {
+            const evidenceBoost = Math.min(evidenceMatches.length, 3) * 0.15;
+            scored.push({ entry, score: score + evidenceBoost, why: `matched: ${matched.join(', ')}` });
+          } else if (
+            currentHits === 0 &&
+            evidenceMatches.length >= 2 &&
+            !entry.stale &&
+            entry.category !== 'emotional'
+          ) {
+            // A conservative fallback for terse facts: require two distinctive
+            // words from the original supporting quote in the current turn.
+            const names = evidenceMatches.slice(0, 3)
+              .map((token) => evidenceSurface.get(token) ?? token);
+            scored.push({
+              entry,
+              score: topicalPolicy.minScore + Math.min(evidenceMatches.length - 2, 2) * 0.1,
+              why: `matched supporting context: ${names.join(', ')}`,
+            });
+          }
+        } catch {
+          // One damaged legacy record must not suppress recall from valid ones.
+          continue;
         }
       }
     }
     scored.sort((a, b) =>
       b.score - a.score ||
-      b.entry.confidence - a.entry.confidence ||
-      b.entry.lastSeenAt - a.entry.lastSeenAt,
+      rankNumber(b.entry.confidence) - rankNumber(a.entry.confidence) ||
+      rankNumber(b.entry.lastSeenAt) - rankNumber(a.entry.lastSeenAt),
     );
 
     // Profile route: a self-context question selects the strongest notes from
     // the asked-about categories directly — similarity can't see "who am I".
-    // Profile picks lead; any token-scored matches fill the remaining budget.
-    if (profileCats) {
+    // Profile picks lead; token-scored matches may fill the remaining budget
+    // only when they belong to the requested profile scope.
+    if (profile && profileCats) {
+      for (let i = scored.length - 1; i >= 0; i--) {
+        const entry = scored[i].entry;
+        if (!profileCats.includes(entry.category) || !profileEntryMatches(entry, profile)) {
+          scored.splice(i, 1);
+        }
+      }
       const byCat = new Map<MemoryCategory, MemoryEntry[]>(profileCats.map((c) => [c, []]));
-      for (const e of input.entries) {
-        if (!e.stale) byCat.get(e.category)?.push(e);
+      for (const e of entries) {
+        if (!e.stale && profileEntryMatches(e, profile)) byCat.get(e.category)?.push(e);
       }
       for (const list of byCat.values()) {
         list.sort((a, b) =>
-          b.timesReinforced - a.timesReinforced ||
-          b.confidence - a.confidence ||
-          b.lastSeenAt - a.lastSeenAt,
+          rankNumber(b.timesReinforced) - rankNumber(a.timesReinforced) ||
+          rankNumber(b.confidence) - rankNumber(a.confidence) ||
+          rankNumber(b.lastSeenAt) - rankNumber(a.lastSeenAt),
         );
       }
       // Round-robin across categories so a broad summary covers the whole
@@ -299,7 +450,7 @@ export function selectRecall(messages: Message[], input: RecallInput): RecallRes
           const e = byCat.get(c)![round];
           if (e) { picks.push(e); added = true; }
         }
-        if (picks.length >= policy.maxTopical) break;
+        if (picks.length >= selectionPolicy.maxTopical) break;
       }
       scored.unshift(...picks.map((entry) => ({
         entry, score: Infinity, why: 'you asked what I know about you',
@@ -310,12 +461,16 @@ export function selectRecall(messages: Message[], input: RecallInput): RecallRes
     // chat admits recent context. Ongoing chats already carry their own history.
     if (isNewConversation && CONTINUATION.test(currentText)) {
       const picked = new Set(scored.map((s) => s.entry.id));
-      const recent = input.entries
+      const recent = entries
         .filter((e) => (e.category === 'context' || e.category === 'goals') && !e.stale && !picked.has(e.id))
-        .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
+        .sort((a, b) => rankNumber(b.lastSeenAt) - rankNumber(a.lastSeenAt))
         .slice(0, 2);
       for (const entry of recent) {
-        scored.push({ entry, score: policy.minScore, why: 'you asked to continue where you left off' });
+        scored.push({
+          entry,
+          score: topicalPolicy.minScore,
+          why: 'you asked to continue where you left off',
+        });
       }
     }
 
@@ -323,16 +478,16 @@ export function selectRecall(messages: Message[], input: RecallInput): RecallRes
     let chars = 0;
     const seen = new Set<string>();
     for (const s of scored) {
-      if (topical.length >= policy.maxTopical) break;
+      if (topical.length >= selectionPolicy.maxTopical) break;
       if (seen.has(s.entry.id)) continue;
-      const cost = s.entry.key.length + s.entry.value.length;
-      if (chars + cost > policy.maxChars && topical.length > 0) continue;
+      const cost = recallCost(s.entry);
+      if (chars + cost > selectionPolicy.maxChars) continue;
       seen.add(s.entry.id);
       chars += cost;
       topical.push({ entry: s.entry, why: s.why });
     }
 
-    return { style, topical, ...(profileCats ? { profileQuery: true } : {}) };
+    return { style, topical, ...(profile ? { profileQuery: true } : {}) };
   } catch {
     return EMPTY_RECALL;
   }

@@ -70,6 +70,8 @@ export interface MemoryEntry {
   lastSeenAt: number;            // Unix ms — bumped each time the fact is re-observed
   stale?: boolean;               // single-observation + long-unseen; de-emphasized in the graph
   evidence?: string;             // verbatim user quote the fact was grounded against
+  evidenceMessageId?: string;    // user message that supplied the quote
+  observedAt?: number;           // createdAt of that user message
   reason?: string;               // one human-readable sentence: why this was saved
   history?: MemoryRevision[];    // previous values, newest first (capped)
 }

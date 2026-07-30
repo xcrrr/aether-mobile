@@ -264,8 +264,11 @@ describe('selectRecall — safety and failure (brief cases 12, 13)', () => {
 
   it('fails safe on malformed entries instead of throwing', () => {
     const broken = { ...aether(), key: undefined } as unknown as MemoryEntry;
+    const valid = aether();
     expect(() => selectRecall([user('aether status')], input([broken]))).not.toThrow();
     expect(selectRecall([user('aether status')], input([broken]))).toEqual(EMPTY_RECALL);
+    expect(selectRecall([user('aether status')], input([broken, valid])).topical)
+      .toEqual([expect.objectContaining({ entry: valid })]);
   });
 
   it('handles an empty store and empty messages', () => {
@@ -362,11 +365,35 @@ describe('selectRecall — profile route (self-context questions)', () => {
     expect(r.topical.map((t) => t.entry.key)).toEqual(['home_city']);
   });
 
-  it('the profile route respects the model budget (E2B caps at 3)', () => {
-    const many = Array.from({ length: 10 }, (_, i) =>
-      entry({ category: 'preferences', key: `pref_${i}`, value: `Enjoys hobby number ${i}` }));
-    const r = selectRecall([user('what do you know about me?')], input(many, { activeModelId: 'gemma4-e2b' }));
-    expect(r.topical.length).toBe(3);
+  it.each(['gemma4-e4b', 'gemma4-e2b'])(
+    'returns twenty concise profile facts on %s instead of reusing ordinary topical caps',
+    (activeModelId) => {
+      const many = Array.from({ length: 20 }, (_, i) =>
+        entry({ category: 'preferences', key: `pref_${i}`, value: `Enjoys hobby number ${i}` }));
+      const r = selectRecall(
+        [user('what do you know about me?')],
+        input(many, { activeModelId }),
+      );
+      expect(r.topical).toHaveLength(20);
+    },
+  );
+
+  it.each([
+    ['gemma4-e4b', 4800],
+    ['gemma4-e2b', 3000],
+  ])('keeps the larger %s profile summary inside its character budget', (activeModelId, maxChars) => {
+    const many = Array.from({ length: 30 }, (_, i) =>
+      entry({ category: 'preferences', key: `pref_${i}`, value: `Hobby ${'x'.repeat(500)}` }));
+    const r = selectRecall(
+      [user('what do you know about me?')],
+      input(many, { activeModelId }),
+    );
+    const chars = r.topical.reduce(
+      (sum, item) => sum + Math.min(item.entry.key.length, 120) + Math.min(item.entry.value.length, 200),
+      0,
+    );
+    expect(chars).toBeLessThanOrEqual(maxChars);
+    expect(r.topical.length).toBeGreaterThan(6);
   });
 
   it('an empty store still flags the profile question so the answer can be honest', () => {
@@ -383,6 +410,68 @@ describe('selectRecall — profile route (self-context questions)', () => {
   it('ordinary unrelated questions never trigger the profile route', () => {
     const r = selectRecall([user('Give me a pasta recipe')], input([aether(), blackHoles()]));
     expect(r.profileQuery).toBeUndefined();
+    expect(r.topical).toEqual([]);
+  });
+});
+
+describe('selectRecall — ASK-gated self facets', () => {
+  const profileEntries = () => [
+    entry({ category: 'identity', key: 'occupation', value: 'Works as a product designer' }),
+    entry({ category: 'identity', key: 'home_city', value: 'Lives in Warsaw' }),
+    entry({ category: 'identity', key: 'spoken_languages', value: 'Speaks Polish and English' }),
+    entry({ category: 'relationships', key: 'partner', value: 'Partner is Alex' }),
+    entry({ category: 'knowledge', key: 'typescript_skill', value: 'Advanced with TypeScript' }),
+    entry({ category: 'personality', key: 'personality_traits', value: 'Curious and persistent' }),
+  ];
+
+  it.each([
+    ['What is my job?', 'occupation'],
+    ['Where do I live?', 'home_city'],
+    ['Which languages do I speak?', 'spoken_languages'],
+    ['Who is my partner?', 'partner'],
+    ['What are my skills?', 'typescript_skill'],
+    ['What is my personality?', 'personality_traits'],
+  ])('routes "%s" to the matching saved self facet', (question, expectedKey) => {
+    const r = selectRecall([user(question)], input(profileEntries()));
+    expect(r.profileQuery).toBe(true);
+    expect(r.topical.map((item) => item.entry.key)).toEqual([expectedKey]);
+  });
+
+  it.each([
+    'Help me improve at my job',
+    'Tell me how to improve at my job',
+    'What is the best way to improve at my job?',
+    'What is my job application missing?',
+    'Where should I live for my new job?',
+    'What skills should I learn for work?',
+    'Can you help with my relationship?',
+    'Write a bio that sounds like my personality',
+  ])('does not mistake the ordinary work request "%s" for a profile query', (request) => {
+    const r = selectRecall([user(request)], input(profileEntries()));
+    expect(r.profileQuery).toBeUndefined();
+    expect(r.topical.every((item) => item.why !== 'you asked what I know about you')).toBe(true);
+  });
+});
+
+describe('selectRecall — supporting evidence', () => {
+  const terseLocation = () => entry({
+    category: 'identity',
+    key: 'home_city',
+    value: 'Warsaw',
+    evidence: 'I moved to Warsaw late last autumn',
+  });
+
+  it('can recover a terse fact from two distinctive words in its supporting quote', () => {
+    const r = selectRecall(
+      [user('Could moving last autumn affect my tax filing?')],
+      input([terseLocation()]),
+    );
+    expect(r.topical.map((item) => item.entry.key)).toEqual(['home_city']);
+    expect(r.topical[0].why).toContain('supporting context');
+  });
+
+  it('never recalls a fact from one incidental evidence word', () => {
+    const r = selectRecall([user('Moving is exhausting')], input([terseLocation()]));
     expect(r.topical).toEqual([]);
   });
 });
