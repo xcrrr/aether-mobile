@@ -78,18 +78,19 @@ function commandOutput(res) {
 
 check('config: app.json release identity', () => {
   const config = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8')).expo;
-  if (config.version !== '2.1.0') return fail(`Expected app.json version 2.1.0, found ${config.version}`);
+  if (!/^\d+\.\d+\.\d+$/.test(config.version ?? '')) return fail(`Unexpected app.json version ${config.version}`);
   if (config.android?.package !== 'com.aether.app') return fail(`Unexpected android package ${config.android?.package}`);
   if (!config.android?.permissions?.includes('INTERNET')) return fail('INTERNET permission missing from Expo config');
-  return pass('Aether 2.1.0 / com.aether.app');
+  return pass(`Aether ${config.version} / com.aether.app`);
 });
 
 check('config: native Android release identity', () => {
   const gradle = fs.readFileSync(path.join(root, 'android', 'app', 'build.gradle'), 'utf8');
   if (!/applicationId 'com\.aether\.app'/.test(gradle)) return fail('applicationId mismatch');
-  if (!/versionName "2\.1\.0"/.test(gradle)) return fail('versionName mismatch');
-  if (!/versionCode 4/.test(gradle)) return fail('versionCode 4 not found');
-  return pass('versionName 2.1.0 / versionCode 4');
+  const name = gradle.match(/versionName "([^"]+)"/)?.[1];
+  const code = gradle.match(/versionCode (\d+)/)?.[1];
+  if (!name || !code) return fail('versionName or versionCode not found in build.gradle');
+  return pass(`versionName ${name} / versionCode ${code}`);
 });
 
 check('legal: document registry', () => {

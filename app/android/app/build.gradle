@@ -92,8 +92,8 @@ android {
         applicationId 'com.aether.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
-        versionName "2.1.0"
+        versionCode 5
+        versionName "2.2.0"
     }
     // Release signing is read from android/keystore.properties, which is
     // gitignored and never committed. Copy keystore.properties.example, fill it
