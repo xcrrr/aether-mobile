@@ -36,7 +36,7 @@ export function Footer() {
           </nav>
         </div>
         <p style={{ margin: '40px 0 0', fontSize: 12, color: 'var(--muted)' }}>
-          © 2026 Aether · In closed beta
+          © 2026 Aether · Open beta · Source on GitHub
         </p>
       </div>
 

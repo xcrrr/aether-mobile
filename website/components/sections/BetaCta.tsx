@@ -10,19 +10,20 @@ export function BetaCta() {
             It’s early. That’s the point.
           </h2>
           <p className="lede" style={{ maxWidth: 520, margin: '24px auto 0' }}>
-            Aether is in closed beta with a small group of Android users. Builds ship as
-            installable APKs, and feedback lands directly with the people making it.
+            Aether is in open beta. Builds ship as installable APKs on GitHub, the source is public,
+            and feedback lands directly with the people making it.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 40 }}>
-            <a href={DISCORD_URL} target="_blank" rel="noreferrer" className="btn btn-primary">
-              Join the beta on Discord
+            <a href={RELEASE_URL} target="_blank" rel="noreferrer" className="btn btn-primary">
+              Download the APK
             </a>
-            <a href={RELEASE_URL} target="_blank" rel="noreferrer" className="btn btn-ghost">
-              Get the latest APK
+            <a href={DISCORD_URL} target="_blank" rel="noreferrer" className="btn btn-ghost">
+              Join the Discord
             </a>
           </div>
           <p style={{ marginTop: 28, fontSize: 13, color: 'var(--muted)' }}>
-            Free during beta · A recent Android phone is recommended — the model runs on your hardware.
+            Free · Android 10+, arm64 · The model runs on your hardware, so a recent phone with 8 GB
+            of RAM is recommended.
           </p>
         </Reveal>
       </div>

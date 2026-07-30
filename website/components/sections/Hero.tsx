@@ -1,6 +1,6 @@
 import { Reveal } from '@/components/ui/Reveal';
 import { BookmarkIllustration } from '@/components/ui/BookmarkIllustration';
-import { DISCORD_URL } from '@/lib/links';
+import { RELEASE_URL } from '@/lib/links';
 
 export function Hero() {
   return (
@@ -8,7 +8,7 @@ export function Hero() {
       <div className="hero-grid">
         <Reveal>
           <div className="hero-copy">
-            <p className="eyebrow" style={{ marginBottom: 24 }}>Private AI assistant · Closed beta</p>
+            <p className="eyebrow" style={{ marginBottom: 24 }}>Private AI assistant · Open beta for Android</p>
             <h1 className="display-1">
               Think without starting over.
             </h1>
@@ -16,8 +16,8 @@ export function Hero() {
               Aether keeps the context behind your work close, so conversations can build instead of reset.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 36 }}>
-              <a href={DISCORD_URL} target="_blank" rel="noreferrer" className="btn btn-primary">
-                Join the beta
+              <a href={RELEASE_URL} target="_blank" rel="noreferrer" className="btn btn-primary">
+                Download for Android
               </a>
               <a href="#mission" className="btn btn-ghost">
                 See it work

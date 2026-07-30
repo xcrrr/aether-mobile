@@ -6,11 +6,11 @@ import { SmoothScroll } from '@/components/ui/SmoothScroll';
 export const metadata: Metadata = {
   title: 'Aether — a private AI assistant for Android',
   description:
-    'Aether runs a language model on your phone. Conversations and memory stay on your device, and optional Research goes online only when you ask. Now in closed beta.',
+    'Aether runs a language model on your phone. Conversations and memory stay on your device, and optional Research goes online only when you ask. Open beta, free on GitHub.',
   openGraph: {
     title: 'Aether — a private AI assistant for Android',
     description:
-      'An assistant that runs on your phone, remembers what matters, and goes online only when you ask. Closed beta.',
+      'An assistant that runs on your phone, remembers what matters, and goes online only when you ask. Open beta for Android.',
     type: 'website',
     siteName: 'Aether',
   },
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     card: 'summary',
     title: 'Aether — a private AI assistant for Android',
     description:
-      'An assistant that runs on your phone, remembers what matters, and goes online only when you ask. Closed beta.',
+      'An assistant that runs on your phone, remembers what matters, and goes online only when you ask. Open beta for Android.',
   },
 };
 

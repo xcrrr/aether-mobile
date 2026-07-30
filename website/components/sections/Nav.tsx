@@ -1,9 +1,10 @@
-import { DISCORD_URL } from '@/lib/links';
+import { GITHUB_URL, RELEASE_URL } from '@/lib/links';
 
 const LINKS = [
   { href: '#mission', label: 'Our Mission' },
   { href: '#memory', label: 'Memory' },
   { href: '#features', label: 'Features' },
+  { href: GITHUB_URL, label: 'GitHub', external: true },
 ];
 
 export function Nav() {
@@ -36,13 +37,19 @@ export function Nav() {
         </a>
         <div className="nav-links" style={{ display: 'flex', gap: 24, flex: 1 }}>
           {LINKS.map((l) => (
-            <a key={l.href} href={l.href} className="quiet-link" style={{ fontSize: 14, fontWeight: 500 }}>
+            <a
+              key={l.href}
+              href={l.href}
+              className="quiet-link"
+              style={{ fontSize: 14, fontWeight: 500 }}
+              {...(l.external ? { target: '_blank', rel: 'noreferrer' } : {})}
+            >
               {l.label}
             </a>
           ))}
         </div>
-        <a href={DISCORD_URL} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ minHeight: 40, padding: '0 18px', fontSize: 14, marginLeft: 'auto' }}>
-          Join the beta
+        <a href={RELEASE_URL} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ minHeight: 40, padding: '0 18px', fontSize: 14, marginLeft: 'auto' }}>
+          Download
         </a>
       </nav>
       <style>{`
