@@ -100,6 +100,8 @@ export const fonts = {
   sansHeavy: 'InstrumentSans-SemiBold',
   serif: 'Newsreader',
   serifItalic: 'Newsreader-Italic',
+  serifSemibold: 'Newsreader-SemiBold',
+  serifBold: 'Newsreader-Bold',
   display: 'Newsreader-Medium',
   displayBold: 'Newsreader-Medium',
   displayHeavy: 'Newsreader-Medium',

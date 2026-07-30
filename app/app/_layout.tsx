@@ -12,6 +12,8 @@ import {
   Newsreader_400Regular,
   Newsreader_400Regular_Italic,
   Newsreader_500Medium,
+  Newsreader_600SemiBold,
+  Newsreader_700Bold,
 } from '@expo-google-fonts/newsreader';
 import * as SystemUI from 'expo-system-ui';
 import { StatusBar } from 'expo-status-bar';
@@ -39,6 +41,12 @@ export default function RootLayout() {
     'Newsreader': Newsreader_400Regular,
     'Newsreader-Italic': Newsreader_400Regular_Italic,
     'Newsreader-Medium': Newsreader_500Medium,
+    // Bold serif weights. Android cannot synthesize a bold face for a custom
+    // font: asking for fontWeight 'bold' on a family with no bold variant makes
+    // it silently fall back to the system sans, which is why bold text in
+    // assistant replies used to render in a different typeface entirely.
+    'Newsreader-SemiBold': Newsreader_600SemiBold,
+    'Newsreader-Bold': Newsreader_700Bold,
   });
 
   useEffect(() => {
