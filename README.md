@@ -32,15 +32,15 @@ explicitly turn on Research for a message.
 
 ## Install
 
-1. Download `Aether-2.2.0.apk` from the [latest release](https://github.com/xcrrr/aether-mobile/releases/latest).
+1. Download `Aether-2.2.1.apk` from the [latest release](https://github.com/xcrrr/aether-mobile/releases/latest).
 2. Allow installation from unknown sources when Android asks.
 3. Open the app and download a model when prompted. This is a one-time download of 2.6 GB or 3.7 GB.
 
 Verify the download if you want to:
 
 ```bash
-sha256sum Aether-2.2.0.apk
-# 771c67d73841d11715df22935612ee50b210fefd2b85f6c725f944e6b3dec49e
+sha256sum Aether-2.2.1.apk
+# 17f9f0bfd6e796067033fb8483c536220c87b3032429f6222715651a91dc7580
 ```
 
 The APK is signed with APK Signature Scheme v2; the signer is `CN=Aether, O=Aether, C=PL`.
@@ -112,7 +112,7 @@ There is no account system, no analytics SDK and no crash-reporting SDK anywhere
 Voice input is transcribed by the device's own Android speech recognizer; Aether does not send audio
 anywhere itself, and whether that involves a network call depends on the phone and OS.
 
-`READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` were removed in 2.2.0 —
+`READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` were removed in this release —
 none were needed, and none were declared by the app itself.
 
 ## Requirements
@@ -137,7 +137,7 @@ Aether is **pre-release beta software**. Concretely:
   before release". Publisher identity and support/privacy contacts are not yet set. See
   [`docs/aether-legal-review-required.md`](docs/aether-legal-review-required.md).
 - **This build has not been verified on a physical device.** It compiles, passes the full automated
-  suite and is correctly signed, but the 2.2.0 fixes have not been confirmed by hand on hardware.
+  suite and is correctly signed, but the 2.2.1 fixes have not been confirmed by hand on hardware.
   The script for that is [`docs/aether-device-beta-checklist.md`](docs/aether-device-beta-checklist.md).
 - **Voice input is unverified on real hardware.**
 - **Core's extraction quality has no measured baseline.** There is no fixture set of real

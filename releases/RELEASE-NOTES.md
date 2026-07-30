@@ -1,18 +1,45 @@
 # Release Notes
 
+## 2.2.1
+
+Typography fix. Everything in 2.2.0 below is included — 2.2.0 was tagged but never published, so
+this is the first public build.
+
+Android, arm64-v8a only, `minSdkVersion` 29.
+
+- APK: `Aether-2.2.1.apk`, 71.9 MiB (75,387,283 bytes)
+- `versionName` 2.2.1, `versionCode` 6, package `com.aether.app`
+- SHA-256: `17f9f0bfd6e796067033fb8483c536220c87b3032429f6222715651a91dc7580`
+- Signed with APK Signature Scheme v2; signer `CN=Aether, O=Aether, C=PL`
+
+**Bold text and headings in Aether's replies rendered in the wrong typeface.** Body text was the
+serif it should be, but anything bold fell back to the system sans, so a single paragraph could
+switch typeface mid-sentence.
+
+The cause is a platform limitation that fails silently. Android cannot synthesize a bold face for a
+custom font: if you ask for `fontWeight: 'bold'` on a family that has no bold file registered, it
+quietly substitutes the system font instead of erroring. The markdown renderer merges its own
+defaults underneath the app's styles — `fontWeight: 'bold'` on strong text and `fontWeight: '500'`
+on every heading — so the app's serif family arrived paired with a weight it could not satisfy.
+
+Two changes: the real Newsreader SemiBold and Bold files are now bundled and loaded, and every
+markdown style that names a font file also pins `fontWeight` and `fontStyle` to `normal`, so the
+weight comes from the file rather than from a request the platform cannot honour. Headings h1–h6,
+bold, italics, links and inline code were all affected; all six heading levels are now styled
+explicitly.
+
+Nothing outside the assistant's rendered markdown changed. The app's own components never used
+`fontWeight` — there are no occurrences anywhere in the source — which is why the rest of the
+interface was unaffected.
+
 ## 2.2.0
 
 First release-signed build, and the first APK since `2.1.0` (built 2026-07-02 from commit
 `aa89bab`). Everything below landed in between.
 
-Android, arm64-v8a only, `minSdkVersion` 29.
+Tagged but never published — no APK was ever attached to it. Its contents ship in 2.2.1 above.
 
-- APK: `Aether-2.2.0.apk`, 71.9 MiB (75,387,163 bytes)
-- `versionName` 2.2.0, `versionCode` 5, package `com.aether.app`
-- SHA-256: `771c67d73841d11715df22935612ee50b210fefd2b85f6c725f944e6b3dec49e`
-- Signed with APK Signature Scheme v2; signer `CN=Aether, O=Aether, C=PL`
-
-The previous build shipped four architectures. Filtering to arm64-v8a alone removed about 63 MB
+The build before it packaged four architectures. Filtering to arm64-v8a alone removed about 63 MB
 of libraries for devices Aether does not support, roughly halving the download.
 
 ### Scope
