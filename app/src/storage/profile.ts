@@ -18,6 +18,15 @@ export async function loadThemePref(): Promise<ThemePref> {
   return v === 'light' || v === 'dark' || v === 'system' ? v : 'dark';
 }
 
+/** Haptic ticking while a reply streams. On unless the user turns it off. */
+export async function loadReplyHaptics(): Promise<boolean> {
+  return (await AsyncStorage.getItem(KEYS.replyHaptics)) !== 'off';
+}
+
+export async function saveReplyHaptics(on: boolean): Promise<void> {
+  await AsyncStorage.setItem(KEYS.replyHaptics, on ? 'on' : 'off');
+}
+
 export async function saveThemePref(pref: ThemePref): Promise<void> {
   await AsyncStorage.setItem(KEYS.themePref, pref);
 }

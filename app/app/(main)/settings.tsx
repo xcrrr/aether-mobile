@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { View, ScrollView, Text, StyleSheet } from 'react-native';
+import { View, ScrollView, Text, StyleSheet, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PressableScale } from '@/components/ds/PressableScale';
 import { useFocusEffect, router } from 'expo-router';
@@ -29,6 +29,8 @@ export default function Settings() {
   const chatIndex = useChatStore((s) => s.index);
   const themePref = useProfileStore((s) => s.themePref);
   const setThemePref = useProfileStore((s) => s.setThemePref);
+  const replyHaptics = useProfileStore((s) => s.replyHaptics);
+  const setReplyHaptics = useProfileStore((s) => s.setReplyHaptics);
   const [disk, setDisk] = useState({ total: 0, free: 0, used: 0 });
 
   const refresh = useCallback(() => {
@@ -85,6 +87,24 @@ export default function Settings() {
         </View>
 
         <View>
+          <Text style={styles.label}>Feedback</Text>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleCopy}>
+              <Text style={styles.toggleTitle}>Vibrate while replying</Text>
+              <Text style={styles.toggleHint}>
+                A faint tick as each reply is written. Turn it off if you would rather it stayed quiet.
+              </Text>
+            </View>
+            <Switch
+              value={replyHaptics}
+              onValueChange={(v) => { void setReplyHaptics(v); }}
+              trackColor={{ false: c.border, true: c.violet }}
+              thumbColor={c.white}
+            />
+          </View>
+        </View>
+
+        <View>
           <Text style={styles.label}>Device storage</Text>
           <View style={styles.storageCard}>
             <View style={styles.storageHead}>
@@ -130,6 +150,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   segmentBtnActive: { backgroundColor: c.bgCard },
   segmentText: { color: c.textMuted, fontSize: fontSize.sm2, fontFamily: fonts.sansSemibold },
   segmentTextActive: { color: c.text },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    backgroundColor: c.bgCard,
+    borderColor: c.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  toggleCopy: { flex: 1, gap: 2 },
+  toggleTitle: { ...typography.sectionTitle, color: c.text },
+  toggleHint: { ...typography.bodySmall, color: c.textMuted },
   navHint: { color: c.textMuted, fontSize: fontSize.sm, fontFamily: fonts.sans, marginTop: spacing.sm },
   storageCard: { paddingVertical: spacing.xs },
   storageHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },

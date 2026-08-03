@@ -9,6 +9,7 @@ import { useBrainNotice } from '@/state/useBrainNotice';
 import { AppState } from 'react-native';
 import { useResearchStore } from '@/state/useResearchStore';
 import { loadConversation } from '@/storage/conversations';
+import { replyHapticTick, resetReplyHaptics } from '@/haptics/replyHaptics';
 
 export interface RAMWarning { available: number; required: number; }
 
@@ -170,10 +171,14 @@ export function useInference(modelId: string | undefined) {
     // this, a long-running chat sends its entire unbounded transcript every turn and
     // silently exceeds the native context once it grows past it.
     const trimmed = trimToContext(messages, Llama.MAX_TOKENS, system.length);
+    resetReplyHaptics();
     await Llama.generate(
       system,
       trimmed,
-      (token) => useChatStore.getState().appendToken(token),
+      (token) => {
+        useChatStore.getState().appendToken(token);
+        replyHapticTick();
+      },
       () => {
         // Auto-name the chat after the reply. Core work is already queued against
         // the originating conversation and waits for the shared session to idle.
@@ -216,7 +221,10 @@ export function useInference(modelId: string | undefined) {
         // into the message body — the body is the answer and nothing else.
         (progress) => useResearchStore.getState().set(progress),
         history,
-        (answer) => setContent(answer),
+        (answer) => {
+          setContent(answer);
+          replyHapticTick();
+        },
       );
       const cited = new Set(result.citations.map((c) => c.index));
       useChatStore.getState().setAssistantResearch({
