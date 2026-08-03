@@ -1,16 +1,12 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system';
 import { useFocusEffect } from 'expo-router';
 import { GraphData } from '@/components/secondbrain/graphData';
-import { fonts, fontSize, spacing } from '@/theme';
-
-const GRAPH_BG = '#181818';
-const GRAPH_TEXT = 'rgba(246,242,250,0.92)';
-const GRAPH_MUTED = 'rgba(210,205,216,0.58)';
-const GRAPH_ACCENT = '#9A87C6';
+import { fonts, fontSize, spacing, Palette } from '@/theme';
+import { useColors, useIsDark } from '@/theme/useColors';
 
 let htmlPromise: Promise<string> | null = null;
 function loadGraphHtml(): Promise<string> {
@@ -45,6 +41,9 @@ export const MemoryGraphView = forwardRef<MemoryGraphViewHandle, Props>(function
   { data, onNodeTap, onClearFocus, focusKey, overlayTop = 0, overlayBottom = 0 }: Props,
   ref,
 ) {
+  const c = useColors();
+  const isDark = useIsDark();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const webRef = useRef<WebView>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -88,6 +87,15 @@ export const MemoryGraphView = forwardRef<MemoryGraphViewHandle, Props>(function
     if (!ready) return;
     webRef.current?.injectJavaScript(`window.__setReducedMotion && window.__setReducedMotion(${reduceMotion ? 'true' : 'false'}); true;`);
   }, [ready, reduceMotion]);
+
+  // Hand the scene the app's palette. Without this the WebView renders its own
+  // hardcoded dark theme, which on the warm-paper theme is a black rectangle in
+  // the middle of a light screen.
+  useEffect(() => {
+    if (!ready) return;
+    const theme = JSON.stringify({ bg: c.bg, text: c.text, accent: c.violet, light: !isDark });
+    webRef.current?.injectJavaScript(`window.__setTheme && window.__setTheme(${theme}); true;`);
+  }, [ready, c, isDark]);
 
   useEffect(() => {
     if (!ready) return;
@@ -143,6 +151,9 @@ export const MemoryGraphView = forwardRef<MemoryGraphViewHandle, Props>(function
           onMessage={onMessage}
           onError={(e) => setError(`webview: ${e.nativeEvent.description}`)}
           onRenderProcessGone={() => setError('The graph renderer crashed.')}
+          injectedJavaScriptBeforeContentLoaded={
+            `window.__initialTheme = ${JSON.stringify({ bg: c.bg, text: c.text, accent: c.violet, light: !isDark })}; true;`
+          }
           style={styles.web}
           containerStyle={styles.web}
           androidLayerType="hardware"
@@ -157,7 +168,7 @@ export const MemoryGraphView = forwardRef<MemoryGraphViewHandle, Props>(function
 
       {!error && (!html || !ready) && (
         <View style={styles.overlay} pointerEvents="none">
-          <ActivityIndicator size="large" color={GRAPH_ACCENT} />
+          <ActivityIndicator size="large" color={c.violet} />
           <Text style={styles.loadingText}>Preparing your map...</Text>
         </View>
       )}
@@ -179,8 +190,8 @@ export const MemoryGraphView = forwardRef<MemoryGraphViewHandle, Props>(function
   );
 });
 
-const styles = StyleSheet.create({
-  fill: { flex: 1, backgroundColor: GRAPH_BG },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  fill: { flex: 1, backgroundColor: c.bg },
   web: { flex: 1, backgroundColor: 'transparent' },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -189,7 +200,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.xl,
   },
-  loadingText: { color: GRAPH_MUTED, fontSize: fontSize.sm2, fontFamily: fonts.sans, letterSpacing: 0 },
-  emptyTitle: { color: GRAPH_TEXT, fontSize: fontSize.lg, fontFamily: fonts.display, textAlign: 'center', lineHeight: 24 },
-  emptyHint: { color: GRAPH_MUTED, fontSize: fontSize.sm2, fontFamily: fonts.sans, textAlign: 'center', lineHeight: 19, maxWidth: 310 },
+  loadingText: { color: c.textMuted, fontSize: fontSize.sm2, fontFamily: fonts.sans, letterSpacing: 0 },
+  emptyTitle: { color: c.text, fontSize: fontSize.lg, fontFamily: fonts.display, textAlign: 'center', lineHeight: 24 },
+  emptyHint: { color: c.textMuted, fontSize: fontSize.sm2, fontFamily: fonts.sans, textAlign: 'center', lineHeight: 19, maxWidth: 310 },
 });

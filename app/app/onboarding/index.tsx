@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Animated, Image, Easing, KeyboardAvoidingView, BackHandler } from 'react-native';
+import { AccessibilityInfo, Platform, View, Text, TextInput, Pressable, StyleSheet, Animated, Image, Easing, KeyboardAvoidingView, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { router } from 'expo-router';
 import { useProfileStore } from '@/state/useProfileStore';
 import { useModelStore } from '@/state/useModelStore';
 import { MODELS, MODES, DEFAULT_MODEL_ID } from '@/models/registry';
-import { Aurora } from '@/components/ds/Aurora';
 import { Button } from '@/components/ds/Button';
 import { Badge } from '@/components/ds/Badge';
 import { LegalDocumentModal } from '@/components/legal/LegalDocumentModal';
@@ -15,7 +14,7 @@ import { CoreGrowthVisual } from '@/components/onboarding/CoreGrowthVisual';
 import { LOGO_PURPLE, LOGO_WHITE } from '@/components/ds/Logo';
 import { getLegalDocument, type LegalDocument } from '@/legal/documents';
 import { TASK_UI_ENABLED } from '@/release/features';
-import { spacing, radius, fonts, Palette, fontSize } from '@/theme';
+import { spacing, radius, fonts, Palette, fontSize, motion } from '@/theme';
 import { useColors, useIsDark } from '@/theme/useColors';
 
 const PAGE_COUNT = 4; // Welcome, Core, Model, Research & Task — Ready/Legal is the terminal screen
@@ -71,11 +70,49 @@ function NavRow({ canBack, onBack, dots, active, onNext, nextDisabled }: {
   );
 }
 
-function IntroVisual({ isDark, halo }: { isDark: boolean; halo: object }) {
+/**
+ * The first thing anyone sees. Deliberately just the mark, breathing.
+ *
+ * This used to sit on a full-screen animated aurora — three drifting violet
+ * radial gradients, a sweeping sheen and a vignette — behind a flat grey disc.
+ * None of that language appears anywhere else in the product, including the
+ * screen this repo names as its quality bar (ModelLoadingOverlay), which is a
+ * mark, a breath and a hairline. Glowing gradient blobs are the single most
+ * generic thing a first-run screen can do, and phases 1 to 3 already had no
+ * background at all, so the intro was also the odd one out.
+ */
+function IntroVisual({ isDark }: { isDark: boolean }) {
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const breath = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion) { breath.setValue(0); return undefined; }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(breath, { toValue: 1, duration: motion.durSlow, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(breath, { toValue: 0, duration: motion.durSlow, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, breath]);
+
   return (
     <View style={visualBox.visual}>
-      <View style={halo} />
-      <Image source={isDark ? LOGO_WHITE : LOGO_PURPLE} style={{ width: 76, height: 76 }} resizeMode="contain" />
+      <Animated.Image
+        source={isDark ? LOGO_WHITE : LOGO_PURPLE}
+        style={{
+          width: 76,
+          height: 76,
+          opacity: breath.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }),
+          transform: [{ scale: breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] }) }],
+        }}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -190,6 +227,7 @@ export default function Onboarding() {
 
   const [phase, setPhase] = useState(0); // 0 welcome, 1 core, 2 model, 3 research&task, 4 ready/legal
   const [name, setName] = useState('');
+  const nameRef = useRef<TextInput>(null);
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
   const [openDoc, setOpenDoc] = useState<LegalDocument | null>(null);
   const [accepting, setAccepting] = useState(false);
@@ -230,14 +268,13 @@ export default function Onboarding() {
   if (phase === 0) {
     return (
       <View style={s.root}>
-        <Aurora />
         <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
           <View style={s.topbar}>
             <View />
             <Pressable onPress={() => setPhase(4)}><Text style={s.skip}>Skip</Text></Pressable>
           </View>
           <Animated.View style={[s.center, animStyle]}>
-            <IntroVisual isDark={isDark} halo={s.halo} />
+            <IntroVisual isDark={isDark} />
             <Text style={s.kicker}>Welcome</Text>
             <Text style={s.brand}>Aether</Text>
             <Text style={s.introTitle}>A private assistant on your phone.</Text>
@@ -355,7 +392,12 @@ export default function Onboarding() {
   return (
     <View style={s.root}>
       <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView style={s.flex} behavior="padding">
+        {/* behavior="padding" is wrong on Android: the manifest already sets
+            windowSoftInputMode="adjustResize", so the window is resized for the
+            keyboard and KeyboardAvoidingView then adds that height a second
+            time, shoving the field out of view. Android needs no behavior at
+            all. */}
+        <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={s.topbar}>
             <BackLink onPress={back} />
             <View />
@@ -366,13 +408,25 @@ export default function Onboarding() {
 
             <View style={{ marginTop: spacing.md }}>
               <Text style={s.fieldLabel}>What should I call you?</Text>
-              <TextInput
-                style={s.input}
-                placeholder="Your name (optional)"
-                placeholderTextColor={c.textMuted}
-                value={name}
-                onChangeText={setName}
-              />
+              {/* The label and the field are one tap target. Tapping a 44px-tall
+                  input is easy to miss, and this screen has no other way to
+                  reach the keyboard. */}
+              <Pressable accessible={false} onPress={() => nameRef.current?.focus()}>
+                <TextInput
+                  ref={nameRef}
+                  style={s.input}
+                  placeholder="Your name (optional)"
+                  placeholderTextColor={c.textMuted}
+                  value={name}
+                  onChangeText={setName}
+                  autoFocus
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={() => nameRef.current?.blur()}
+                  accessibilityLabel="What should I call you?"
+                />
+              </Pressable>
               <Text style={s.fieldHint}>Used only to make replies feel natural. Stored on this device.</Text>
             </View>
 
@@ -422,7 +476,7 @@ const makeStyles = (c: Palette, isDark: boolean) => StyleSheet.create({
   legalCopy: { fontFamily: fonts.sans, fontSize: fontSize.base, lineHeight: 21, color: c.textMuted },
   fieldLabel: { fontFamily: fonts.sansSemibold, fontSize: fontSize.base, color: c.text, marginTop: spacing.md },
   fieldHint: { fontFamily: fonts.sans, fontSize: fontSize.xs, lineHeight: 16, color: c.textMuted, marginTop: spacing.xs },
-  input: { backgroundColor: c.bgCard, borderColor: c.border, borderWidth: 1, borderRadius: radius.md, color: c.text, paddingHorizontal: 14, paddingVertical: spacing.sm, fontSize: fontSize.md, fontFamily: fonts.sans, marginTop: spacing.xs },
+  input: { backgroundColor: c.bgCard, borderColor: c.border, borderWidth: 1, borderRadius: radius.md, color: c.text, paddingHorizontal: 14, paddingVertical: spacing.md, minHeight: 52, fontSize: fontSize.md, fontFamily: fonts.sans, marginTop: spacing.xs },
   docLinks: { marginTop: spacing.lg, borderTopWidth: 1, borderTopColor: c.border },
   docLink: { borderBottomWidth: 1, borderBottomColor: c.border, paddingVertical: spacing.md },
   docLinkTitle: { fontFamily: fonts.sansSemibold, fontSize: fontSize.base, color: c.text },
@@ -432,7 +486,6 @@ const makeStyles = (c: Palette, isDark: boolean) => StyleSheet.create({
   topbar: { height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   skip: { fontFamily: fonts.sans, fontSize: fontSize.base, color: c.textMuted },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  halo: { position: 'absolute', width: 150, height: 150, borderRadius: 75, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(109,40,217,0.07)' },
   coreVisual: { width: 200, height: 200, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   kicker: { fontFamily: fonts.sansSemibold, fontSize: fontSize.sm, letterSpacing: 0, color: isDark ? '#C9A9FF' : c.violet, marginTop: 14, textTransform: 'uppercase' },
   brand: { fontFamily: fonts.displayBold, fontSize: fontSize.brand, color: c.text, marginTop: spacing.xs },

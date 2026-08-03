@@ -28,23 +28,33 @@
     return;
   }
 
-  var BG = '#181818';
-  var NODE_DIM = '#5d5b60';
+  // Theme. The scene used to hardcode a dark palette, so on the warm-paper
+  // theme Core was a black rectangle dropped into a light app, with near-white
+  // labels that would have been invisible had the ground ever matched. Even on
+  // dark it was #181818 against the app's #1C1C1C, which showed as a seam.
+  // React Native pushes the real palette through __setTheme.
+  var BG = '#1C1C1C';
+  var NODE_DIM = '#5D5B60';
   var NODE_FADE = '#343336';
   var EDGE_NEUTRAL = new THREE.Color('#8A8490');
   var EDGE_DIRECT = new THREE.Color('#CBBFDD');
   var EDGE_NEAR = new THREE.Color('#6D6674');
   var TEXT = '#ECE8F2';
+  var LABEL_CHIP = 'rgba(22,22,24,0.62)';
+  var LABEL_BORDER = 'rgba(255,255,255,0.06)';
   var AETHER = '#9A87C6';
+  var isLightTheme = false;
+  // Fallback only — React Native supplies node.color. Keep in step with
+  // VISUAL_CATEGORY_COLORS in src/components/secondbrain/graphData.ts.
   var CATEGORY_COLORS = {
-    projects: '#8B78B2',
-    work: '#718BA1',
-    people: '#A77F8A',
-    learning: '#AB936A',
-    health: '#789B8D',
-    travel: '#6F99A3',
-    personal: '#8D8393',
-    uncategorized: '#737373',
+    projects: '#8B7BD8',
+    work: '#5C8FC7',
+    people: '#C87C8C',
+    learning: '#C89A57',
+    health: '#5FA98A',
+    travel: '#4FA2B5',
+    personal: '#A681BE',
+    uncategorized: '#8C8C93',
   };
 
   var canvas = document.getElementById('c');
@@ -172,6 +182,10 @@
     bindInput();
     window.addEventListener('resize', onResize);
     graphReady = true;
+    // Adopt the palette before the first frame. React Native sets this via
+    // injectedJavaScriptBeforeContentLoaded, so opening Core on the light theme
+    // never flashes the dark default.
+    if (window.__initialTheme && window.__setTheme) window.__setTheme(window.__initialTheme);
     requestFrame();
   }
 
@@ -688,10 +702,10 @@
     cv.height = h;
     ctx.scale(dpr, dpr);
     ctx.font = '500 ' + fontSize + 'px "Instrument Sans", "Roboto", Arial, sans-serif';
-    ctx.fillStyle = 'rgba(22,22,24,0.62)';
+    ctx.fillStyle = LABEL_CHIP;
     roundRect(ctx, 0.5, 0.5, w / dpr - 1, h / dpr - 1, 7);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.strokeStyle = LABEL_BORDER;
     ctx.stroke();
     ctx.fillStyle = TEXT;
     ctx.textBaseline = 'middle';
@@ -811,10 +825,16 @@
     return false;
   }
 
+  // Hit-testing is generous on purpose. A node is a small sphere on a globe the
+  // user is also rotating with the same finger, so the target is both tiny and
+  // moving. The previous version computed a per-node tolerance from the sphere's
+  // radius and then never used it: the guard was `d < limit && d < bestD` with
+  // bestD seeded at 28*28, so `limit` could only ever be ignored and every node
+  // shared one flat 28px reach regardless of how big it was drawn.
   function nearestNodeAt(x, y) {
     if (!nodes.length) return null;
     var best = null;
-    var bestD = 28 * 28;
+    var bestD = Infinity;
     var p = new THREE.Vector3();
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
@@ -822,9 +842,9 @@
       var s = worldToScreen(p);
       if (!s) continue;
       var d = (s.x - x) * (s.x - x) + (s.y - y) * (s.y - y);
-      var tolerance = Math.pow(18 + baseRadius(n) * 1.7, 2);
-      var limit = Math.max(bestD, tolerance);
-      if (d < limit && d < bestD) {
+      // At least a finger-sized target, more for a node drawn larger.
+      var reach = Math.max(34, 20 + baseRadius(n) * 2.1);
+      if (d <= reach * reach && d < bestD) {
         best = n;
         bestD = d;
       }
@@ -858,8 +878,13 @@
         var dy = t.clientY - ly;
         lx = t.clientX;
         ly = t.clientY;
-        if (Math.abs(t.clientX - sx) + Math.abs(t.clientY - sy) > 10) moved = true;
-        if (moved) userAdjusted = true;
+        // Straight-line distance, not the Manhattan sum, which reached the
+        // threshold at ~7px on a diagonal and turned steady taps into drags.
+        if (Math.hypot(t.clientX - sx, t.clientY - sy) > 16) moved = true;
+        // Hold the camera still until the gesture is definitely a drag, so
+        // aiming at a node does not shove the target out from under the finger.
+        if (!moved) return;
+        userAdjusted = true;
         cam.theta -= dx * 0.0048;
         cam.phi = clamp(cam.phi - dy * 0.0044, 0.28, Math.PI - 0.28);
         labelDirty = true;
@@ -877,7 +902,9 @@
     }, { passive: true });
 
     canvas.addEventListener('touchend', function () {
-      if (mode === 1 && !moved && Date.now() - st < 360) tapAt(sx, sy);
+      // 360ms rejected anyone who lined up carefully on a small target. If the
+      // finger never travelled, it was a tap however long it rested.
+      if (mode === 1 && !moved && Date.now() - st < 800) tapAt(sx, sy);
       mode = 0;
     }, { passive: true });
   }
@@ -920,6 +947,56 @@
       requestRender();
     }
   };
+  /**
+   * Adopt the app's palette. Called by React Native on load and whenever the
+   * theme toggles, so Core is one continuous surface with the screen around it
+   * rather than a dark rectangle pasted into a light app.
+   *
+   * Both caches have the old colours baked in — label textures are drawn on a
+   * canvas and node materials are keyed by colour — so both are dropped.
+   */
+  window.__setTheme = function (t) {
+    if (!t || !t.bg) return;
+    isLightTheme = !!t.light;
+    BG = t.bg;
+    TEXT = t.text || TEXT;
+    AETHER = t.accent || AETHER;
+
+    if (isLightTheme) {
+      NODE_DIM = '#A9A6AE';
+      NODE_FADE = '#CFCCD4';
+      EDGE_NEUTRAL = new THREE.Color('#B3ADBA');
+      EDGE_DIRECT = new THREE.Color('#7A6A98');
+      EDGE_NEAR = new THREE.Color('#C2BCC9');
+      LABEL_CHIP = 'rgba(255,255,255,0.86)';
+      LABEL_BORDER = 'rgba(27,27,26,0.10)';
+    } else {
+      NODE_DIM = '#5D5B60';
+      NODE_FADE = '#343336';
+      EDGE_NEUTRAL = new THREE.Color('#8A8490');
+      EDGE_DIRECT = new THREE.Color('#CBBFDD');
+      EDGE_NEAR = new THREE.Color('#6D6674');
+      LABEL_CHIP = 'rgba(22,22,24,0.62)';
+      LABEL_BORDER = 'rgba(255,255,255,0.06)';
+    }
+
+    document.documentElement.style.background = BG;
+    document.body.style.background = BG;
+    if (renderer) renderer.setClearColor(new THREE.Color(BG), 1);
+    if (fog) fog.color = new THREE.Color(BG);
+    if (selectedRing) selectedRing.material.color = new THREE.Color(AETHER);
+
+    labelCache = {};
+    nodeMatCache = {};
+    if (labelLayer) {
+      while (labelLayer.children.length) labelLayer.remove(labelLayer.children[0]);
+      labelSprites = {};
+    }
+    labelDirty = true;
+    if (graphReady) updateStyles();
+    requestRender();
+  };
+
   window.__focusNode = function (key) { focusNode(key, false); };
   window.__clearFocus = function () { clearFocus(false); };
   window.__resetView = resetView;

@@ -31,7 +31,7 @@ const REPLY_LEN = blocksLen(REPLY);
 // Health/Fitness category color, mirrored from
 // app/src/components/secondbrain/graphData.ts VISUAL_CATEGORY_COLORS.health —
 // the graph's own token for this category, not invented for the site.
-const HEALTH_COLOR = '#789B8D';
+const HEALTH_COLOR = '#5FA98A';
 
 const NEW_NODE = { x: 150, y: 96, label: 'Marathon' };
 const DIM_NODES = [

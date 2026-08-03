@@ -17,15 +17,25 @@ export const VISUAL_CATEGORY_LABELS: Record<MemoryVisualCategory, string> = {
   uncategorized: 'Uncategorized',
 };
 
+/**
+ * Category hues for the Core globe and its detail sheet.
+ *
+ * The previous set sat between 50% and 60% lightness at very low chroma, so on
+ * a dark ground eight categories read as one brownish grey and the globe looked
+ * like gravel. These keep the same restrained, non-neon register — this is not
+ * a dashboard — but separate the hues properly and lift the chroma enough that
+ * a category is identifiable without reading its label. Lightness is held near
+ * 62% so the same values stay legible on the warm-paper theme.
+ */
 export const VISUAL_CATEGORY_COLORS: Record<MemoryVisualCategory, string> = {
-  projects: '#8B78B2',
-  work: '#718BA1',
-  people: '#A77F8A',
-  learning: '#AB936A',
-  health: '#789B8D',
-  travel: '#6F99A3',
-  personal: '#8D8393',
-  uncategorized: '#737373',
+  projects: '#8B7BD8',
+  work: '#5C8FC7',
+  people: '#C87C8C',
+  learning: '#C89A57',
+  health: '#5FA98A',
+  travel: '#4FA2B5',
+  personal: '#A681BE',
+  uncategorized: '#8C8C93',
 };
 
 export const CATEGORY_COLORS: Record<MemoryCategory, string> = {
