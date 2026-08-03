@@ -1,5 +1,66 @@
 # Release Notes
 
+## 2.2.2
+
+Three fixes reported from a Galaxy S25 Ultra, plus haptics.
+
+Android, arm64-v8a only, `minSdkVersion` 29.
+
+- APK: `Aether-2.2.2.apk`, 71.9 MiB (75,388,019 bytes)
+- `versionName` 2.2.2, `versionCode` 7, package `com.aether.app`
+- SHA-256: `48f3ff4118a04bef11df0a12ae211ebe33418973b169b971b5322f5488ef6c01`
+- Signed with APK Signature Scheme v2; signer `CN=Aether, O=Aether, C=PL`
+
+### You could not type your name during setup
+
+The keyboard never appeared on the name field, so the only way past it was to
+leave the name blank. The field had lost its `autoFocus` when onboarding was
+rewritten, and tapping it did not raise the keyboard either. Onboarding also had
+`KeyboardAvoidingView` set to pad for the keyboard on Android, where the window
+is already resized for it — so the field was pushed by that height twice over.
+
+Everywhere else the keyboard was fine; this was specific to that one field.
+
+### You could not tap anything in Core
+
+Three separate faults stacked up, and together they made the knowledge graph
+read-only:
+
+- The hit target was a flat 28 pixels around a node's centre no matter how large
+  the node was drawn. The code meant to scale it with the node's size, but the
+  check discarded that value.
+- The threshold for "this is a drag, not a tap" triggered at about 7 pixels on a
+  diagonal, so a steady finger still counted as a swipe.
+- A tap was rejected outright if your finger rested for more than a third of a
+  second — so the more carefully you aimed, the less likely it was to register.
+
+The globe also began rotating from the first pixel of movement, sliding the
+target out from under your finger. It now holds still until the gesture is
+clearly a drag.
+
+### Core looked wrong
+
+On the light theme Core was a black rectangle dropped into a light app, because
+the graph shipped its own hardcoded dark palette. Even on the dark theme it drew
+a slightly different grey from the screen around it, which showed as a seam. It
+now takes the app's real colours, including a light variant, and gets them
+before the first frame so opening Core never flashes dark.
+
+The eight category colours all sat at nearly the same lightness with very little
+saturation, so they blurred into one brownish grey. The hues are now properly
+separated while staying in the same restrained register.
+
+### Vibration while Aether writes
+
+A faint tick for as long as a reply is being written, on by default. **Settings →
+Feedback → Vibrate while replying** turns it off, and turning it off stops an
+in-progress reply immediately rather than at the end.
+
+### The first onboarding screen
+
+Removed the animated violet gradient behind the logo. It was the only screen in
+the app with anything like it.
+
 ## 2.2.1
 
 Typography fix. Everything in 2.2.0 below is included — 2.2.0 was tagged but never published, so

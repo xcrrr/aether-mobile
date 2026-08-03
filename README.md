@@ -32,15 +32,15 @@ explicitly turn on Research for a message.
 
 ## Install
 
-1. Download `Aether-2.2.1.apk` from the [latest release](https://github.com/xcrrr/aether-mobile/releases/latest).
+1. Download `Aether-2.2.2.apk` from the [latest release](https://github.com/xcrrr/aether-mobile/releases/latest).
 2. Allow installation from unknown sources when Android asks.
 3. Open the app and download a model when prompted. This is a one-time download of 2.6 GB or 3.7 GB.
 
 Verify the download if you want to:
 
 ```bash
-sha256sum Aether-2.2.1.apk
-# 17f9f0bfd6e796067033fb8483c536220c87b3032429f6222715651a91dc7580
+sha256sum Aether-2.2.2.apk
+# 48f3ff4118a04bef11df0a12ae211ebe33418973b169b971b5322f5488ef6c01
 ```
 
 The APK is signed with APK Signature Scheme v2; the signer is `CN=Aether, O=Aether, C=PL`.
@@ -86,6 +86,12 @@ Word `.docx`, and plain text, Markdown, CSV, JSON and XML.
 Dictate a message using Android speech recognition. Recognition is handled by whatever
 speech-recognition service the device provides (Google, Samsung or another OS-level recognizer) —
 Aether does not send the audio anywhere itself, and only the recognized text reaches the app.
+
+### Haptic feedback
+
+A faint tick while a reply is being written, so an answer arriving is something you can feel rather
+than only see. On by default; **Settings → Feedback → Vibrate while replying** turns it off, and
+turning it off silences a reply already in progress.
 
 ### Not in this build
 
@@ -137,7 +143,7 @@ Aether is **pre-release beta software**. Concretely:
   before release". Publisher identity and support/privacy contacts are not yet set. See
   [`docs/aether-legal-review-required.md`](docs/aether-legal-review-required.md).
 - **This build has not been verified on a physical device.** It compiles, passes the full automated
-  suite and is correctly signed, but the 2.2.1 fixes have not been confirmed by hand on hardware.
+  suite and is correctly signed, but the 2.2.2 fixes have not been confirmed by hand on hardware.
   The script for that is [`docs/aether-device-beta-checklist.md`](docs/aether-device-beta-checklist.md).
 - **Voice input is unverified on real hardware.**
 - **Core's extraction quality has no measured baseline.** There is no fixture set of real
