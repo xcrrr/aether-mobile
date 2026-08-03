@@ -189,8 +189,6 @@ export function BookmarkIllustration({
         </filter>
       </defs>
 
-      <rect x="0" y="0" width="640" height="480" fill="var(--bg)" />
-
       <g filter={`url(#${roughId})`} fill="none" strokeLinecap="round" strokeLinejoin="round">
         <g transform="translate(325 285) scale(1.16) translate(-325 -285)">
           {/* ground hatch shadow */}

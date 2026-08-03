@@ -1,7 +1,8 @@
 'use client';
 import { c, radius, sans, type } from './tokens';
 import {
-  IconArrowUp, IconFileText, IconPlus, IconStopSquare, IconX,
+  IconArrowUp, IconChevronDown, IconFileText, IconGlobe, IconMic, IconPaperclip,
+  IconStopSquare, IconX,
 } from './icons';
 
 /* ---------- assistant content model ---------- */
@@ -29,20 +30,24 @@ function Inline({ text }: { text: string }) {
   );
 }
 
-function BlockView({ block, revealed }: { block: Block; revealed: number }) {
+function Caret() {
+  return <span style={{ opacity: 0.7 }}>▍</span>;
+}
+
+function BlockView({ block, revealed, caret = false }: { block: Block; revealed: number; caret?: boolean }) {
   if (revealed <= 0) return null;
   const text = block.text.slice(0, revealed);
   if (block.kind === 'li') {
     return (
       <div style={{ display: 'flex', gap: 8, padding: '2px 0 2px 4px' }}>
         <span style={{ ...type.assistantBody, color: c.text }}>•</span>
-        <div style={{ ...type.assistantBody, color: c.text, flex: 1 }}><Inline text={text} /></div>
+        <div style={{ ...type.assistantBody, color: c.text, flex: 1 }}><Inline text={text} />{caret && <Caret />}</div>
       </div>
     );
   }
   return (
     <div style={{ ...type.assistantBody, color: c.text, padding: '6px 0', whiteSpace: 'pre-wrap' }}>
-      <Inline text={text} />
+      <Inline text={text} />{caret && <Caret />}
     </div>
   );
 }
@@ -52,11 +57,17 @@ function BlockView({ block, revealed }: { block: Block; revealed: number }) {
  * bare serif prose on the canvas — no bubble, no avatar. `revealed` is how
  * many characters of the block list are visible (streaming).
  */
-export function AssistantTurn({ blocks, revealed, children }: {
+export function AssistantTurn({ blocks, revealed, caret = false, children }: {
   blocks: Block[];
   revealed: number;
+  caret?: boolean;
   children?: React.ReactNode;
 }) {
+  // the caret belongs on the last block that has any text on screen
+  const lastVisible = blocks.reduce((last, b, i) => {
+    const used = blocks.slice(0, i).reduce((sum, prev) => sum + blockLen(prev), 0);
+    return revealed - used > 0 ? i : last;
+  }, -1);
   return (
     <div style={{ marginBottom: 32, animation: 'demoRise 300ms var(--ease) both' }}>
       <div style={{ ...type.name, color: c.textMuted, marginBottom: 6 }}>Aether</div>
@@ -64,7 +75,7 @@ export function AssistantTurn({ blocks, revealed, children }: {
         const len = blockLen(b);
         const used = blocks.slice(0, i).reduce((sum, prev) => sum + blockLen(prev), 0);
         const slice = Math.max(0, Math.min(len, revealed - used));
-        return <BlockView key={i} block={b} revealed={slice} />;
+        return <BlockView key={i} block={b} revealed={slice} caret={caret && i === lastVisible} />;
       })}
       {children}
     </div>
@@ -77,7 +88,7 @@ export function TypingDots() {
       <div style={{ ...type.name, color: c.textMuted, marginBottom: 6 }}>Aether</div>
       <div style={{ display: 'flex', gap: 5, padding: '6px 2px' }}>
         {[0, 1, 2].map((i) => (
-          <span key={i} style={{
+          <span key={i} data-dot style={{
             width: 6, height: 6, borderRadius: 999,
             background: i === 1 ? c.violet : c.textMuted,
             animation: `demoDot 1.2s ${i * 0.18}s ease-in-out infinite`,
@@ -131,20 +142,32 @@ export function UserTurn({ text, attachment }: { text: string; attachment?: Reac
 
 /* ---------- composer ---------- */
 
-export function ActionPill({ icon, label, active }: {
-  icon: React.ReactNode; label: string; active?: boolean;
-}) {
+export type ComposerMode = 'chat' | 'research';
+
+/**
+ * The row above the input, exactly as the app draws it: a quiet text trigger
+ * in Chat, and a filled violet bar while Research is on. There is no pill
+ * toolbar in the app — attach and voice live on the input row itself.
+ */
+export function ModeRow({ mode }: { mode: ComposerMode }) {
+  if (mode === 'research') {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8,
+        background: c.violetDim, borderRadius: radius.md, padding: '6px 10px',
+      }}>
+        <IconGlobe size={14} color={c.violet} strokeWidth={2} />
+        <span style={{ ...type.label, color: c.violet }}>Research</span>
+        <span style={{ ...type.caption, color: c.textMuted, flex: 1 }}>· Uses the web</span>
+        <span style={{ display: 'flex', color: c.textMuted }}><IconX size={14} strokeWidth={2} /></span>
+      </div>
+    );
+  }
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 7,
-      padding: '7px 11px', borderRadius: radius.md,
-      background: active ? c.violetDim : c.bg,
-      border: `1px solid ${active ? 'rgba(124,58,237,0.14)' : c.border}`,
-      ...type.label, color: active ? c.violet : c.text,
-    }}>
-      <span style={{ display: 'flex', color: active ? c.violet : c.textMuted }}>{icon}</span>
-      {label}
-    </span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 8, paddingLeft: 2 }}>
+      <span style={{ ...type.label, color: c.textMuted }}>Chat</span>
+      <IconChevronDown size={14} color={c.textMuted} strokeWidth={1.6} />
+    </div>
   );
 }
 
@@ -191,32 +214,33 @@ export function VisionBadge() {
 }
 
 /**
- * The app's composer: optional pills bar and attachment chip, plus button,
- * input with typed text + caret, and the send/stop control with the real
- * state colors (violet ready · gray idle · red stop while generating).
+ * The app's composer: mode row, optional attachment chip, the paperclip, the
+ * input with typed text + caret, and the single circular control that swaps
+ * between mic (idle) · violet send (ready) · red stop (generating), exactly
+ * as ChatInput does. Attach dims in Research, where the app disables it.
  */
-export function Composer({ value = '', placeholder = 'Message Aether', generating = false, caret = false, pills, chip, badge, barOpen = false }: {
+export function Composer({ value = '', placeholder = 'Message Aether', generating = false, caret = false, mode = 'chat', chip, badge }: {
   value?: string;
   placeholder?: string;
   generating?: boolean;
   caret?: boolean;
-  pills?: React.ReactNode;
+  mode?: ComposerMode;
   chip?: React.ReactNode;
   badge?: React.ReactNode;
-  barOpen?: boolean;
 }) {
   const ready = value.length > 0;
-  const sendBg = generating ? c.danger : ready ? c.violet : c.bgInput;
+  const research = mode === 'research';
   return (
     <div style={{ background: c.bg, paddingTop: 6 }}>
       {chip}
       {badge}
-      {pills && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>{pills}</div>
-      )}
+      <ModeRow mode={mode} />
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-        <span style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.textMuted }}>
-          {barOpen ? <IconX size={20} strokeWidth={1.8} /> : <IconPlus size={21} strokeWidth={1.8} />}
+        <span style={{
+          width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: research ? c.border : c.textMuted,
+        }}>
+          <IconPaperclip size={19} strokeWidth={1.8} />
         </span>
         <div style={{
           flex: 1, background: c.bgInput, border: `1px solid ${c.border}`,
@@ -226,20 +250,33 @@ export function Composer({ value = '', placeholder = 'Message Aether', generatin
           {value || placeholder}
           {caret && <span style={{ opacity: 0.7, color: c.text }}>▍</span>}
         </div>
-        <span style={{
-          width: 40, height: 40, borderRadius: 999, background: sendBg, flex: 'none',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'background 160ms var(--ease)',
-        }}>
-          {generating
-            ? <IconStopSquare color={c.white} />
-            : <IconArrowUp size={19} color={ready ? c.white : c.textMuted} strokeWidth={2.2} />}
-        </span>
+        <SendControl generating={generating} ready={ready} />
       </div>
       <div style={{ textAlign: 'center', ...type.metadata, color: c.textMuted, padding: '8px 0 0', fontFamily: sans }}>
-        Aether is an AI and can make mistakes. Replies run on-device.
+        Aether is an AI and can make mistakes.{research ? '' : ' Replies run on-device.'}
       </div>
     </div>
+  );
+}
+
+/** One 40×40 control, three mutually exclusive states — the app never shows
+ *  a separate mic and send button at the same time. */
+function SendControl({ generating, ready }: { generating: boolean; ready: boolean }) {
+  const base = {
+    width: 40, height: 40, borderRadius: 999, flex: 'none' as const,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background 160ms var(--ease)',
+  };
+  if (generating) {
+    return <span style={{ ...base, background: c.danger }}><IconStopSquare color={c.white} /></span>;
+  }
+  if (ready) {
+    return <span style={{ ...base, background: c.violet }}><IconArrowUp size={19} color={c.white} strokeWidth={2.2} /></span>;
+  }
+  return (
+    <span style={{ ...base, background: c.bgInput, border: `1px solid ${c.border}` }}>
+      <IconMic size={18} color={c.textMuted} strokeWidth={1.8} />
+    </span>
   );
 }
 

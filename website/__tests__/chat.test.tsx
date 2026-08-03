@@ -1,21 +1,16 @@
 import { render, screen } from '@testing-library/react';
-import { UserBubble } from '@/components/phone/chat/UserBubble';
-import { AssistantTurn } from '@/components/phone/chat/AssistantTurn';
-import { TypingDots } from '@/components/phone/chat/TypingDots';
-import { InputBar } from '@/components/phone/chat/InputBar';
+import { UserTurn, AssistantTurn, TypingDots, Composer } from '@/components/demos/kit/chat';
 
 test('user bubble matches the app: quiet dark surface, not violet', () => {
-  const { container } = render(<UserBubble text="Hi Aether" />);
-  expect(screen.getByText('Hi Aether')).toBeInTheDocument();
-  const bubble = container.querySelector('[data-user-bubble]') as HTMLElement;
-  expect(bubble.style.backgroundColor).toBe('rgb(37, 37, 37)');
+  render(<UserTurn text="Hi Aether" />);
+  const bubble = screen.getByText('Hi Aether');
+  expect(bubble.style.background).toBe('rgb(37, 37, 37)');
 });
 
 test('assistant turn shows Aether label and serif content', () => {
-  render(<AssistantTurn text="Hello there" />);
+  render(<AssistantTurn blocks={[{ kind: 'p', text: 'Hello there' }]} revealed={11} />);
   expect(screen.getByText('Aether')).toBeInTheDocument();
-  const body = screen.getByText('Hello there');
-  expect(body).toBeInTheDocument();
+  const body = screen.getByText('Hello there').parentElement as HTMLElement;
   expect(body.style.fontFamily).toContain('--font-serif-stack');
 });
 
@@ -24,9 +19,16 @@ test('typing dots renders three dots', () => {
   expect(container.querySelectorAll('[data-dot]')).toHaveLength(3);
 });
 
-test('input bar shows placeholder, mode chip, and disclaimer', () => {
-  render(<InputBar />);
+test('composer shows placeholder, the Chat mode trigger, and the on-device disclaimer', () => {
+  render(<Composer />);
   expect(screen.getByText('Message Aether')).toBeInTheDocument();
-  expect(screen.getByText('Fast')).toBeInTheDocument();
-  expect(screen.getByText(/can make mistakes/)).toBeInTheDocument();
+  expect(screen.getByText('Chat')).toBeInTheDocument();
+  expect(screen.getByText(/can make mistakes\. Replies run on-device\./)).toBeInTheDocument();
+});
+
+test('research mode swaps in the web bar and drops the on-device claim', () => {
+  render(<Composer mode="research" placeholder="Research the web..." />);
+  expect(screen.getByText('Research')).toBeInTheDocument();
+  expect(screen.getByText('· Uses the web')).toBeInTheDocument();
+  expect(screen.queryByText(/Replies run on-device/)).not.toBeInTheDocument();
 });

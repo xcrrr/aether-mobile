@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { ChatDemo, SeeDemo, FilesDemo, ResearchDemo, CoreDemo, TaskDemo } from '@/components/demos';
+import { ChatDemo, SeeDemo, FilesDemo, ResearchDemo, CoreDemo } from '@/components/demos';
 
 /* Internal inspection route only — Codex composes the real feature section.
    Not linked from the site.
@@ -20,7 +20,6 @@ const demos = [
   ['Files', FilesDemo],
   ['Research', ResearchDemo],
   ['Core', CoreDemo],
-  ['Task', TaskDemo],
 ] as const;
 
 export default function DemosPreview() {
