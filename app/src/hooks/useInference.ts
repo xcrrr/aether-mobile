@@ -9,7 +9,7 @@ import { useBrainNotice } from '@/state/useBrainNotice';
 import { AppState } from 'react-native';
 import { useResearchStore } from '@/state/useResearchStore';
 import { loadConversation } from '@/storage/conversations';
-import { replyHapticTick, resetReplyHaptics } from '@/haptics/replyHaptics';
+import { startReplyHaptics, stopReplyHaptics } from '@/haptics/replyHaptics';
 
 export interface RAMWarning { available: number; required: number; }
 
@@ -171,15 +171,13 @@ export function useInference(modelId: string | undefined) {
     // this, a long-running chat sends its entire unbounded transcript every turn and
     // silently exceeds the native context once it grows past it.
     const trimmed = trimToContext(messages, Llama.MAX_TOKENS, system.length);
-    resetReplyHaptics();
+    startReplyHaptics();
     await Llama.generate(
       system,
       trimmed,
-      (token) => {
-        useChatStore.getState().appendToken(token);
-        replyHapticTick();
-      },
+      (token) => useChatStore.getState().appendToken(token),
       () => {
+        stopReplyHaptics();
         // Auto-name the chat after the reply. Core work is already queued against
         // the originating conversation and waits for the shared session to idle.
         void useChatStore.getState().finishAssistant().then(async () => {
@@ -187,6 +185,7 @@ export function useInference(modelId: string | undefined) {
         });
       },
       (e) => {
+        stopReplyHaptics();
         useChatStore.getState().appendToken(`\n\n_Error: ${e}_`);
         useChatStore.getState().finishAssistant();
       },
@@ -213,6 +212,7 @@ export function useInference(modelId: string | undefined) {
     const setContent = useChatStore.getState().setAssistantContent;
     const researchStore = useResearchStore.getState();
     researchStore.start(conversationId);
+    startReplyHaptics();
     try {
       const { runResearch } = require('@/webresearch/ResearchEngine') as typeof import('@/webresearch/ResearchEngine');
       const result = await runResearch(
@@ -221,10 +221,7 @@ export function useInference(modelId: string | undefined) {
         // into the message body — the body is the answer and nothing else.
         (progress) => useResearchStore.getState().set(progress),
         history,
-        (answer) => {
-          setContent(answer);
-          replyHapticTick();
-        },
+        (answer) => setContent(answer),
       );
       const cited = new Set(result.citations.map((c) => c.index));
       useChatStore.getState().setAssistantResearch({
@@ -243,6 +240,7 @@ export function useInference(modelId: string | undefined) {
       const msg = e instanceof Error ? e.message : 'research failed';
       setContent(`Research could not finish. Check the connection and try again.\n\n_${msg}_`);
     } finally {
+      stopReplyHaptics();
       useResearchStore.getState().clear();
       await useChatStore.getState().finishAssistant();
     }
@@ -317,7 +315,7 @@ export function useInference(modelId: string | undefined) {
     }
   }, [chat, modelId, send]);
 
-  const stop = useCallback(() => { getLlama().stop(); }, []);
+  const stop = useCallback(() => { stopReplyHaptics(); getLlama().stop(); }, []);
 
   const model = modelId ? getModelById(modelId) : undefined;
   const supportsVision = model?.supportsVision ?? false;
