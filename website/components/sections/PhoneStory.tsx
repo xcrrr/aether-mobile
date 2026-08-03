@@ -17,7 +17,7 @@ function MissionCopy({ scenes, activeIndex, started }: { scenes: Scene[]; active
         <p className="display-3" style={{ margin: 0 }}>
           {scenes.reduce((a, b) => (b.headline.length > a.headline.length ? b : a)).headline}
         </p>
-        <p className="body-copy" style={{ marginTop: 16 }}>
+        <p className="body-copy">
           {scenes.reduce((a, b) => (b.body.length > a.body.length ? b : a)).body}
         </p>
       </div>
@@ -36,7 +36,7 @@ function MissionCopy({ scenes, activeIndex, started }: { scenes: Scene[]; active
             }}
           >
             <p className="display-3" style={{ margin: 0 }}>{s.headline}</p>
-            <p className="body-copy" style={{ marginTop: 16 }}>{s.body}</p>
+            <p className="body-copy">{s.body}</p>
           </div>
         );
       })}
@@ -89,8 +89,8 @@ export function PhoneStory() {
   const sceneIdx = Math.min(missionScenes.length - 1, Math.floor(convo * missionScenes.length));
 
   return (
-    <section id="mission" ref={ref} style={{ height: '340vh', position: 'relative' }} aria-label="Aether's mission: your phone is enough">
-      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', background: '#242424' }}>
+    <section id="mission" ref={ref} className="story-section" aria-label="Aether's mission: your phone is enough">
+      <div className="story-pane">
         <div className="shell story-grid">
           <div className="story-copy">
             <MissionCopy scenes={missionScenes} activeIndex={sceneIdx} started={started} />
@@ -117,11 +117,33 @@ export function PhoneStory() {
       </div>
 
       <style>{`
+        /* svh, not vh: on mobile browsers vh is the *largest* viewport, so a
+           100vh pane is taller than what's actually visible and the pinned
+           phone gets cropped by the chrome. svh always fits. */
+        .story-section {
+          position: relative;
+          height: 300vh;
+          height: 300svh;
+        }
+        .story-pane {
+          position: sticky;
+          top: 0;
+          height: 100vh;
+          height: 100svh;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          background: #242424;
+          /* the topbar is sticky and floats over this pane — reserve its height
+             so the phone is centred in the space the reader can actually see */
+          padding-top: var(--nav-h);
+          box-sizing: border-box;
+        }
         .story-grid {
           display: grid;
           grid-template-areas: 'phone' 'copy';
           grid-template-columns: 1fr;
-          gap: 8px;
+          gap: 14px;
           align-items: center;
           justify-items: center;
           width: min(1040px, 100% - 40px);
@@ -142,11 +164,17 @@ export function PhoneStory() {
           transform: scale(var(--phone-scale, 0.58));
           transform-origin: top left;
         }
-        .story-grid { --phone-scale: 0.58; }
-        @media (min-height: 700px) {
-          .story-grid { --phone-scale: 0.64; }
-        }
+        /* Portrait: the phone has to share the fold with its caption, so the
+           scale steps track viewport height instead of a single breakpoint. */
+        .story-grid { --phone-scale: 0.46; }
+        .story-copy .display-3 { font-size: 22px; }
+        .story-copy .body-copy { font-size: 14.5px; line-height: 1.5; margin-top: 12px; }
+        @media (min-height: 700px) { .story-grid { --phone-scale: 0.56; } }
+        @media (min-height: 760px) { .story-grid { --phone-scale: 0.6; } }
+        @media (min-height: 820px) { .story-grid { --phone-scale: 0.66; } }
+        @media (min-height: 900px) { .story-grid { --phone-scale: 0.7; } }
         @media (min-width: 920px) {
+          .story-section { height: 340vh; height: 340svh; }
           .story-grid {
             grid-template-areas: 'copy phone';
             grid-template-columns: minmax(320px, 440px) auto;
@@ -156,12 +184,11 @@ export function PhoneStory() {
             --phone-scale: 0.82;
           }
           .story-copy { text-align: left; }
+          .story-copy .display-3 { font-size: clamp(22px, 2.6vw, 28px); }
+          .story-copy .body-copy { font-size: 16px; line-height: 1.65; margin-top: 16px; }
         }
         @media (min-width: 920px) and (min-height: 860px) {
           .story-grid { --phone-scale: 0.94; }
-        }
-        @media (max-width: 919.9px) and (max-height: 640px) {
-          .story-grid { --phone-scale: 0.5; }
         }
       `}</style>
     </section>

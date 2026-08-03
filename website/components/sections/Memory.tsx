@@ -106,41 +106,77 @@ const DESKTOP: Graph = {
   ],
 };
 
+/** The same six-cluster composition as the desktop graph, re-laid for a
+ *  portrait canvas — the phone used to get a thinned-out four-node version
+ *  that read as half-drawn. Every label is hand-placed to clear its
+ *  neighbours, the centre ring and the spokes at this aspect ratio. */
 const MOBILE: Graph = {
-  w: 400,
-  h: 520,
-  cx: 200,
-  cy: 250,
-  ringR: 52,
-  markSize: 30,
-  wordSize: 23,
-  primarySize: 15,
-  subSize: 13,
-  spokeTrim: [62, 14],
+  w: 380,
+  h: 606,
+  cx: 190,
+  cy: 318,
+  ringR: 54,
+  markSize: 32,
+  wordSize: 24,
+  primarySize: 13.5,
+  subSize: 11.5,
+  spokeTrim: [64, 14],
   subTrim: [11, 8],
   clusters: [
     {
-      label: 'Projects', x: 300, y: 110, labelPos: 'right',
-      subs: [{ label: 'Beta', x: 348, y: 62 }],
-      drift: [-1.5, 2], driftDur: 11,
+      label: 'Research', x: 176, y: 112, labelPos: 'above',
+      subs: [
+        { label: 'Local models', x: 196, y: 46, labelPos: 'above' },
+        { label: 'Privacy', x: 262, y: 74, labelPos: 'right' },
+      ],
+      drift: [2, -1.5], driftDur: 12,
     },
     {
-      label: 'Goals', x: 312, y: 392, labelPos: 'right',
-      subs: [{ label: 'Marathon', x: 315, y: 452 }],
-      drift: [1.5, 1.5], driftDur: 12,
+      label: 'Projects', x: 300, y: 196, labelPos: 'right',
+      subs: [
+        { label: 'App', x: 346, y: 140, labelPos: 'above' },
+        { label: 'Website', x: 338, y: 252, labelPos: 'below' },
+      ],
+      drift: [-1.5, 2], driftDur: 10,
     },
     {
-      label: 'Interests', x: 95, y: 385, labelPos: 'left',
-      subs: [{ label: 'Climbing', x: 85, y: 447 }],
-      drift: [1.5, -1.5], driftDur: 10,
+      label: 'Goals', x: 302, y: 400, labelPos: 'right',
+      subs: [
+        { label: 'Marathon', x: 340, y: 462, labelPos: 'below' },
+        { label: 'Ship v1', x: 276, y: 496, labelPos: 'below' },
+      ],
+      drift: [1.5, 1.5], driftDur: 13,
     },
     {
-      label: 'Learning', x: 92, y: 112, labelPos: 'left',
-      subs: [{ label: 'AI', x: 52, y: 60 }],
-      drift: [-1.5, -1.5], driftDur: 13,
+      label: 'Preferences', x: 166, y: 486, labelPos: 'right',
+      subs: [
+        { label: 'Short answers', x: 120, y: 556, labelPos: 'below' },
+        { label: 'Dark mode', x: 232, y: 552, labelPos: 'below' },
+      ],
+      drift: [-2, -1.5], driftDur: 11,
+    },
+    {
+      label: 'Interests', x: 82, y: 384, labelPos: 'left',
+      subs: [
+        { label: 'Climbing', x: 44, y: 452, labelPos: 'below' },
+        { label: 'Science', x: 118, y: 300, labelPos: 'left' },
+      ],
+      drift: [1.5, -2], driftDur: 14,
+    },
+    {
+      label: 'Learning', x: 84, y: 196, labelPos: 'left',
+      subs: [
+        { label: 'AI', x: 46, y: 138, labelPos: 'left' },
+        { label: 'Design', x: 118, y: 140, labelPos: 'right' },
+      ],
+      drift: [-1.5, -1.5], driftDur: 9.5,
     },
   ],
-  cross: [[[95, 385], [312, 392]]],
+  cross: [
+    [[46, 138], [196, 46]],    // AI ↔ Local models
+    [[262, 74], [346, 140]],   // Privacy ↔ App
+    [[82, 384], [166, 486]],   // Interests ↔ Preferences
+  ],
 };
 
 function trimLine(x1: number, y1: number, x2: number, y2: number, t1: number, t2: number) {
@@ -171,7 +207,9 @@ function useCompact() {
   return useSyncExternalStore(subscribeCompact, () => window.matchMedia(COMPACT_QUERY).matches, () => false);
 }
 
-const clusterBase = (i: number) => 0.6 + i * 0.5;
+// Reveal cadence: the whole graph has to be drawn before a normal scroll
+// carries it off screen, so clusters land ~a third of a second apart.
+const clusterBase = (i: number) => 0.4 + i * 0.34;
 
 function BrainGraph() {
   const ref = useRef<HTMLDivElement>(null);
@@ -180,7 +218,7 @@ function BrainGraph() {
   const inView = useInView(ref, { once: true, amount: compact ? 0.2 : 0.35 });
   const show = reduced || inView;
   const g = compact ? MOBILE : DESKTOP;
-  const crossBase = clusterBase(g.clusters.length - 1) + 1.7;
+  const crossBase = clusterBase(g.clusters.length - 1) + 1.2;
 
   const fade = (delay: number, dur = 0.65, fromY = 8) => ({
     initial: reduced ? (false as const) : { opacity: 0, y: fromY },

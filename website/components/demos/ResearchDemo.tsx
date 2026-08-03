@@ -3,10 +3,10 @@ import { DemoPhone } from './kit/Phone';
 import { c, radius, spacing, type } from './kit/tokens';
 import { useDemoClock, prog, burst, typeSlice, loopOpacity } from './kit/timeline';
 import {
-  AssistantTurn, UserTurn, Composer, ActionPill,
+  AssistantTurn, UserTurn, Composer,
   DemoKeyframes, type Block, blocksLen,
 } from './kit/chat';
-import { IconCheck, IconGlobe, IconMic, IconPaperclip } from './kit/icons';
+import { IconCheck, IconGlobe } from './kit/icons';
 
 /*
  * Demo 4 — Research. Mirrors the real pipeline in app/src/webresearch: up to
@@ -175,16 +175,7 @@ export function ResearchDemo() {
             caret={!sent && t >= TYPE_A && t < SEND}
             placeholder="Research the web..."
             generating={generating}
-            barOpen
-            pills={
-              <>
-                <span style={{ opacity: 0.5 }}>
-                  <ActionPill icon={<IconPaperclip size={17} strokeWidth={1.8} color={c.border} />} label="Attach" />
-                </span>
-                <ActionPill icon={<IconGlobe size={17} strokeWidth={1.8} />} label="Research" active />
-                <ActionPill icon={<IconMic size={17} strokeWidth={1.8} />} label="Voice" />
-              </>
-            }
+            mode="research"
           />
         }
       >

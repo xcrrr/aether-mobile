@@ -172,23 +172,8 @@ export function Capabilities() {
           transition: border-color 220ms var(--ease);
         }
 
-        .feature-item::before {
-          content: '';
-          position: absolute;
-          left: 0;
-          top: 18px;
-          bottom: 18px;
-          width: 1px;
-          background: rgba(241, 241, 239, 0);
-          transition: background 220ms var(--ease);
-        }
-
         .feature-item.is-active {
           border-bottom-color: rgba(241, 241, 239, 0.24);
-        }
-
-        .feature-item.is-active::before {
-          background: rgba(241, 241, 239, 0.72);
         }
 
         .feature-trigger {
@@ -221,7 +206,7 @@ export function Capabilities() {
         }
 
         .feature-item.is-active .feature-index {
-          color: var(--text);
+          color: var(--accent);
         }
 
         .feature-title-wrap {

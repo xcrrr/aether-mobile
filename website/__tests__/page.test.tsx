@@ -7,7 +7,7 @@ test('page composes the full narrative', () => {
   expect(screen.getByRole('region', { name: /Aether's mission: your phone is enough/i })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: /It remembers what matters/i })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: /What Aether can do/i })).toBeInTheDocument();
-  expect(screen.getAllByRole('link', { name: /Join the beta/i }).length).toBeGreaterThan(0);
+  expect(screen.getAllByRole('link', { name: /Download/i }).length).toBeGreaterThan(0);
 });
 
 test('page keeps honest scoping: no absolute privacy claims', () => {
